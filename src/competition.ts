@@ -425,41 +425,86 @@ function pickAndDrawTeams(
     });
   } else if (headers.length && heelers.length) {
     const count = Math.max(headers.length, heelers.length);
-    const shuffledHeaders = shuffle(headers);
-    const shuffledHeelers = shuffle(heelers);
-    for (let index = 0; index < count; index += 1) {
-      const header = shuffledHeaders[index % shuffledHeaders.length];
-      const candidates = shuffledHeelers.map((heeler) => ({
-        headerId: header.contestantId,
-        heelerId: heeler.contestantId,
-        heeler,
+    type DrawEntry = (typeof headers)[number] & { freeRun: boolean };
+    type DrawPair = { header: DrawEntry; heeler: DrawEntry };
+    const expandPool = (pool: (typeof headers)[number][]) => {
+      const randomized = shuffle(pool).map((entry) => ({
+        ...entry,
+        freeRun: false,
       }));
-      const selected =
-        shuffle(candidates).find(
-          (candidate) =>
-            eligiblePair(event, candidate.headerId, candidate.heelerId, contestants) &&
-            !used.has(pairKey(candidate.headerId, candidate.heelerId)),
-        ) ?? (event.allowRepeatPartners
-          ? shuffle(candidates).find((candidate) =>
-              eligiblePair(event, candidate.headerId, candidate.heelerId, contestants),
-            )
-          : undefined);
-      if (!selected) continue;
-      used.add(pairKey(selected.headerId, selected.heelerId));
+      return Array.from({ length: count }, (_, index) =>
+        index < randomized.length
+          ? randomized[index]
+          : {
+              ...randomized[index % randomized.length],
+              freeRun: true,
+            },
+      );
+    };
+    let completedPairs: DrawPair[] | null = null;
+
+    for (let attempt = 0; attempt < 250 && !completedPairs; attempt += 1) {
+      const availableHeaders = shuffle(expandPool(headers));
+      const availableHeelers = shuffle(expandPool(heelers));
+      const attemptUsed = new Set(used);
+      const pairs: DrawPair[] = [];
+
+      for (let index = 0; index < count; index += 1) {
+        const header = availableHeaders[index];
+        let selectedIndex = availableHeelers.findIndex(
+          (heeler, candidateIndex) =>
+            candidateIndex >= index &&
+            eligiblePair(
+              event,
+              header.contestantId,
+              heeler.contestantId,
+              contestants,
+            ) &&
+            !attemptUsed.has(
+              pairKey(header.contestantId, heeler.contestantId),
+            ),
+        );
+        if (selectedIndex < 0 && event.allowRepeatPartners) {
+          selectedIndex = availableHeelers.findIndex(
+            (heeler, candidateIndex) =>
+              candidateIndex >= index &&
+              eligiblePair(
+                event,
+                header.contestantId,
+                heeler.contestantId,
+                contestants,
+              ),
+          );
+        }
+        if (selectedIndex < 0) break;
+
+        [availableHeelers[index], availableHeelers[selectedIndex]] = [
+          availableHeelers[selectedIndex],
+          availableHeelers[index],
+        ];
+        const heeler = availableHeelers[index];
+        attemptUsed.add(pairKey(header.contestantId, heeler.contestantId));
+        pairs.push({ header, heeler });
+      }
+      if (pairs.length === count) completedPairs = pairs;
+    }
+
+    completedPairs?.forEach(({ header, heeler }) => {
+      used.add(pairKey(header.contestantId, heeler.contestantId));
       generated.push(
         newTeam(
           event.id,
-          selected.headerId,
-          selected.heelerId,
+          header.contestantId,
+          heeler.contestantId,
           baseTeams.length + generated.length + 1,
           1,
           header.entryNumber,
-          selected.heeler.entryNumber,
-          index >= headers.length,
-          index >= heelers.length,
+          heeler.entryNumber,
+          header.freeRun,
+          heeler.freeRun,
         ),
       );
-    }
+    });
   }
   return [...baseTeams, ...generated].map((team, index) => ({ ...team, drawPosition: index + 1 }));
 }

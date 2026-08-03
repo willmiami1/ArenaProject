@@ -1394,6 +1394,23 @@ function Teams({
       );
       return;
     }
+    if (event.competitionType === "pick-and-draw") {
+      const expectedDrawTeams =
+        event.pickDrawRole === "header"
+          ? headerEntryCount
+          : event.pickDrawRole === "heeler"
+            ? heelerEntryCount
+            : Math.max(headerEntryCount, heelerEntryCount);
+      const generatedDrawTeams = generated.filter(
+        (team) => team.generated,
+      ).length;
+      if (generatedDrawTeams < expectedDrawTeams) {
+        setMessage(
+          `The draw pot has ${expectedDrawTeams} entries but only ${generatedDrawTeams} unique eligible teams can be made. Check handicaps and positions, or enable repeat partner runs.`,
+        );
+        return;
+      }
+    }
     onCommitDraw(event.id, generated);
     setMessage(`Draw version ${event.drawHistory.length + 1} generated with ${generated.length} teams.`);
   };
