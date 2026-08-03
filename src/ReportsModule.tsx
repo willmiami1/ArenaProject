@@ -11,6 +11,7 @@ import {
   Filter,
   History,
   Mail,
+  Eye,
   Printer,
   RefreshCw,
   Search,
@@ -165,6 +166,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
   const [showHistory, setShowHistory] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [showColumns, setShowColumns] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
   const [columnPreferences, setColumnPreferences] =
     useState<Record<string, string[]>>(loadColumnPreferences);
@@ -198,7 +200,8 @@ export function ReportsModule({ data }: { data: ArenaData }) {
   useEffect(() => {
     window.localStorage.setItem(ROLE_KEY, role);
     if (selected && !selected.roles.includes(role)) setSelected(null);
-  }, [role, selected]);
+    setPreviewOpen(false);
+  }, [role]);
 
   useEffect(() => {
     if (!report) return;
@@ -274,15 +277,18 @@ export function ReportsModule({ data }: { data: ArenaData }) {
     setFilters(nextFilters);
     setSelected(definition);
     setShowHistory(false);
-    recordHistory(
-      "Preview",
-      generateReport(data, definition, nextFilters),
-      nextFilters,
-    );
+    setPreviewOpen(false);
+  };
+
+  const openPreview = () => {
+    if (!report) return;
+    setPage(1);
+    setPreviewOpen(true);
+    recordHistory("Preview");
   };
 
   const printReport = () => {
-    if (!report) return;
+    if (!report || !previewOpen) return;
     const popup = window.open("", "_blank", "width=1200,height=800");
     if (!popup) {
       window.alert("Allow pop-ups to preview and print this report.");
@@ -296,7 +302,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
   };
 
   const exportPdf = async () => {
-    if (!report || !exportAllowed) return;
+    if (!report || !previewOpen || !exportAllowed) return;
     const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
     const pdf = await PDFDocument.create();
     pdf.setTitle(`${report.eventName} - ${report.definition.title}`);
@@ -477,7 +483,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
   };
 
   const exportCsv = () => {
-    if (!report || !exportAllowed) return;
+    if (!report || !previewOpen || !exportAllowed) return;
     const columns = report.columns.filter((column) =>
       visibleColumns.includes(column.key),
     );
@@ -492,7 +498,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
   };
 
   const exportExcel = async () => {
-    if (!report || !exportAllowed) return;
+    if (!report || !previewOpen || !exportAllowed) return;
     const columns = report.columns.filter((column) =>
       visibleColumns.includes(column.key),
     );
@@ -523,7 +529,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
   };
 
   const downloadHtml = () => {
-    if (!report || !exportAllowed) return;
+    if (!report || !previewOpen || !exportAllowed) return;
     saveBlob(
       reportHtml(report, visibleColumns, role),
       "text/html;charset=utf-8",
@@ -533,7 +539,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
   };
 
   const emailReport = () => {
-    if (!report || !exportAllowed) return;
+    if (!report || !previewOpen || !exportAllowed) return;
     const metrics = report.metrics
       .slice(0, 8)
       .map((metric) => `${metric.label}: ${metric.value}`)
@@ -554,6 +560,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
     setFilters(entry.filters);
     setSelected(definition);
     setShowHistory(false);
+    setPreviewOpen(true);
     recordHistory(
       "Regenerated",
       generateReport(data, definition, entry.filters),
@@ -567,6 +574,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
   ) => {
     setFilters((current) => ({ ...current, [key]: value }));
     setPage(1);
+    setPreviewOpen(false);
   };
 
   const toggleColumn = (key: string, checked: boolean) => {
@@ -575,6 +583,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
       ? [...visibleColumns, key]
       : visibleColumns.filter((columnKey) => columnKey !== key);
     setVisibleColumns(next);
+    setPreviewOpen(false);
     setColumnPreferences((current) => ({
       ...current,
       [`${role}:${report.definition.id}`]: next,
@@ -684,69 +693,91 @@ export function ReportsModule({ data }: { data: ArenaData }) {
   return (
     <div className="reports-workspace">
       <ReportHeader role={role} setRole={setRole} onHistory={() => setShowHistory(true)} />
-      <div className="report-builder-heading">
-        <button className="secondary" onClick={() => setSelected(null)}><ChevronLeft size={16} /> Reports</button>
-        <div><span className="tag neutral">{report.definition.section} report</span><h2>{report.definition.title}</h2><p>{report.definition.description}</p></div>
-      </div>
-
-      <section className="report-action-bar no-print">
-        <button className="secondary" onClick={() => setShowFilters((current) => !current)}><Filter size={16} /> Filters</button>
-        <button className="secondary" onClick={() => setShowColumns((current) => !current)}><Settings2 size={16} /> Columns</button>
-        <span />
-        <button className="secondary" onClick={printReport}><Printer size={16} /> Print</button>
-        <button className="secondary" disabled={!exportAllowed} onClick={() => void exportPdf()}><FileDown size={16} /> Save PDF</button>
-        <button className="secondary" disabled={!exportAllowed} onClick={() => void exportExcel()}><FileSpreadsheet size={16} /> Excel</button>
-        <button className="secondary" disabled={!exportAllowed} onClick={exportCsv}><Download size={16} /> CSV</button>
-        <button className="secondary" disabled={!exportAllowed} onClick={downloadHtml}><FileText size={16} /> Download</button>
-        <button className="secondary" disabled={!exportAllowed} onClick={emailReport}><Mail size={16} /> Email</button>
-      </section>
-
-      {showFilters && (
-        <section className="report-filters no-print">
-          <div className="report-filter-heading"><div><Filter size={17} /><strong>Report filters</strong></div><button onClick={() => setShowFilters(false)}><X size={17} /></button></div>
-          <div className="report-filter-grid">
-            <label><span>Event</span><select value={filters.meetId} onChange={(event) => {
-              const meetId = event.target.value;
-              const competitionId = data.events.find(
-                (competition) =>
-                  !meetId || competition.parentEventId === meetId,
-              )?.id ?? "";
-              setFilters((current) => ({
-                ...current,
-                meetId,
-                competitionId,
-              }));
-              setPage(1);
-            }}><option value="">All events</option>{data.meets.map((meet) => <option value={meet.id} key={meet.id}>{meet.name}</option>)}</select></label>
-            <label><span>Competition</span><select value={filters.competitionId} onChange={(event) => updateFilter("competitionId", event.target.value)}><option value="">All competitions</option>{data.events.filter((event) => !filters.meetId || event.parentEventId === filters.meetId).map((event) => <option value={event.id} key={event.id}>{event.name}</option>)}</select></label>
-            <label><span>Date</span><input type="date" value={filters.date} onChange={(event) => updateFilter("date", event.target.value)} /></label>
-            <label><span>Category #</span><input value={filters.categoryNumber} onChange={(event) => updateFilter("categoryNumber", event.target.value)} placeholder="All categories" /></label>
-            <label><span>Position</span><select value={filters.role} onChange={(event) => updateFilter("role", event.target.value as ReportFilters["role"])}><option value="">Header & Heeler</option><option value="Header">Header</option><option value="Heeler">Heeler</option></select></label>
-            <label><span>Team</span><input value={filters.team} onChange={(event) => updateFilter("team", event.target.value)} placeholder="Header or heeler" /></label>
-            <label><span>Round</span><select value={filters.round} onChange={(event) => updateFilter("round", event.target.value)}><option value="">All rounds</option>{Array.from({ length: Math.max(1, ...data.events.map((event) => event.rounds)) }, (_, index) => <option key={index + 1} value={index + 1}>Round {index + 1}</option>)}</select></label>
-            <label><span>Draw position</span><input type="number" min="1" value={filters.drawPosition} onChange={(event) => updateFilter("drawPosition", event.target.value)} placeholder="All positions" /></label>
-            <label><span>Payment</span><select value={filters.paidStatus} onChange={(event) => updateFilter("paidStatus", event.target.value as ReportFilters["paidStatus"])}><option value="">Paid & unpaid</option><option value="paid">Paid entries</option><option value="unpaid">Unpaid entries</option></select></label>
-            <label className="report-row-search"><span>Search results</span><input value={filters.search} onChange={(event) => updateFilter("search", event.target.value)} placeholder="Search every report column" /></label>
+      {!previewOpen ? (
+        <>
+          <div className="report-builder-heading">
+            <button className="secondary" onClick={() => setSelected(null)}><ChevronLeft size={16} /> Reports</button>
+            <div><span className="tag neutral">{report.definition.section} report</span><h2>{report.definition.title}</h2><p>{report.definition.description}</p></div>
           </div>
-          <div className="report-filter-toggles">
-            <label><input type="checkbox" checked={filters.qualifiedOnly} onChange={(event) => updateFilter("qualifiedOnly", event.target.checked)} /> Qualified only</label>
-            <label><input type="checkbox" checked={filters.noTimesOnly} onChange={(event) => updateFilter("noTimesOnly", event.target.checked)} /> No times only</label>
-            <label><input type="checkbox" checked={filters.checkedInOnly} onChange={(event) => updateFilter("checkedInOnly", event.target.checked)} /> Checked-in only</label>
-            <label><input type="checkbox" checked={filters.scratchedOnly} onChange={(event) => updateFilter("scratchedOnly", event.target.checked)} /> Scratched only</label>
+
+          <section className="report-action-bar no-print">
+            <button className="secondary" onClick={() => setShowFilters((current) => !current)}><Filter size={16} /> Filters</button>
+            <button className="secondary" onClick={() => setShowColumns((current) => !current)}><Settings2 size={16} /> Columns</button>
+            <span />
+            <button className="primary" onClick={openPreview}><Eye size={16} /> Preview report</button>
+          </section>
+
+          {showFilters && (
+            <section className="report-filters no-print">
+              <div className="report-filter-heading"><div><Filter size={17} /><strong>Report filters</strong></div><button onClick={() => setShowFilters(false)}><X size={17} /></button></div>
+              <div className="report-filter-grid">
+                <label><span>Event</span><select value={filters.meetId} onChange={(event) => {
+                  const meetId = event.target.value;
+                  const competitionId = data.events.find(
+                    (competition) =>
+                      !meetId || competition.parentEventId === meetId,
+                  )?.id ?? "";
+                  setFilters((current) => ({
+                    ...current,
+                    meetId,
+                    competitionId,
+                  }));
+                  setPage(1);
+                  setPreviewOpen(false);
+                }}><option value="">All events</option>{data.meets.map((meet) => <option value={meet.id} key={meet.id}>{meet.name}</option>)}</select></label>
+                <label><span>Competition</span><select value={filters.competitionId} onChange={(event) => updateFilter("competitionId", event.target.value)}><option value="">All competitions</option>{data.events.filter((event) => !filters.meetId || event.parentEventId === filters.meetId).map((event) => <option value={event.id} key={event.id}>{event.name}</option>)}</select></label>
+                <label><span>Date</span><input type="date" value={filters.date} onChange={(event) => updateFilter("date", event.target.value)} /></label>
+                <label><span>Category #</span><input value={filters.categoryNumber} onChange={(event) => updateFilter("categoryNumber", event.target.value)} placeholder="All categories" /></label>
+                <label><span>Position</span><select value={filters.role} onChange={(event) => updateFilter("role", event.target.value as ReportFilters["role"])}><option value="">Header & Heeler</option><option value="Header">Header</option><option value="Heeler">Heeler</option></select></label>
+                <label><span>Team</span><input value={filters.team} onChange={(event) => updateFilter("team", event.target.value)} placeholder="Header or heeler" /></label>
+                <label><span>Round</span><select value={filters.round} onChange={(event) => updateFilter("round", event.target.value)}><option value="">All rounds</option>{Array.from({ length: Math.max(1, ...data.events.map((event) => event.rounds)) }, (_, index) => <option key={index + 1} value={index + 1}>Round {index + 1}</option>)}</select></label>
+                <label><span>Draw position</span><input type="number" min="1" value={filters.drawPosition} onChange={(event) => updateFilter("drawPosition", event.target.value)} placeholder="All positions" /></label>
+                <label><span>Payment</span><select value={filters.paidStatus} onChange={(event) => updateFilter("paidStatus", event.target.value as ReportFilters["paidStatus"])}><option value="">Paid & unpaid</option><option value="paid">Paid entries</option><option value="unpaid">Unpaid entries</option></select></label>
+                <label className="report-row-search"><span>Search results</span><input value={filters.search} onChange={(event) => updateFilter("search", event.target.value)} placeholder="Search every report column" /></label>
+              </div>
+              <div className="report-filter-toggles">
+                <label><input type="checkbox" checked={filters.qualifiedOnly} onChange={(event) => updateFilter("qualifiedOnly", event.target.checked)} /> Qualified only</label>
+                <label><input type="checkbox" checked={filters.noTimesOnly} onChange={(event) => updateFilter("noTimesOnly", event.target.checked)} /> No times only</label>
+                <label><input type="checkbox" checked={filters.checkedInOnly} onChange={(event) => updateFilter("checkedInOnly", event.target.checked)} /> Checked-in only</label>
+                <label><input type="checkbox" checked={filters.scratchedOnly} onChange={(event) => updateFilter("scratchedOnly", event.target.checked)} /> Scratched only</label>
+              </div>
+            </section>
+          )}
+
+          {showColumns && (
+            <section className="report-columns no-print">
+              <strong>Customize columns</strong>
+              {report.columns.map((column) => (
+                <label key={column.key}><input type="checkbox" checked={visibleColumns.includes(column.key)} onChange={(event) => toggleColumn(column.key, event.target.checked)} /> {column.label}</label>
+              ))}
+            </section>
+          )}
+
+          <section className="report-ready-card">
+            <span className="report-ready-icon"><Eye size={26} /></span>
+            <div>
+              <span className="eyebrow">Ready to preview</span>
+              <h3>{report.definition.title}</h3>
+              <p>{sortedRows.length.toLocaleString()} matching rows · {visibleReportColumns.length} visible columns</p>
+            </div>
+            <button className="primary" onClick={openPreview}><Eye size={16} /> Preview report</button>
+          </section>
+        </>
+      ) : (
+        <section className="report-preview-screen">
+          <div className="report-preview-toolbar no-print">
+            <button className="secondary" onClick={() => setPreviewOpen(false)}><ChevronLeft size={16} /> Back to setup</button>
+            <div><span className="eyebrow">Report preview</span><strong>{report.definition.title}</strong></div>
+            <span />
+            <button className="secondary" onClick={printReport}><Printer size={16} /> Print</button>
+            <button className="secondary" disabled={!exportAllowed} onClick={() => void exportPdf()}><FileDown size={16} /> Save PDF</button>
+            <button className="secondary" disabled={!exportAllowed} onClick={() => void exportExcel()}><FileSpreadsheet size={16} /> Excel</button>
+            <button className="secondary" disabled={!exportAllowed} onClick={exportCsv}><Download size={16} /> CSV</button>
+            <button className="secondary" disabled={!exportAllowed} onClick={downloadHtml}><FileText size={16} /> Download</button>
+            <button className="secondary" disabled={!exportAllowed} onClick={emailReport}><Mail size={16} /> Email</button>
           </div>
-        </section>
-      )}
 
-      {showColumns && (
-        <section className="report-columns no-print">
-          <strong>Customize columns</strong>
-          {report.columns.map((column) => (
-            <label key={column.key}><input type="checkbox" checked={visibleColumns.includes(column.key)} onChange={(event) => toggleColumn(column.key, event.target.checked)} /> {column.label}</label>
-          ))}
-        </section>
-      )}
-
-      <article className="report-preview">
+          <article className="report-preview">
         <header className="report-document-header">
           <img src="./destiny-ranch-arena-logo.png" alt="Destiny Ranch Arena" />
           <div><span>Destiny Ranch Arena</span><h2>{report.definition.title}</h2><p>{report.eventName} · {report.competitionName}</p></div>
@@ -769,12 +800,14 @@ export function ReportsModule({ data }: { data: ArenaData }) {
           {!pageRows.length && <div className="empty-state"><FileText size={27} /><p>No records match the selected report filters.</p></div>}
         </div>
         <footer className="report-document-footer"><span>Destiny Ranch Arena · {report.definition.title}</span><span>Page {page} of {pageCount}</span></footer>
-      </article>
+          </article>
 
-      <div className="report-pagination no-print">
-        <span>{sortedRows.length.toLocaleString()} rows · {PAGE_SIZE} per page</span>
-        <div><button disabled={page === 1} onClick={() => setPage((current) => current - 1)}><ChevronLeft size={16} /></button><strong>{page} / {pageCount}</strong><button disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}><ChevronRight size={16} /></button></div>
-      </div>
+          <div className="report-pagination no-print">
+            <span>{sortedRows.length.toLocaleString()} rows · {PAGE_SIZE} per page</span>
+            <div><button disabled={page === 1} onClick={() => setPage((current) => current - 1)}><ChevronLeft size={16} /></button><strong>{page} / {pageCount}</strong><button disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}><ChevronRight size={16} /></button></div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
