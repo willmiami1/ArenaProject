@@ -292,12 +292,18 @@ main { grid-column: 2; min-width: 0; }
 .desk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
 .run-queue { order: 1; overflow: hidden; }
 .queue-scroll { max-height: 640px; overflow-y: auto; }
-.queue-row { width: 100%; min-height: 62px; display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 11px; padding: 9px 20px; color: var(--ink); background: #fff; border: 0; border-bottom: 1px solid #efefeb; text-align: left; }
+.queue-row { width: 100%; min-height: 62px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 7px 20px; color: var(--ink); background: #fff; border-bottom: 1px solid #efefeb; text-align: left; }
 .queue-row:hover, .queue-row.active { background: #f3f7f4; }
 .queue-row.active { box-shadow: inset 3px 0 var(--green); }
-.queue-row strong, .queue-row small { display: block; }
+.queue-row.rolled { background: #fff8eb; }
+.queue-team-select { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 11px; padding: 4px 0; color: inherit; background: transparent; border: 0; text-align: left; }
+.queue-team-name { min-width: 0; }
+.queue-row strong, .queue-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queue-row strong { font-size: 11px; }
 .queue-row small { margin-top: 3px; color: #929a95; font-size: 9px; text-transform: capitalize; }
+.queue-row.rolled small { color: #9a651a; font-weight: 800; }
+.roll-team-button { padding: 6px 9px; color: #8b641f; background: #fff9ed; border: 1px solid #e6cc9e; border-radius: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.roll-team-button.active { color: #fff; background: #a87324; border-color: #a87324; }
 .status-dot { width: 8px; height: 8px; background: #b6bdb9; border-radius: 50%; }
 .status-dot.complete { background: #4b9a6c; }
 .status-dot.no-time { background: #bf6159; }

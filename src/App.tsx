@@ -474,6 +474,14 @@ function App() {
                   teams: [...current.teams, team],
                 }))
               }
+              onRollTeam={(teamId, rolled) =>
+                setData((current) => ({
+                  ...current,
+                  teams: current.teams.map((team) =>
+                    team.id === teamId ? { ...team, rolled } : team,
+                  ),
+                }))
+              }
             />
           )}
           {view === "reports" && <ReportsModule data={data} />}
@@ -1524,7 +1532,7 @@ function Teams({
               <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}</small></span></div>
               <span className="pair-mark">&</span>
               <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}</small></span></div>
-              <span className="draw-status"><span className={`tag ${team.scratched ? "no-time" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}</small></span>
+              <span className="draw-status"><span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}</small></span>
               <span className="row-actions no-print">
                 <button title={team.checkedIn ? "Checked in" : "Check in"} disabled={event?.drawLocked} onClick={() => onUpdateTeam({ ...team, checkedIn: !team.checkedIn })}>{team.checkedIn ? <Check size={15} /> : <UserRound size={15} />}</button>
                 {!team.generated && <button title="Edit team" disabled={!canEdit} onClick={() => { setEditingTeam(team); setShowForm(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil size={15} /></button>}
@@ -1542,7 +1550,7 @@ function Teams({
           {event.drawHistory.slice().reverse().map((snapshot, index) => (
             <div className="history-row" key={snapshot.id}>
               <div><strong>Version {event.drawHistory.length - index}</strong><small>{new Date(snapshot.createdAt).toLocaleString()} · {snapshot.teams.length} teams</small></div>
-              <button className="secondary" disabled={event.drawLocked} onClick={() => onCommitDraw(event.id, snapshot.teams.map((team) => ({ ...team, id: uid("team"), status: "ready", rawTime: null, penalties: 0 })))}><RefreshCw size={14} /> Restore</button>
+              <button className="secondary" disabled={event.drawLocked} onClick={() => onCommitDraw(event.id, snapshot.teams.map((team) => ({ ...team, id: uid("team"), status: "ready", rawTime: null, penalties: 0, rolled: false })))}><RefreshCw size={14} /> Restore</button>
             </div>
           ))}
         </div>
@@ -1674,6 +1682,7 @@ function RunDesk({
   onUpdateEvent,
   onSave,
   onAddRideIn,
+  onRollTeam,
 }: {
   event?: ArenaEvent;
   teams: Team[];
@@ -1682,6 +1691,7 @@ function RunDesk({
   onUpdateEvent: (event: ArenaEvent) => void;
   onSave: (teamId: string, update: Partial<Team>) => void;
   onAddRideIn: (team: Team) => void;
+  onRollTeam: (teamId: string, rolled: boolean) => void;
 }) {
   const [selectedRound, setSelectedRound] = useState(1);
   const [showRideInForm, setShowRideInForm] = useState(false);
@@ -1691,8 +1701,16 @@ function RunDesk({
   const allEventTeams = teams
     .filter((team) => team.eventId === event?.id && !team.scratched)
     .sort((a, b) => a.drawPosition - b.drawPosition);
-  const eventTeams = allEventTeams.filter((team) => team.round === activeRound);
-  const nextTeam = eventTeams.find((team) => team.status === "ready");
+  const eventTeams = allEventTeams
+    .filter((team) => team.round === activeRound)
+    .sort(
+      (a, b) =>
+        Number(Boolean(a.rolled)) - Number(Boolean(b.rolled)) ||
+        a.drawPosition - b.drawPosition,
+    );
+  const nextTeam =
+    eventTeams.find((team) => team.status === "ready" && !team.rolled) ??
+    eventTeams.find((team) => team.status === "ready");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = eventTeams.find((team) => team.id === selectedId) ?? nextTeam;
   const [rawTime, setRawTime] = useState("");
@@ -1752,6 +1770,16 @@ function RunDesk({
     setPenalties(team.penalties.toString());
     setNotes(team.notes);
   };
+  const toggleRolled = (team: Team) => {
+    if (team.status !== "ready") return;
+    onRollTeam(team.id, !team.rolled);
+    if (team.id === selected?.id) {
+      setSelectedId(null);
+      setRawTime("");
+      setPenalties("0");
+      setNotes("");
+    }
+  };
   const saveRun = (status: Team["status"]) => {
     if (!selected) return;
     const total = Number(rawTime) + Number(penalties);
@@ -1762,6 +1790,7 @@ function RunDesk({
       penalties: status === "complete" ? Number(penalties) : 0,
       notes: exceededLimit ? `${notes}${notes ? " · " : ""}Time limit exceeded` : notes,
       points: status === "complete" && !exceededLimit ? 1 : 0,
+      rolled: false,
     });
     setSelectedId(null);
     setRawTime("");
@@ -1898,11 +1927,18 @@ function RunDesk({
           <PanelHeading title={`Round ${activeRound} run order`} subtitle={`${eventTeams.filter((team) => team.status === "ready").length} teams remaining`} />
           <div className="queue-scroll">
             {eventTeams.map((team) => (
-              <button className={`queue-row ${selected?.id === team.id ? "active" : ""}`} key={team.id} onClick={() => chooseTeam(team)}>
-                <span className="draw-number">{team.drawPosition}</span>
-                <div><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : "Ready"}</small></div>
+              <div className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""}`} key={team.id}>
+                <button className="queue-team-select" onClick={() => chooseTeam(team)}>
+                  <span className="draw-number">{team.drawPosition}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Ready"}</small></span>
+                </button>
+                {team.status === "ready" && (
+                  <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>
+                    {team.rolled ? "Unroll" : "Roll"}
+                  </button>
+                )}
                 <span className={`status-dot ${team.status}`} />
-              </button>
+              </div>
             ))}
           </div>
         </section>
