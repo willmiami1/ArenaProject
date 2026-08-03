@@ -468,6 +468,12 @@ function App() {
                   };
                 })
               }
+              onAddRideIn={(team) =>
+                setData((current) => ({
+                  ...current,
+                  teams: [...current.teams, team],
+                }))
+              }
             />
           )}
           {view === "reports" && <ReportsModule data={data} />}
@@ -1608,7 +1614,7 @@ function IndividualRegistrationForm({
   );
 }
 
-function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel }: { event: ArenaEvent; team?: Team; contestants: Contestant[]; drawPosition: number; onSubmit: (team: Team) => void; onCancel: () => void }) {
+function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel, rideIn = false }: { event: ArenaEvent; team?: Team; contestants: Contestant[]; drawPosition: number; onSubmit: (team: Team) => void; onCancel: () => void; rideIn?: boolean }) {
   const headers = contestants.filter((rider) => rider.role !== "Heeler");
   const heelers = contestants.filter((rider) => rider.role !== "Header");
   const [headerId, setHeaderId] = useState(team?.headerId ?? headers[0]?.id ?? "");
@@ -1632,6 +1638,7 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel }
       checkedIn: team?.checkedIn ?? false,
       scratched: team?.scratched ?? false,
       generated: team?.generated ?? false,
+      rideIn: team?.rideIn ?? rideIn,
       points: team?.points ?? 0,
       headerEntryNumber: team?.headerEntryNumber ?? 1,
       heelerEntryNumber: team?.heelerEntryNumber ?? 1,
@@ -1642,7 +1649,7 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel }
   };
   return (
     <form className="form-panel" onSubmit={submit}>
-      <div className="form-heading"><div><h3>{team ? "Edit team" : "Add team"}</h3><p>Entry #{drawPosition} for {event.name}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
+      <div className="form-heading"><div><h3>{team ? "Edit team" : rideIn ? "Add ride-in team" : "Add team"}</h3><p>{rideIn ? "Append a late team to the end of the Round 1 run order." : `Entry #${drawPosition} for ${event.name}`}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
       <div className="form-grid">
         <Field label="Header"><select value={headerId} required onChange={(e) => setHeaderId(e.target.value)}>{headers.map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
         <Field label="Heeler"><select value={heelerId} required onChange={(e) => setHeelerId(e.target.value)}>{heelers.filter((rider) => rider.id !== headerId).map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
@@ -1654,7 +1661,7 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel }
         <strong>{handicap}</strong>
         <small>Maximum {event.handicapTotal}</small>
       </div>
-      <FormActions onCancel={onCancel} submitLabel={team ? "Save team" : "Add to draw"} />
+      <FormActions onCancel={onCancel} submitLabel={team ? "Save team" : rideIn ? "Add ride-in team" : "Add to draw"} />
     </form>
   );
 }
@@ -1666,6 +1673,7 @@ function RunDesk({
   contestants,
   onUpdateEvent,
   onSave,
+  onAddRideIn,
 }: {
   event?: ArenaEvent;
   teams: Team[];
@@ -1673,8 +1681,11 @@ function RunDesk({
   contestants: Contestant[];
   onUpdateEvent: (event: ArenaEvent) => void;
   onSave: (teamId: string, update: Partial<Team>) => void;
+  onAddRideIn: (team: Team) => void;
 }) {
   const [selectedRound, setSelectedRound] = useState(1);
+  const [showRideInForm, setShowRideInForm] = useState(false);
+  const [rideInMessage, setRideInMessage] = useState("");
   const roundCount = Math.max(event?.rounds ?? 1, 1);
   const activeRound = Math.min(selectedRound, roundCount);
   const allEventTeams = teams
@@ -1691,18 +1702,16 @@ function RunDesk({
   const standings = eventTeams
     .filter((team) => team.status === "complete" && team.rawTime !== null)
     .sort((a, b) => (a.rawTime! + a.penalties) - (b.rawTime! + b.penalties));
+  const fixedPaidEntries = allEventTeams.filter(
+    (team) =>
+      team.round === 1 &&
+      !team.generated &&
+      !team.scratched &&
+      team.paid !== false,
+  ).length;
   const paidEntryCount =
     event
-      ? (event.competitionType === "pick-only" ||
-          event.competitionType === "pick-and-draw"
-          ? allEventTeams.filter(
-              (team) =>
-                team.round === 1 &&
-                !team.generated &&
-                !team.scratched &&
-                team.paid !== false,
-            ).length
-          : 0) +
+      ? fixedPaidEntries +
         (event.competitionType === "draw-pot" ||
         event.competitionType === "round-robin" ||
         event.competitionType === "pick-and-draw"
@@ -1765,31 +1774,99 @@ function RunDesk({
     setRawTime("");
     setPenalties("0");
     setNotes("");
+    setShowRideInForm(false);
+  };
+  const addRideInTeam = (team: Team) => {
+    if (!event) return;
+    const duplicate = allEventTeams.some(
+      (existing) =>
+        existing.round === 1 &&
+        existing.headerId === team.headerId &&
+        existing.heelerId === team.heelerId,
+    );
+    if (duplicate && !event.allowRepeatPartners) {
+      setRideInMessage(
+        "That partnership is already in Round 1. Enable repeat partner runs to add it again.",
+      );
+      return;
+    }
+    const handicap = teamHandicapTotal(
+      team.headerId,
+      team.heelerId,
+      contestants,
+    );
+    if (handicap > event.handicapTotal) {
+      setRideInMessage(
+        `Team handicap ${handicap} exceeds the roping maximum of ${event.handicapTotal}.`,
+      );
+      return;
+    }
+    const pairingRun =
+      allEventTeams.filter(
+        (existing) =>
+          existing.round === 1 &&
+          existing.headerId === team.headerId &&
+          existing.heelerId === team.heelerId,
+      ).length + 1;
+    const rideInTeam = {
+      ...team,
+      headerEntryNumber: pairingRun,
+      heelerEntryNumber: pairingRun,
+    };
+    onAddRideIn(rideInTeam);
+    setSelectedId(rideInTeam.id);
+    setShowRideInForm(false);
+    setRideInMessage(
+      `Ride-in team added as Draw #${team.drawPosition} in Round 1.`,
+    );
   };
 
   return (
     <>
       <PageIntro title="Run desk" text={event ? `Record times and publish standings for ${event.name}.` : "Select an event to open the run desk."} />
       {event && (
-        <div className="round-tabs" role="tablist" aria-label="Competition rounds">
-          {Array.from({ length: roundCount }, (_, index) => {
-            const round = index + 1;
-            const roundTeams = allEventTeams.filter((team) => team.round === round);
-            const completed = roundTeams.filter((team) => team.status !== "ready").length;
-            return (
-              <button
-                className={activeRound === round ? "active" : ""}
-                key={round}
-                role="tab"
-                aria-selected={activeRound === round}
-                onClick={() => changeRound(round)}
-              >
-                <span>Round {round}</span>
-                <small>{completed}/{roundTeams.length} runs</small>
-              </button>
-            );
-          })}
+        <div className="run-desk-round-controls">
+          <div className="round-tabs" role="tablist" aria-label="Competition rounds">
+            {Array.from({ length: roundCount }, (_, index) => {
+              const round = index + 1;
+              const roundTeams = allEventTeams.filter((team) => team.round === round);
+              const completed = roundTeams.filter((team) => team.status !== "ready").length;
+              return (
+                <button
+                  className={activeRound === round ? "active" : ""}
+                  key={round}
+                  role="tab"
+                  aria-selected={activeRound === round}
+                  onClick={() => changeRound(round)}
+                >
+                  <span>Round {round}</span>
+                  <small>{completed}/{roundTeams.length} runs</small>
+                </button>
+              );
+            })}
+          </div>
+          {activeRound === 1 && (
+            <button className="secondary ride-in-button" onClick={() => setShowRideInForm((current) => !current)}><Plus size={16} /> Ride-in team</button>
+          )}
         </div>
+      )}
+      {rideInMessage && <div className="notice"><span>{rideInMessage}</span><button onClick={() => setRideInMessage("")}><X size={16} /></button></div>}
+      {event && activeRound === 1 && showRideInForm && (
+        <TeamForm
+          event={event}
+          contestants={contestants}
+          drawPosition={
+            Math.max(
+              0,
+              ...allEventTeams
+                .filter((team) => team.round === 1)
+                .map((team) => team.drawPosition),
+            ) + 1
+          }
+          onSubmit={addRideInTeam}
+          onCancel={() => setShowRideInForm(false)}
+          rideIn
+        />
       )}
       <div className="run-desk-grid">
         <section className="panel desk-entry">

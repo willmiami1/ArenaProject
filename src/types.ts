@@ -72,6 +72,7 @@ export interface Team {
   checkedIn: boolean;
   scratched: boolean;
   generated: boolean;
+  rideIn?: boolean;
   points: number;
   headerEntryNumber?: number;
   heelerEntryNumber?: number;

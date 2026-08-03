@@ -16,6 +16,7 @@ inside a Wix site.
 - Downloadable and restorable contestant database backups
 - Team entry and randomized draw order
 - Run desk for times, penalties, no-times, and notes
+- Round 1 ride-in team entry directly from the Run Desk
 - Configurable Short Go limits that advance only the fastest qualified teams
 - Final-round running orders listed from slowest qualifier to fastest qualifier
 - Live standings, round-robin points, and event overview

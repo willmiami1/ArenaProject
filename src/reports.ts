@@ -187,7 +187,7 @@ function eventEntries(
   if (event.competitionType === "pick-and-draw") {
     return fixedTeamEntries + registrationEntries;
   }
-  return registrationEntries;
+  return registrationEntries + fixedTeamEntries;
 }
 
 function eventFinancials(
