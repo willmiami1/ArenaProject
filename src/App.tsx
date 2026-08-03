@@ -1389,7 +1389,7 @@ function Teams({
         event.competitionType === "draw-pot"
           ? "Register at least one eligible header and heeler before drawing."
           : event.competitionType === "pick-and-draw"
-            ? "Add at least one picked team and eligible contestants to the draw pot."
+            ? "No eligible draw teams could be made. Confirm paid Header and Heeler entries, check the handicap limit, and enable repeat partner runs when entries must reuse partners."
             : "Add eligible contestants or teams before generating the draw.",
       );
       return;
