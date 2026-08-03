@@ -22,8 +22,6 @@ export type PersistenceStatus =
   | "error";
 
 function normalizeData(parsed: ArenaData): ArenaData {
-  const resetParticipants =
-    (parsed.participantDatabaseVersion ?? 1) < PARTICIPANT_DATABASE_VERSION;
   const meets: ArenaMeet[] = (
     parsed.meets ??
     parsed.events.map((event) => ({
@@ -52,9 +50,9 @@ function normalizeData(parsed: ArenaData): ArenaData {
         (event as typeof event & { handicapCategory?: string }).handicapCategory,
       ) || 99),
     shortGoTeams: event.shortGoTeams ?? 0,
-    drawHistory: resetParticipants ? [] : event.drawHistory ?? [],
+    drawHistory: event.drawHistory ?? [],
   }));
-  const teams = (resetParticipants ? [] : parsed.teams).map((team) => ({
+  const teams = (parsed.teams ?? []).map((team) => ({
     ...team,
     round: team.round ?? 1,
     checkedIn: team.checkedIn ?? false,
@@ -71,7 +69,7 @@ function normalizeData(parsed: ArenaData): ArenaData {
     participantDatabaseVersion: PARTICIPANT_DATABASE_VERSION,
     meets,
     events,
-    contestants: (resetParticipants ? [] : parsed.contestants ?? []).map(
+    contestants: (parsed.contestants ?? []).map(
       (contestant) => ({
         ...contestant,
         role:
@@ -82,7 +80,7 @@ function normalizeData(parsed: ArenaData): ArenaData {
       }),
     ),
     teams: reconcileQualifiedAdvancements(teams, events),
-    registrations: (resetParticipants ? [] : parsed.registrations ?? []).map(
+    registrations: (parsed.registrations ?? []).map(
       (registration) => ({
         ...registration,
         paid: registration.paid ?? true,
