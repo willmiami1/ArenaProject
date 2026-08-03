@@ -1,27 +1,58 @@
 import { useMemo, useState, type FormEvent } from "react";
 import {
   ArrowRight,
+  Camera,
   CalendarDays,
   Check,
   ChevronDown,
   CircleDollarSign,
   Clock3,
-  Flag,
+  Copy,
+  Dices,
+  Download,
   Gauge,
+  GitFork,
+  Handshake,
   LayoutDashboard,
   ListOrdered,
+  Lock,
   MapPin,
   Menu,
   Plus,
+  Pencil,
+  Printer,
   RefreshCw,
+  Repeat2,
   Search,
   Trophy,
+  Trash2,
+  Unlock,
   UserRound,
   UsersRound,
   X,
 } from "lucide-react";
 import { useArenaData } from "./useArenaData";
-import type { ArenaEvent, Contestant, EventStatus, Team, View } from "./types";
+import {
+  calculatePayouts,
+  calculatePurse,
+  applyRunResult,
+  competitionName,
+  competitionTypes,
+  defaultCompetitionSettings,
+  generateCompetitionDraw,
+  teamHandicapTotal,
+} from "./competition";
+import type {
+  ArenaEvent,
+  ArenaMeet,
+  CompetitionType,
+  Contestant,
+  EventRegistration,
+  EventStatus,
+  PickDrawRole,
+  Team,
+  View,
+} from "./types";
 
 const navItems: { id: View; label: string; icon: typeof Gauge }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -54,7 +85,9 @@ function App() {
     <div className="app-shell">
       <aside className={`sidebar ${mobileOpen ? "open" : ""}`}>
         <div className="brand">
-          <div className="brand-mark"><Flag size={22} /></div>
+          <div className="brand-mark">
+            <img src="./destiny-ranch-arena-logo.png" alt="Destiny Ranch Arena" />
+          </div>
           <div>
             <strong>Arena Command</strong>
             <span>Team roping operations</span>
@@ -104,7 +137,9 @@ function App() {
               disabled={!data.events.length}
             >
               {data.events.map((event) => (
-                <option value={event.id} key={event.id}>{event.name}</option>
+                <option value={event.id} key={event.id}>
+                  {data.meets.find((meet) => meet.id === event.parentEventId)?.name} — {event.name}
+                </option>
               ))}
             </select>
             <ChevronDown size={16} />
@@ -116,6 +151,7 @@ function App() {
             <Overview
               event={activeEvent}
               teams={data.teams}
+              registrations={data.registrations}
               contestants={data.contestants}
               onNavigate={changeView}
             />
@@ -123,6 +159,8 @@ function App() {
           {view === "events" && (
             <Events
               events={data.events}
+              meets={data.meets}
+              teams={data.teams}
               activeEventId={data.activeEventId}
               onAdd={(event) =>
                 setData((current) => ({
@@ -131,7 +169,78 @@ function App() {
                   activeEventId: event.id,
                 }))
               }
+              onAddMeet={(meet) =>
+                setData((current) => ({
+                  ...current,
+                  meets: [...current.meets, meet],
+                }))
+              }
+              onUpdateMeet={(meet) =>
+                setData((current) => ({
+                  ...current,
+                  meets: current.meets.map((item) => item.id === meet.id ? meet : item),
+                  events: current.events.map((event) =>
+                    event.parentEventId === meet.id
+                      ? {
+                          ...event,
+                          date: meet.date,
+                          startTime: meet.startTime,
+                          location: meet.location,
+                        }
+                      : event,
+                  ),
+                }))
+              }
+              onDeleteMeet={(meetId) =>
+                setData((current) => {
+                  const competitionIds = new Set(
+                    current.events
+                      .filter((event) => event.parentEventId === meetId)
+                      .map((event) => event.id),
+                  );
+                  const events = current.events.filter(
+                    (event) => event.parentEventId !== meetId,
+                  );
+                  return {
+                    ...current,
+                    meets: current.meets.filter((meet) => meet.id !== meetId),
+                    events,
+                    teams: current.teams.filter(
+                      (team) => !competitionIds.has(team.eventId),
+                    ),
+                    registrations: current.registrations.filter(
+                      (registration) => !competitionIds.has(registration.eventId),
+                    ),
+                    activeEventId: competitionIds.has(current.activeEventId)
+                      ? events[0]?.id ?? ""
+                      : current.activeEventId,
+                  };
+                })
+              }
               onSelect={setActiveEvent}
+              onUpdate={(event) =>
+                setData((current) => ({
+                  ...current,
+                  events: current.events.map((item) => item.id === event.id ? event : item),
+                }))
+              }
+              onDelete={(eventId) =>
+                setData((current) => {
+                  const events = current.events.filter((event) => event.id !== eventId);
+                  return {
+                    ...current,
+                    events,
+                    teams: current.teams.filter((team) => team.eventId !== eventId),
+                    registrations: current.registrations.filter(
+                      (registration) => registration.eventId !== eventId,
+                    ),
+                    activeEventId:
+                      current.activeEventId === eventId
+                        ? events[0]?.id ?? ""
+                        : current.activeEventId,
+                  };
+                })
+              }
             />
           )}
           {view === "contestants" && (
@@ -143,15 +252,104 @@ function App() {
                   contestants: [...current.contestants, contestant],
                 }))
               }
+              onUpdate={(contestant) =>
+                setData((current) => ({
+                  ...current,
+                  contestants: current.contestants.map((item) =>
+                    item.id === contestant.id ? contestant : item,
+                  ),
+                }))
+              }
+              onDelete={(contestantId) =>
+                setData((current) => ({
+                  ...current,
+                  contestants: current.contestants.filter((item) => item.id !== contestantId),
+                  registrations: current.registrations.filter(
+                    (registration) => registration.contestantId !== contestantId,
+                  ),
+                  teams: current.teams.filter(
+                    (team) => team.headerId !== contestantId && team.heelerId !== contestantId,
+                  ),
+                }))
+              }
             />
           )}
           {view === "teams" && (
             <Teams
               event={activeEvent}
               teams={data.teams}
+              registrations={data.registrations}
               contestants={data.contestants}
               onAdd={(team) =>
                 setData((current) => ({ ...current, teams: [...current.teams, team] }))
+              }
+              onUpdateTeam={(updatedTeam) =>
+                setData((current) => ({
+                  ...current,
+                  teams: current.teams.map((team) =>
+                    team.id === updatedTeam.id ? updatedTeam : team,
+                  ),
+                }))
+              }
+              onDeleteTeam={(teamId) =>
+                setData((current) => ({
+                  ...current,
+                  teams: current.teams.filter((team) => team.id !== teamId),
+                }))
+              }
+              onAddRegistration={(registration) =>
+                setData((current) => ({
+                  ...current,
+                  registrations: [...current.registrations, registration],
+                }))
+              }
+              onUpdateRegistration={(registration) =>
+                setData((current) => ({
+                  ...current,
+                  registrations: current.registrations.map((item) =>
+                    item.id === registration.id ? registration : item,
+                  ),
+                }))
+              }
+              onDeleteRegistration={(registrationId) =>
+                setData((current) => ({
+                  ...current,
+                  registrations: current.registrations.filter(
+                    (registration) => registration.id !== registrationId,
+                  ),
+                }))
+              }
+              onCommitDraw={(eventId, eventTeams) =>
+                setData((current) => ({
+                  ...current,
+                  teams: [
+                    ...current.teams.filter((team) => team.eventId !== eventId),
+                    ...eventTeams,
+                  ],
+                  events: current.events.map((event) =>
+                    event.id === eventId
+                      ? {
+                          ...event,
+                          drawHistory: [
+                            ...event.drawHistory,
+                            {
+                              id: uid("draw"),
+                              createdAt: new Date().toISOString(),
+                              teams: eventTeams,
+                            },
+                          ],
+                        }
+                      : event,
+                  ),
+                }))
+              }
+              onUpdateEvent={(updatedEvent) =>
+                setData((current) => ({
+                  ...current,
+                  events: current.events.map((event) =>
+                    event.id === updatedEvent.id ? updatedEvent : event,
+                  ),
+                }))
               }
               onShuffle={(eventId) =>
                 setData((current) => {
@@ -177,14 +375,28 @@ function App() {
             <RunDesk
               event={activeEvent}
               teams={data.teams}
+              registrations={data.registrations}
               contestants={data.contestants}
-              onSave={(teamId, update) =>
+              onUpdateEvent={(updatedEvent) =>
                 setData((current) => ({
                   ...current,
-                  teams: current.teams.map((team) =>
-                    team.id === teamId ? { ...team, ...update } : team,
+                  events: current.events.map((event) =>
+                    event.id === updatedEvent.id ? updatedEvent : event,
                   ),
                 }))
+              }
+              onSave={(teamId, update) =>
+                setData((current) => {
+                  return {
+                    ...current,
+                    teams: applyRunResult(
+                      current.teams,
+                      teamId,
+                      update,
+                      activeEvent?.rounds ?? 1,
+                    ),
+                  };
+                })
               }
             />
           )}
@@ -198,11 +410,13 @@ function App() {
 function Overview({
   event,
   teams,
+  registrations,
   contestants,
   onNavigate,
 }: {
   event?: ArenaEvent;
   teams: Team[];
+  registrations: EventRegistration[];
   contestants: Contestant[];
   onNavigate: (view: View) => void;
 }) {
@@ -210,6 +424,12 @@ function Overview({
     .filter((team) => team.eventId === event?.id)
     .sort((a, b) => a.drawPosition - b.drawPosition);
   const completed = eventTeams.filter((team) => team.status !== "ready");
+  const paidEntries =
+    event?.competitionType === "draw-pot"
+      ? registrations
+          .filter((entry) => entry.eventId === event.id && entry.status === "entered")
+          .reduce((total, entry) => total + entry.entries, 0)
+      : eventTeams.length;
   const upcoming = eventTeams.filter((team) => team.status === "ready").slice(0, 4);
   const standings = eventTeams
     .filter((team) => team.status === "complete" && team.rawTime !== null)
@@ -236,7 +456,7 @@ function Overview({
         <Stat icon={UsersRound} label="Teams entered" value={eventTeams.length} detail={`${contestants.length} riders on file`} />
         <Stat icon={Check} label="Runs completed" value={completed.length} detail={`${Math.max(eventTeams.length - completed.length, 0)} still to rope`} />
         <Stat icon={Clock3} label="Fast time" value={standings[0] ? `${(standings[0].rawTime! + standings[0].penalties).toFixed(2)}s` : "--"} detail={standings[0] ? `${rider(standings[0].headerId)} / ${rider(standings[0].heelerId)}` : "Waiting on results"} />
-        <Stat icon={CircleDollarSign} label="Entry pot" value={`$${(eventTeams.length * (event?.entryFee ?? 0)).toLocaleString()}`} detail={`$${event?.entryFee ?? 0} per team`} />
+        <Stat icon={CircleDollarSign} label="Entry pot" value={`$${(paidEntries * (event?.entryFee ?? 0)).toLocaleString()}`} detail={`$${event?.entryFee ?? 0} per paid entry`} />
       </section>
 
       <section className="two-column">
@@ -294,99 +514,493 @@ function Stat({ icon: Icon, label, value, detail }: { icon: typeof Gauge; label:
 }
 
 function Events({
+  meets,
   events,
+  teams,
   activeEventId,
+  onAddMeet,
+  onUpdateMeet,
+  onDeleteMeet,
   onAdd,
   onSelect,
+  onUpdate,
+  onDelete,
 }: {
+  meets: ArenaMeet[];
   events: ArenaEvent[];
+  teams: Team[];
   activeEventId: string;
+  onAddMeet: (meet: ArenaMeet) => void;
+  onUpdateMeet: (meet: ArenaMeet) => void;
+  onDeleteMeet: (id: string) => void;
   onAdd: (event: ArenaEvent) => void;
   onSelect: (id: string) => void;
+  onUpdate: (event: ArenaEvent) => void;
+  onDelete: (id: string) => void;
 }) {
-  const [showForm, setShowForm] = useState(false);
+  const [showMeetForm, setShowMeetForm] = useState(false);
+  const [editingMeet, setEditingMeet] = useState<ArenaMeet | null>(null);
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<ArenaEvent | null>(null);
+  const [copying, setCopying] = useState<ArenaEvent | null>(null);
+  const [selectedType, setSelectedType] = useState<CompetitionType | null>(null);
+  const selectedParent =
+    meets.find((meet) => meet.id === selectedParentId) ??
+    meets.find((meet) => meet.id === editing?.parentEventId);
 
   return (
     <>
       <PageIntro
         title="Events"
-        text="Create jackpots and series stops, then select the active event for arena operations."
+        text="Create an arena event, then add independent roping competitions beneath it."
         button="New event"
-        onClick={() => setShowForm((open) => !open)}
+        onClick={() => {
+          setCopying(null);
+          setEditingMeet(null);
+          setShowMeetForm(true);
+          setEditing(null);
+          setSelectedParentId(null);
+          setSelectedType(null);
+        }}
       />
-      {showForm && <EventForm onSubmit={(event) => { onAdd(event); setShowForm(false); }} onCancel={() => setShowForm(false)} />}
-      <div className="event-grid">
-        {events.map((event) => (
-          <article className={`event-card ${event.id === activeEventId ? "selected" : ""}`} key={event.id}>
-            <div className="event-date">
-              <strong>{new Date(`${event.date}T12:00:00`).getDate()}</strong>
-              <span>{new Date(`${event.date}T12:00:00`).toLocaleDateString("en-US", { month: "short" })}</span>
-            </div>
-            <div className="event-card-body">
-              <span className={`tag ${event.status.toLowerCase()}`}>{event.status}</span>
-              <h3>{event.name}</h3>
-              <p><MapPin size={15} /> {event.location}</p>
-              <p><Clock3 size={15} /> {formatTime(event.startTime)} · ${event.entryFee} entry</p>
-              <button className={event.id === activeEventId ? "selected-button" : "secondary"} onClick={() => onSelect(event.id)}>
-                {event.id === activeEventId ? <><Check size={16} /> Active event</> : "Set as active"}
-              </button>
-            </div>
-          </article>
-        ))}
+      {(showMeetForm || editingMeet) && (
+        <MeetForm
+          meet={editingMeet ?? undefined}
+          onSubmit={(meet) => {
+            if (editingMeet) onUpdateMeet(meet);
+            else onAddMeet(meet);
+            setEditingMeet(null);
+            setShowMeetForm(false);
+          }}
+          onCancel={() => {
+            setEditingMeet(null);
+            setShowMeetForm(false);
+          }}
+        />
+      )}
+      {copying && (
+        <CopyCompetitionForm
+          competition={copying}
+          sourceMeet={meets.find((meet) => meet.id === copying.parentEventId)}
+          targetMeets={meets.filter(
+            (meet) =>
+              meet.id !== copying.parentEventId &&
+              meet.date >= new Date().toISOString().slice(0, 10),
+          )}
+          onSubmit={(targetMeet, name) => {
+            onAdd({
+              ...copying,
+              id: uid("event"),
+              parentEventId: targetMeet.id,
+              name,
+              date: targetMeet.date,
+              startTime: targetMeet.startTime,
+              location: targetMeet.location,
+              status: "Upcoming",
+              registrationOpen: true,
+              drawLocked: false,
+              resultsPublished: false,
+              drawHistory: [],
+            });
+            setCopying(null);
+          }}
+          onCancel={() => setCopying(null)}
+        />
+      )}
+      {selectedParentId && !selectedType && !editing && (
+        <CompetitionTypeSelector
+          events={events.filter((event) => event.parentEventId === selectedParentId)}
+          teams={teams}
+          onSelect={setSelectedType}
+          onCancel={() => setSelectedParentId(null)}
+        />
+      )}
+      {((selectedParentId && selectedType) || editing) && selectedParent && (
+        <EventForm
+          event={editing ?? undefined}
+          parent={selectedParent}
+          competitionType={selectedType ?? editing?.competitionType}
+          onSubmit={(event) => {
+            if (editing) onUpdate(event);
+            else onAdd(event);
+            setEditing(null);
+            setSelectedType(null);
+            setSelectedParentId(null);
+          }}
+          onCancel={() => {
+            setEditing(null);
+            setSelectedType(null);
+            setSelectedParentId(null);
+          }}
+        />
+      )}
+      <div className="meet-list">
+        {meets.map((meet) => {
+          const competitions = events.filter((event) => event.parentEventId === meet.id);
+          return (
+            <section className="meet-card" key={meet.id}>
+              <div className="meet-header">
+                <div className="event-date">
+                  <strong>{new Date(`${meet.date}T12:00:00`).getDate()}</strong>
+                  <span>{new Date(`${meet.date}T12:00:00`).toLocaleDateString("en-US", { month: "short" })}</span>
+                </div>
+                <div className="meet-title">
+                  <span className="eyebrow">Arena event</span>
+                  <h2>{meet.name}</h2>
+                  <p><MapPin size={14} /> {meet.location} <i /> <Clock3 size={14} /> {formatTime(meet.startTime)}</p>
+                </div>
+                <div className="event-actions">
+                  <button className="primary" onClick={() => { setCopying(null); setSelectedParentId(meet.id); setSelectedType(null); setEditing(null); setShowMeetForm(false); }}><Plus size={16} /> Add roping</button>
+                  <button className="icon-action" title="Edit event" onClick={() => { setCopying(null); setEditingMeet(meet); setShowMeetForm(false); setSelectedParentId(null); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil size={16} /></button>
+                  <button className="icon-action delete-action" title="Delete event" onClick={() => {
+                    if (window.confirm(`Delete ${meet.name} and all of its roping competitions, draws, and results?`)) {
+                      onDeleteMeet(meet.id);
+                    }
+                  }}><Trash2 size={16} /></button>
+                </div>
+              </div>
+              <div className="competition-list">
+                {competitions.map((event) => (
+                  <article className={`competition-row ${event.id === activeEventId ? "selected" : ""}`} key={event.id}>
+                    <span className="competition-icon">{event.competitionType === "draw-pot" ? <Dices size={20} /> : event.competitionType === "pick-only" ? <Handshake size={20} /> : event.competitionType === "pick-and-draw" ? <GitFork size={20} /> : <Repeat2 size={20} />}</span>
+                    <div className="competition-row-main">
+                      <div className="event-card-tags"><span className={`tag ${event.status.toLowerCase()}`}>{event.status}</span><span className="tag neutral">{competitionName(event.competitionType)}</span></div>
+                      <h3>{event.name}</h3>
+                      <p>${event.entryFee} entry · HC {event.handicapTotal} · {event.rounds} round{event.rounds === 1 ? "" : "s"} · {teams.filter((team) => team.eventId === event.id).length} teams</p>
+                    </div>
+                    <div className="event-actions">
+                      <button className={event.id === activeEventId ? "selected-button" : "secondary"} onClick={() => onSelect(event.id)}>
+                        {event.id === activeEventId ? <><Check size={16} /> Active roping</> : "Open roping"}
+                      </button>
+                      <button className="icon-action" title="Copy roping to upcoming event" onClick={() => { setCopying(event); setEditing(null); setSelectedParentId(null); setShowMeetForm(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Copy size={16} /></button>
+                      <button className="icon-action" title="Edit roping" onClick={() => { setCopying(null); setEditing(event); setSelectedParentId(meet.id); setSelectedType(null); setShowMeetForm(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil size={16} /></button>
+                      <button className="icon-action delete-action" title="Delete roping" onClick={() => {
+                        if (window.confirm(`Delete ${event.name}? This will also delete its entries, draw, and results.`)) {
+                          onDelete(event.id);
+                          if (editing?.id === event.id) setEditing(null);
+                        }
+                      }}><Trash2 size={16} /></button>
+                    </div>
+                  </article>
+                ))}
+                {!competitions.length && <EmptyState text="No roping competitions yet. Add Draw Pot, Pick Only, Pick and Draw, or Round Robin." />}
+              </div>
+            </section>
+          );
+        })}
+        {!meets.length && <div className="panel"><EmptyState text="Create your first arena event to add roping competitions." /></div>}
       </div>
     </>
   );
 }
 
-function EventForm({ onSubmit, onCancel }: { onSubmit: (event: ArenaEvent) => void; onCancel: () => void }) {
-  const [form, setForm] = useState({
-    name: "", date: "", startTime: "18:00", location: "", status: "Upcoming" as EventStatus, entryFee: "60",
-  });
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    onSubmit({ ...form, id: uid("event"), entryFee: Number(form.entryFee) || 0 });
+function CopyCompetitionForm({
+  competition,
+  sourceMeet,
+  targetMeets,
+  onSubmit,
+  onCancel,
+}: {
+  competition: ArenaEvent;
+  sourceMeet?: ArenaMeet;
+  targetMeets: ArenaMeet[];
+  onSubmit: (targetMeet: ArenaMeet, name: string) => void;
+  onCancel: () => void;
+}) {
+  const [targetId, setTargetId] = useState(targetMeets[0]?.id ?? "");
+  const [name, setName] = useState(competition.name);
+  const submit = (formEvent: FormEvent) => {
+    formEvent.preventDefault();
+    const target = targetMeets.find((meet) => meet.id === targetId);
+    if (target) onSubmit(target, name.trim());
   };
-
   return (
-    <form className="form-panel" onSubmit={submit}>
-      <div className="form-heading"><div><h3>Create event</h3><p>Add the details used across the draw and run desk.</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
-      <div className="form-grid">
-        <Field label="Event name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Saturday Night Jackpot" /></Field>
-        <Field label="Location"><input required value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Arena name" /></Field>
-        <Field label="Date"><input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
-        <Field label="Start time"><input required type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></Field>
-        <Field label="Entry fee"><input required min="0" type="number" value={form.entryFee} onChange={(e) => setForm({ ...form, entryFee: e.target.value })} /></Field>
-        <Field label="Status"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EventStatus })}><option>Upcoming</option><option>Live</option><option>Complete</option></select></Field>
+    <form className="form-panel copy-form" onSubmit={submit}>
+      <div className="form-heading">
+        <div><span className="tag neutral"><Copy size={12} /> Copy roping</span><h3>{competition.name}</h3><p>Copy configuration from {sourceMeet?.name ?? "the current event"} without entries, draw, or results.</p></div>
+        <button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button>
       </div>
-      <FormActions onCancel={onCancel} submitLabel="Create event" />
+      {targetMeets.length ? (
+        <>
+          <div className="form-grid two">
+            <Field label="Roping name"><input required value={name} onChange={(event) => setName(event.target.value)} /></Field>
+            <Field label="Upcoming event"><select required value={targetId} onChange={(event) => setTargetId(event.target.value)}>{targetMeets.map((meet) => <option value={meet.id} key={meet.id}>{meet.name} · {formatDate(meet.date)}</option>)}</select></Field>
+          </div>
+          <div className="copy-summary">
+            <span>{competitionName(competition.competitionType)}</span>
+            <span>HC {competition.handicapTotal}</span>
+            <span>{competition.rounds} round{competition.rounds === 1 ? "" : "s"}</span>
+            <span>${competition.entryFee} entry</span>
+          </div>
+          <FormActions onCancel={onCancel} submitLabel="Copy to event" />
+        </>
+      ) : (
+        <>
+          <div className="notice"><span>Create another upcoming event before copying this roping.</span></div>
+          <div className="form-actions"><button type="button" className="secondary" onClick={onCancel}>Close</button></div>
+        </>
+      )}
     </form>
   );
 }
 
-function Contestants({ contestants, onAdd }: { contestants: Contestant[]; onAdd: (contestant: Contestant) => void }) {
+function MeetForm({
+  meet,
+  onSubmit,
+  onCancel,
+}: {
+  meet?: ArenaMeet;
+  onSubmit: (meet: ArenaMeet) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: meet?.name ?? "",
+    date: meet?.date ?? "",
+    startTime: meet?.startTime ?? "18:00",
+    location: meet?.location ?? "",
+  });
+  const submit = (formEvent: FormEvent) => {
+    formEvent.preventDefault();
+    onSubmit({ ...form, id: meet?.id ?? uid("meet") });
+  };
+  return (
+    <form className="form-panel" onSubmit={submit}>
+      <div className="form-heading"><div><span className="tag neutral">Arena event</span><h3>{meet ? "Edit event" : "Create event"}</h3><p>Name and schedule the event before adding its roping competitions.</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
+      <div className="form-grid">
+        <Field label="Event name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Saturday Night Jackpot" /></Field>
+        <Field label="Arena"><input required value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Arena name" /></Field>
+        <Field label="Event date"><input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
+        <Field label="Start time"><input required type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></Field>
+      </div>
+      <FormActions onCancel={onCancel} submitLabel={meet ? "Save event" : "Create event"} />
+    </form>
+  );
+}
+
+function CompetitionTypeSelector({
+  events,
+  teams,
+  onSelect,
+  onCancel,
+}: {
+  events: ArenaEvent[];
+  teams: Team[];
+  onSelect: (type: CompetitionType) => void;
+  onCancel: () => void;
+}) {
+  const icons = {
+    "draw-pot": Dices,
+    "pick-only": Handshake,
+    "pick-and-draw": GitFork,
+    "round-robin": Repeat2,
+  };
+  return (
+    <section className="competition-chooser">
+      <div className="chooser-heading">
+        <div><span className="eyebrow">New competition</span><h2>Choose a competition type</h2><p>The format configures registration, partner assignment, draw generation, and standings.</p></div>
+        <button className="icon-button" onClick={onCancel}><X size={21} /></button>
+      </div>
+      <div className="competition-grid">
+        {competitionTypes.map((type) => {
+          const Icon = icons[type.id];
+          const typeEvents = events.filter((event) => event.competitionType === type.id);
+          const teamCount = teams.filter((team) => typeEvents.some((event) => event.id === team.eventId)).length;
+          return (
+            <article className={`competition-card type-${type.id}`} key={type.id}>
+              <span className="competition-icon"><Icon size={24} /></span>
+              <h3>{type.name}</h3>
+              <p>{type.description}</p>
+              <ul>{type.features.map((feature) => <li key={feature}><Check size={13} /> {feature}</li>)}</ul>
+              <div className="competition-meta"><span><Clock3 size={14} /> {type.setupTime}</span><span><UsersRound size={14} /> {teamCount} registered teams</span></div>
+              <button className="primary" onClick={() => onSelect(type.id)}>Create Event <ArrowRight size={16} /></button>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function EventForm({
+  event,
+  parent,
+  competitionType,
+  onSubmit,
+  onCancel,
+}: {
+  event?: ArenaEvent;
+  parent: ArenaMeet;
+  competitionType?: CompetitionType;
+  onSubmit: (event: ArenaEvent) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: event?.name ?? "",
+    status: event?.status ?? "Upcoming" as EventStatus,
+    entryFee: event?.entryFee.toString() ?? "60",
+    competitionType: competitionType ?? event?.competitionType ?? defaultCompetitionSettings.competitionType,
+    pickDrawRole: event?.pickDrawRole ?? defaultCompetitionSettings.pickDrawRole,
+    registrationOpen: event?.registrationOpen ?? true,
+    entriesAllowed: (event?.entriesAllowed ?? 1).toString(),
+    handicapTotal: (event?.handicapTotal ?? 99).toString(),
+    timeLimit: (event?.timeLimit ?? 30).toString(),
+    rounds: (event?.rounds ?? 1).toString(),
+    progressiveAfterRound: (event?.progressiveAfterRound ?? 0).toString(),
+    addedMoney: (event?.addedMoney ?? 0).toString(),
+    incentivePayouts: event?.incentivePayouts ?? false,
+    officeCharge: (event?.officeCharge ?? 0).toString(),
+    stockCharge: (event?.stockCharge ?? 0).toString(),
+    producerFeePercent: (event?.producerFeePercent ?? 0).toString(),
+    payoutPercentages: (event?.payoutPercentages ?? [50, 30, 20]).join(", "),
+  });
+  const submit = (formEvent: FormEvent) => {
+    formEvent.preventDefault();
+    onSubmit({
+      ...event,
+      ...form,
+      id: event?.id ?? uid("event"),
+      parentEventId: parent.id,
+      date: parent.date,
+      startTime: parent.startTime,
+      location: parent.location,
+      entryFee: Number(form.entryFee) || 0,
+      entriesAllowed: Number(form.entriesAllowed) || 1,
+      handicapTotal: Number(form.handicapTotal) || 0,
+      timeLimit: Number(form.timeLimit) || 0,
+      rounds: Number(form.rounds) || 1,
+      progressiveAfterRound: Number(form.progressiveAfterRound) || 0,
+      addedMoney: Number(form.addedMoney) || 0,
+      officeCharge: Number(form.officeCharge) || 0,
+      stockCharge: Number(form.stockCharge) || 0,
+      producerFeePercent: Number(form.producerFeePercent) || 0,
+      payoutPercentages: form.payoutPercentages
+        .split(",")
+        .map((value) => Number(value.trim()))
+        .filter((value) => value > 0),
+      drawLocked: event?.drawLocked ?? false,
+      resultsPublished: event?.resultsPublished ?? false,
+      drawHistory: event?.drawHistory ?? [],
+    });
+  };
+
+  return (
+    <form className="form-panel" onSubmit={submit}>
+      <div className="form-heading"><div><span className="tag neutral">{competitionName(form.competitionType)}</span><h3>{event ? "Edit roping" : `Add roping to ${parent.name}`}</h3><p>Configure this competition's rules, registration, scoring, and payouts.</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
+      <h4 className="form-section-title">Roping details</h4>
+      <div className="form-grid">
+        <Field label="Roping name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="#10.5 Draw Pot" /></Field>
+        <Field label="Entry fee"><input required min="0" type="number" value={form.entryFee} onChange={(e) => setForm({ ...form, entryFee: e.target.value })} /></Field>
+        <Field label="Status"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EventStatus })}><option>Upcoming</option><option>Live</option><option>Complete</option></select></Field>
+      </div>
+      <h4 className="form-section-title">Competition rules</h4>
+      <div className="form-grid">
+        <Field label="Competition type"><select value={form.competitionType} onChange={(e) => setForm({ ...form, competitionType: e.target.value as CompetitionType })}>{competitionTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}</select></Field>
+        {form.competitionType === "pick-and-draw" && (
+          <Field label="Draw assignment"><select value={form.pickDrawRole} onChange={(e) => setForm({ ...form, pickDrawRole: e.target.value as PickDrawRole })}><option value="header">Draw Header</option><option value="heeler">Draw Heeler</option><option value="both">Draw Both</option></select></Field>
+        )}
+        <Field label="Entries allowed"><input required type="number" min="1" value={form.entriesAllowed} onChange={(e) => setForm({ ...form, entriesAllowed: e.target.value })} /></Field>
+        <Field label="Handicap Total"><input required type="number" min="0" step="0.5" value={form.handicapTotal} onChange={(e) => setForm({ ...form, handicapTotal: e.target.value })} placeholder="10.5" /></Field>
+        <Field label="Time limit (seconds)"><input required type="number" min="1" value={form.timeLimit} onChange={(e) => setForm({ ...form, timeLimit: e.target.value })} /></Field>
+        <Field label="Number of rounds"><input required type="number" min="1" value={form.rounds} onChange={(e) => setForm({ ...form, rounds: e.target.value })} /></Field>
+        <Field label="Progressive after round"><select value={form.progressiveAfterRound} onChange={(e) => setForm({ ...form, progressiveAfterRound: e.target.value })}><option value="0">Not progressive</option>{Array.from({ length: Math.max(Number(form.rounds), 1) }, (_, index) => <option value={index + 1} key={index + 1}>Round {index + 1}</option>)}</select></Field>
+      </div>
+      <h4 className="form-section-title">Fees and payouts</h4>
+      <div className="form-grid">
+        <Field label="Added money"><input type="number" min="0" value={form.addedMoney} onChange={(e) => setForm({ ...form, addedMoney: e.target.value })} /></Field>
+        <Field label="Office charge / entry"><input type="number" min="0" value={form.officeCharge} onChange={(e) => setForm({ ...form, officeCharge: e.target.value })} /></Field>
+        <Field label="Stock charge / entry"><input type="number" min="0" value={form.stockCharge} onChange={(e) => setForm({ ...form, stockCharge: e.target.value })} /></Field>
+        <Field label="Producer fee (%)"><input type="number" min="0" max="100" step="0.1" value={form.producerFeePercent} onChange={(e) => setForm({ ...form, producerFeePercent: e.target.value })} /></Field>
+        <Field label="Payout split (%)"><input required value={form.payoutPercentages} onChange={(e) => setForm({ ...form, payoutPercentages: e.target.value })} placeholder="50, 30, 20" /></Field>
+      </div>
+      <div className="toggle-grid">
+        <label className="toggle-row"><input type="checkbox" checked={form.registrationOpen} onChange={(e) => setForm({ ...form, registrationOpen: e.target.checked })} /><span><strong>Registration open</strong><small>Allow new contestants and teams to enter.</small></span></label>
+        <label className="toggle-row"><input type="checkbox" checked={form.incentivePayouts} onChange={(e) => setForm({ ...form, incentivePayouts: e.target.checked })} /><span><strong>Incentive payouts</strong><small>Track an additional incentive payout class.</small></span></label>
+      </div>
+      <FormActions onCancel={onCancel} submitLabel={event ? "Save roping" : "Add roping"} />
+    </form>
+  );
+}
+
+function Contestants({
+  contestants,
+  onAdd,
+  onUpdate,
+  onDelete,
+}: {
+  contestants: Contestant[];
+  onAdd: (contestant: Contestant) => void;
+  onUpdate: (contestant: Contestant) => void;
+  onDelete: (contestantId: string) => void;
+}) {
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Contestant | null>(null);
   const [search, setSearch] = useState("");
   const filtered = contestants.filter((contestant) =>
-    `${contestant.name} ${contestant.hometown} ${contestant.role}`.toLowerCase().includes(search.toLowerCase()),
+    `${contestant.name} ${contestant.hometown} ${contestant.role} ${contestant.headerHandicap} ${contestant.heelerHandicap}`.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
     <>
-      <PageIntro title="Contestants" text="Maintain the rider roster used to build teams for every event." button="Add contestant" onClick={() => setShowForm((open) => !open)} />
-      {showForm && <ContestantForm onSubmit={(rider) => { onAdd(rider); setShowForm(false); }} onCancel={() => setShowForm(false)} />}
+      <PageIntro title="Contestants" text="Maintain the rider roster used to build teams for every event." button="Add contestant" onClick={() => { setEditing(null); setShowForm((open) => !open); }} />
+      {(showForm || editing) && (
+        <ContestantForm
+          contestant={editing ?? undefined}
+          onSubmit={(rider) => {
+            if (editing) onUpdate(rider);
+            else onAdd(rider);
+            setEditing(null);
+            setShowForm(false);
+          }}
+          onCancel={() => {
+            setEditing(null);
+            setShowForm(false);
+          }}
+        />
+      )}
       <div className="panel table-panel">
         <div className="table-toolbar">
           <div><h3>Rider roster</h3><p>{contestants.length} contestants on file</p></div>
           <label className="search"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search riders" /></label>
         </div>
-        <div className="data-table">
-          <div className="table-row table-header"><span>Contestant</span><span>Position</span><span>Hometown</span><span>Phone</span></div>
+        <div className="data-table contestant-table">
+          <div className="table-row table-header"><span>Contestant</span><span>Position</span><span>Header handicap</span><span>Heeler handicap</span><span>Hometown</span><span>Phone</span><span>Actions</span></div>
           {filtered.map((contestant) => (
             <div className="table-row" key={contestant.id}>
-              <span className="person"><i>{initials(contestant.name)}</i><strong>{contestant.name}</strong></span>
+              <span className="person">
+                {contestant.photo
+                  ? <img className="profile-photo" src={contestant.photo} alt="" />
+                  : <i>{initials(contestant.name)}</i>}
+                <strong>{contestant.name}</strong>
+              </span>
               <span><b className="tag neutral">{contestant.role}</b></span>
+              <span>{contestant.headerHandicap}</span>
+              <span>{contestant.heelerHandicap}</span>
               <span>{contestant.hometown || "—"}</span>
               <span>{contestant.phone || "—"}</span>
+              <span className="row-actions">
+                <button
+                  title="Edit contestant"
+                  onClick={() => {
+                    setEditing(contestant);
+                    setShowForm(false);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  <Pencil size={15} />
+                </button>
+                <button
+                  className="delete-action"
+                  title="Delete contestant"
+                  onClick={() => {
+                    if (window.confirm(`Delete ${contestant.name}? This will also delete all of their team entries.`)) {
+                      onDelete(contestant.id);
+                      if (editing?.id === contestant.id) setEditing(null);
+                    }
+                  }}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </span>
             </div>
           ))}
         </div>
@@ -395,22 +1009,82 @@ function Contestants({ contestants, onAdd }: { contestants: Contestant[]; onAdd:
   );
 }
 
-function ContestantForm({ onSubmit, onCancel }: { onSubmit: (contestant: Contestant) => void; onCancel: () => void }) {
-  const [form, setForm] = useState({ name: "", role: "Either" as Contestant["role"], phone: "", hometown: "" });
+function ContestantForm({
+  contestant,
+  onSubmit,
+  onCancel,
+}: {
+  contestant?: Contestant;
+  onSubmit: (contestant: Contestant) => void;
+  onCancel: () => void;
+}) {
+  const nameParts = contestant?.name.trim().split(/\s+/) ?? [];
+  const [form, setForm] = useState({
+    firstName: nameParts.slice(0, -1).join(" ") || nameParts[0] || "",
+    lastName: nameParts.length > 1 ? nameParts[nameParts.length - 1] : "",
+    role: contestant?.role ?? "Both" as Contestant["role"],
+    headerHandicap: contestant?.headerHandicap.toString() ?? "",
+    heelerHandicap: contestant?.heelerHandicap.toString() ?? "",
+    photo: contestant?.photo ?? "",
+    phone: contestant?.phone ?? "",
+    hometown: contestant?.hometown ?? "",
+  });
+  const [photoError, setPhotoError] = useState("");
+  const handlePhoto = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Choose an image file.");
+      return;
+    }
+    try {
+      const photo = await resizeProfilePhoto(file);
+      setForm((current) => ({ ...current, photo }));
+      setPhotoError("");
+    } catch {
+      setPhotoError("The photo could not be loaded.");
+    }
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    onSubmit({ ...form, id: uid("rider") });
+    onSubmit({
+      id: contestant?.id ?? uid("rider"),
+      name: `${form.firstName.trim()} ${form.lastName.trim()}`,
+      role: form.role,
+      headerHandicap: Number(form.headerHandicap),
+      heelerHandicap: Number(form.heelerHandicap),
+      phone: form.phone,
+      hometown: form.hometown,
+      photo: form.photo,
+    });
   };
   return (
     <form className="form-panel" onSubmit={submit}>
-      <div className="form-heading"><div><h3>Add contestant</h3><p>Create a rider profile for team entries.</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
+      <div className="form-heading"><div><h3>{contestant ? "Edit contestant" : "Add contestant"}</h3><p>{contestant ? "Update this rider's profile and handicaps." : "Create a rider profile for team entries."}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
+      <div className="photo-field">
+        <div className="photo-preview">
+          {form.photo ? <img src={form.photo} alt="Contestant preview" /> : <Camera size={24} />}
+        </div>
+        <div>
+          <strong>Profile picture</strong>
+          <p>Optional JPG, PNG, or WebP image.</p>
+          <label className="secondary photo-button">
+            {form.photo ? "Change picture" : "Choose picture"}
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => void handlePhoto(e.target.files?.[0])} />
+          </label>
+          {form.photo && <button type="button" className="remove-photo" onClick={() => setForm({ ...form, photo: "" })}>Remove</button>}
+          {photoError && <span className="field-error">{photoError}</span>}
+        </div>
+      </div>
       <div className="form-grid">
-        <Field label="Full name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Rider name" /></Field>
-        <Field label="Position"><select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Contestant["role"] })}><option>Header</option><option>Heeler</option><option>Either</option></select></Field>
+        <Field label="First Name"><input required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} placeholder="First name" /></Field>
+        <Field label="Last Name"><input required value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} placeholder="Last name" /></Field>
+        <Field label="Position"><select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Contestant["role"] })}><option>Header</option><option>Heeler</option><option>Both</option></select></Field>
+        <Field label="Header Handicap"><input required type="number" min="0" step="0.5" value={form.headerHandicap} onChange={(e) => setForm({ ...form, headerHandicap: e.target.value })} placeholder="0" /></Field>
+        <Field label="Heeler Handicap"><input required type="number" min="0" step="0.5" value={form.heelerHandicap} onChange={(e) => setForm({ ...form, heelerHandicap: e.target.value })} placeholder="0" /></Field>
         <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555-0123" /></Field>
         <Field label="Hometown"><input value={form.hometown} onChange={(e) => setForm({ ...form, hometown: e.target.value })} placeholder="City, State" /></Field>
       </div>
-      <FormActions onCancel={onCancel} submitLabel="Add contestant" />
+      <FormActions onCancel={onCancel} submitLabel={contestant ? "Save changes" : "Add contestant"} />
     </form>
   );
 }
@@ -418,63 +1092,334 @@ function ContestantForm({ onSubmit, onCancel }: { onSubmit: (contestant: Contest
 function Teams({
   event,
   teams,
+  registrations,
   contestants,
   onAdd,
+  onUpdateTeam,
+  onDeleteTeam,
+  onAddRegistration,
+  onUpdateRegistration,
+  onDeleteRegistration,
+  onCommitDraw,
+  onUpdateEvent,
   onShuffle,
 }: {
   event?: ArenaEvent;
   teams: Team[];
+  registrations: EventRegistration[];
   contestants: Contestant[];
   onAdd: (team: Team) => void;
+  onUpdateTeam: (team: Team) => void;
+  onDeleteTeam: (teamId: string) => void;
+  onAddRegistration: (registration: EventRegistration) => void;
+  onUpdateRegistration: (registration: EventRegistration) => void;
+  onDeleteRegistration: (registrationId: string) => void;
+  onCommitDraw: (eventId: string, teams: Team[]) => void;
+  onUpdateEvent: (event: ArenaEvent) => void;
   onShuffle: (eventId: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
+  const [entryMode, setEntryMode] = useState<"team" | "registration">("team");
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [message, setMessage] = useState("");
+  const [teamSearch, setTeamSearch] = useState("");
   const eventTeams = teams.filter((team) => team.eventId === event?.id).sort((a, b) => a.drawPosition - b.drawPosition);
+  const eventRegistrations = registrations.filter((entry) => entry.eventId === event?.id);
+  const headerEntryCount = eventRegistrations
+    .filter((entry) => entry.role === "Header" && entry.status === "entered")
+    .reduce((total, entry) => total + entry.entries, 0);
+  const heelerEntryCount = eventRegistrations
+    .filter((entry) => entry.role === "Heeler" && entry.status === "entered")
+    .reduce((total, entry) => total + entry.entries, 0);
   const rider = (id: string) => contestants.find((item) => item.id === id);
+  const displayedTeams = eventTeams.filter((team) =>
+    `${rider(team.headerId)?.name ?? ""} ${rider(team.heelerId)?.name ?? ""}`
+      .toLowerCase()
+      .includes(teamSearch.toLowerCase()),
+  );
+  const individualRegistration =
+    event?.competitionType === "draw-pot" || event?.competitionType === "round-robin";
+  const usesDrawPool =
+    individualRegistration || event?.competitionType === "pick-and-draw";
+  const entryButton = individualRegistration ? "Register rider" : "Add team";
+  const canEdit = Boolean(event?.registrationOpen && !event?.drawLocked);
+  const format = competitionTypes.find((type) => type.id === event?.competitionType);
+
+  const saveTeam = (team: Team) => {
+    const duplicate = eventTeams.some(
+      (item) =>
+        item.id !== team.id &&
+        item.headerId === team.headerId &&
+        item.heelerId === team.heelerId,
+    );
+    if (duplicate) {
+      setMessage("That header and heeler are already entered as a team.");
+      return;
+    }
+    const handicap = teamHandicapTotal(team.headerId, team.heelerId, contestants);
+    if (event && handicap > event.handicapTotal) {
+      setMessage(
+        `Team handicap ${handicap} exceeds the event maximum of ${event.handicapTotal}.`,
+      );
+      return;
+    }
+    if (editingTeam) onUpdateTeam(team);
+    else onAdd(team);
+    setEditingTeam(null);
+    setShowForm(false);
+    setMessage("");
+  };
+
+  const generateDraw = () => {
+    if (!event) return;
+    const generated = generateCompetitionDraw(event, eventRegistrations, teams, contestants);
+    if (!generated.length) {
+      setMessage(
+        event.competitionType === "draw-pot"
+          ? "Register at least one eligible header and heeler before drawing."
+          : event.competitionType === "pick-and-draw"
+            ? "Add at least one picked team and eligible contestants to the draw pot."
+            : "Add eligible contestants or teams before generating the draw.",
+      );
+      return;
+    }
+    onCommitDraw(event.id, generated);
+    setMessage(`Draw version ${event.drawHistory.length + 1} generated with ${generated.length} teams.`);
+  };
 
   return (
     <>
-      <PageIntro title="Teams & draw" text={event ? `Build and order teams for ${event.name}.` : "Create an event before adding teams."} button="Add team" onClick={() => setShowForm((open) => !open)} disabled={!event} />
-      {showForm && event && <TeamForm event={event} contestants={contestants} drawPosition={eventTeams.length + 1} onSubmit={(team) => { onAdd(team); setShowForm(false); }} onCancel={() => setShowForm(false)} />}
-      <div className="panel">
+      <PageIntro title="Teams & draw" text={event ? `${competitionName(event.competitionType)} workflow for ${event.name}.` : "Create an event before adding teams."} button={entryButton} onClick={() => { setEditingTeam(null); setEntryMode(individualRegistration ? "registration" : "team"); setShowForm((open) => !open); }} disabled={!event || !canEdit} />
+      {event && (
+        <div className="format-banner">
+          <span className="competition-icon">{event.competitionType === "draw-pot" ? <Dices size={21} /> : event.competitionType === "pick-only" ? <Handshake size={21} /> : event.competitionType === "pick-and-draw" ? <GitFork size={21} /> : <Repeat2 size={21} />}</span>
+          <div><strong>{format?.name}</strong><p>{format?.description}</p></div>
+          {event.competitionType === "pick-and-draw" && (
+            <button className="secondary" disabled={!canEdit} onClick={() => { setEditingTeam(null); setEntryMode("registration"); setShowForm(true); }}>
+              <Dices size={15} /> Add to Draw Pot
+            </button>
+          )}
+          <span className={`tag ${event.registrationOpen ? "complete" : "no-time"}`}>{event.registrationOpen ? "Registration open" : "Registration closed"}</span>
+          <span className={`tag ${event.drawLocked ? "no-time" : "neutral"}`}>{event.drawLocked ? "Draw locked" : "Draw editable"}</span>
+        </div>
+      )}
+      {message && <div className="notice"><span>{message}</span><button onClick={() => setMessage("")}><X size={16} /></button></div>}
+      {showForm && event && entryMode === "registration" && (
+        <IndividualRegistrationForm
+          event={event}
+          contestants={contestants}
+          registrations={eventRegistrations}
+          onSubmit={(registration) => {
+            const duplicate = eventRegistrations.some(
+              (item) =>
+                item.contestantId === registration.contestantId &&
+                item.role === registration.role &&
+                item.status !== "scratched",
+            );
+            if (duplicate) {
+              setMessage("This contestant is already registered in that position.");
+              return;
+            }
+            onAddRegistration(registration);
+            setShowForm(false);
+            setMessage("");
+          }}
+          onCancel={() => setShowForm(false)}
+        />
+      )}
+      {((showForm && entryMode === "team") || editingTeam) && event && !individualRegistration && (
+        <TeamForm
+          event={event}
+          team={editingTeam ?? undefined}
+          contestants={contestants}
+          drawPosition={editingTeam?.drawPosition ?? eventTeams.length + 1}
+          onSubmit={saveTeam}
+          onCancel={() => { setShowForm(false); setEditingTeam(null); }}
+        />
+      )}
+      {event && usesDrawPool && (
+        <div className="panel registration-panel">
+          <div className="table-toolbar">
+            <div><h3>{event.competitionType === "pick-and-draw" ? "Draw Pot contestants" : "Rider registration"}</h3><p>{eventRegistrations.length} registered riders</p></div>
+            <div className="entry-totals">
+              <span><strong>{headerEntryCount}</strong> Paid header entries</span>
+              <span><strong>{heelerEntryCount}</strong> Paid heeler entries</span>
+              {event.competitionType === "pick-and-draw" && (
+                <span><strong>{event.pickDrawRole === "header" ? headerEntryCount : event.pickDrawRole === "heeler" ? heelerEntryCount : Math.max(headerEntryCount, heelerEntryCount)}</strong> Round 1 draw teams</span>
+              )}
+              {event.competitionType === "round-robin" && (
+                <span><strong>{eventRegistrations.filter((entry) => entry.role === "Header" && entry.status === "entered").length * eventRegistrations.filter((entry) => entry.role === "Heeler" && entry.status === "entered").length}</strong> Round Robin teams</span>
+              )}
+              {event.competitionType === "draw-pot" && headerEntryCount !== heelerEntryCount && (
+                <span className="free-total"><strong>{Math.abs(headerEntryCount - heelerEntryCount)}</strong> Free {headerEntryCount > heelerEntryCount ? "heeler" : "header"} run{Math.abs(headerEntryCount - heelerEntryCount) === 1 ? "" : "s"}</span>
+              )}
+            </div>
+          </div>
+          <div className="registration-list">
+            {eventRegistrations.map((registration) => (
+              <div className="registration-row" key={registration.id}>
+                <span className="person"><i>{initials(rider(registration.contestantId)?.name ?? "")}</i><span><strong>{rider(registration.contestantId)?.name}</strong><small>{registration.role} · {registration.entries} entr{registration.entries === 1 ? "y" : "ies"}</small></span></span>
+                <span className={`tag ${registration.status === "entered" ? "complete" : registration.status === "waitlist" ? "amber" : "no-time"}`}>{registration.status}</span>
+                <button className={registration.checkedIn ? "selected-button small-action" : "secondary small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, checkedIn: !registration.checkedIn })}>{registration.checkedIn ? <><Check size={14} /> Checked in</> : "Check in"}</button>
+                <button className="secondary small-action" disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, status: registration.status === "scratched" ? "entered" : "scratched" })}>{registration.status === "scratched" ? "Restore" : "Scratch"}</button>
+                <button className="icon-action delete-action small-icon" disabled={event.drawLocked} title="Delete registration" onClick={() => onDeleteRegistration(registration.id)}><Trash2 size={14} /></button>
+              </div>
+            ))}
+            {!eventRegistrations.length && <EmptyState text="No individual riders registered yet." />}
+          </div>
+        </div>
+      )}
+      <div className="panel draw-sheet">
         <div className="table-toolbar">
-          <div><h3>Draw order</h3><p>{eventTeams.length} teams entered</p></div>
-          <button className="secondary" disabled={!eventTeams.length} onClick={() => event && onShuffle(event.id)}><RefreshCw size={16} /> Randomize draw</button>
+          <div><h3>Draw order</h3><p>{eventTeams.length} teams · {event?.drawHistory.length ?? 0} draw version{event?.drawHistory.length === 1 ? "" : "s"}</p></div>
+          <div className="toolbar-actions">
+            <label className="search draw-search"><Search size={15} /><input value={teamSearch} onChange={(e) => setTeamSearch(e.target.value)} placeholder="Search teams" /></label>
+            <button className="secondary" disabled={!eventTeams.length} onClick={() => event && exportDrawCsv(event, eventTeams, contestants)}><Download size={16} /> CSV</button>
+            <button className="secondary" disabled={!eventTeams.length} onClick={() => window.print()}><Printer size={16} /> Print / PDF</button>
+            {event && <button className="secondary" onClick={() => onUpdateEvent({ ...event, drawLocked: !event.drawLocked })}>{event.drawLocked ? <><Unlock size={16} /> Unlock</> : <><Lock size={16} /> Lock draw</>}</button>}
+            {event?.competitionType === "pick-only" && event.rounds === 1
+              ? <button className="primary" disabled={!eventTeams.length || event.drawLocked} onClick={() => onShuffle(event.id)}><RefreshCw size={16} /> Randomize order</button>
+              : <button className="primary" disabled={!event || event.drawLocked} onClick={generateDraw}><Dices size={16} /> {eventTeams.length ? "Redraw" : "Generate draw"}</button>}
+          </div>
         </div>
         <div className="draw-list">
-          {eventTeams.map((team) => (
-            <div className="draw-row" key={team.id}>
+          {displayedTeams.map((team) => (
+            <div className={`draw-row ${team.scratched ? "scratched-row" : ""}`} key={team.id}>
               <span className="draw-number large">{team.drawPosition}</span>
-              <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name}</strong><small>Header</small></span></div>
+              <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}</small></span></div>
               <span className="pair-mark">&</span>
-              <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name}</strong><small>Heeler</small></span></div>
-              <span className={`tag ${team.status === "ready" ? "neutral" : team.status}`}>{team.status === "no-time" ? "No time" : team.status}</span>
+              <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}</small></span></div>
+              <span className="draw-status"><span className={`tag ${team.scratched ? "no-time" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}</small></span>
+              <span className="row-actions no-print">
+                <button title={team.checkedIn ? "Checked in" : "Check in"} disabled={event?.drawLocked} onClick={() => onUpdateTeam({ ...team, checkedIn: !team.checkedIn })}>{team.checkedIn ? <Check size={15} /> : <UserRound size={15} />}</button>
+                {!team.generated && <button title="Edit team" disabled={!canEdit} onClick={() => { setEditingTeam(team); setShowForm(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil size={15} /></button>}
+                <button title={team.scratched ? "Restore team" : "Scratch team"} disabled={event?.drawLocked} onClick={() => onUpdateTeam({ ...team, scratched: !team.scratched })}><X size={15} /></button>
+                <button className="delete-action" title="Delete team" disabled={!canEdit} onClick={() => onDeleteTeam(team.id)}><Trash2 size={15} /></button>
+              </span>
             </div>
           ))}
-          {!eventTeams.length && <EmptyState text="No teams entered for this event yet." />}
+          {!displayedTeams.length && <EmptyState text={eventTeams.length ? "No teams match this search." : "No teams entered for this event yet."} />}
         </div>
       </div>
+      {event && event.drawHistory.length > 0 && (
+        <div className="panel draw-history">
+          <PanelHeading title="Draw history" subtitle="Restore any previous generated draw" />
+          {event.drawHistory.slice().reverse().map((snapshot, index) => (
+            <div className="history-row" key={snapshot.id}>
+              <div><strong>Version {event.drawHistory.length - index}</strong><small>{new Date(snapshot.createdAt).toLocaleString()} · {snapshot.teams.length} teams</small></div>
+              <button className="secondary" disabled={event.drawLocked} onClick={() => onCommitDraw(event.id, snapshot.teams.map((team) => ({ ...team, id: uid("team"), status: "ready", rawTime: null, penalties: 0 })))}><RefreshCw size={14} /> Restore</button>
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
 
-function TeamForm({ event, contestants, drawPosition, onSubmit, onCancel }: { event: ArenaEvent; contestants: Contestant[]; drawPosition: number; onSubmit: (team: Team) => void; onCancel: () => void }) {
-  const headers = contestants.filter((rider) => rider.role !== "Heeler");
-  const heelers = contestants.filter((rider) => rider.role !== "Header");
-  const [headerId, setHeaderId] = useState(headers[0]?.id ?? "");
-  const [heelerId, setHeelerId] = useState(heelers.find((rider) => rider.id !== headerId)?.id ?? "");
+function IndividualRegistrationForm({
+  event,
+  contestants,
+  registrations,
+  onSubmit,
+  onCancel,
+}: {
+  event: ArenaEvent;
+  contestants: Contestant[];
+  registrations: EventRegistration[];
+  onSubmit: (registration: EventRegistration) => void;
+  onCancel: () => void;
+}) {
+  const requiredRole =
+    event.competitionType === "pick-and-draw" && event.pickDrawRole !== "both"
+      ? event.pickDrawRole === "header" ? "Header" : "Heeler"
+      : null;
+  const eligibleContestants = contestants.filter((contestant) =>
+    requiredRole === "Header"
+      ? contestant.role !== "Heeler"
+      : requiredRole === "Heeler"
+        ? contestant.role !== "Header"
+        : true,
+  );
+  const [contestantId, setContestantId] = useState(eligibleContestants[0]?.id ?? "");
+  const [role, setRole] = useState<"Header" | "Heeler">(
+    requiredRole ??
+      (eligibleContestants[0]?.role === "Heeler" ? "Heeler" : "Header"),
+  );
+  const [entries, setEntries] = useState("1");
+  const [status, setStatus] = useState<EventRegistration["status"]>("entered");
+  const [notes, setNotes] = useState("");
   const submit = (formEvent: FormEvent) => {
     formEvent.preventDefault();
-    onSubmit({ id: uid("team"), eventId: event.id, headerId, heelerId, drawPosition, status: "ready", rawTime: null, penalties: 0, notes: "" });
+    onSubmit({
+      id: uid("registration"),
+      eventId: event.id,
+      contestantId,
+      role,
+      entries: Number(entries),
+      checkedIn: false,
+      status,
+      notes,
+    });
   };
   return (
     <form className="form-panel" onSubmit={submit}>
-      <div className="form-heading"><div><h3>Add team</h3><p>Entry #{drawPosition} for {event.name}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
-      <div className="form-grid two">
+      <div className="form-heading"><div><h3>{event.competitionType === "pick-and-draw" ? "Add contestant to Draw Pot" : "Register rider"}</h3><p>Individual entry #{registrations.length + 1} for {event.name}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
+      <div className="form-grid">
+        <Field label="Contestant"><select required value={contestantId} onChange={(e) => { const id = e.target.value; setContestantId(id); const contestant = eligibleContestants.find((item) => item.id === id); if (!requiredRole && (contestant?.role === "Header" || contestant?.role === "Heeler")) setRole(contestant.role); }}>{eligibleContestants.map((contestant) => <option value={contestant.id} key={contestant.id}>{contestant.name}</option>)}</select></Field>
+        <Field label="Draw position"><select value={role} disabled={Boolean(requiredRole)} onChange={(e) => setRole(e.target.value as "Header" | "Heeler")}>{(!requiredRole || requiredRole === "Header") && <option>Header</option>}{(!requiredRole || requiredRole === "Heeler") && <option>Heeler</option>}</select></Field>
+        <Field label="Number of entries"><input required type="number" min="1" max={event.entriesAllowed} value={entries} onChange={(e) => setEntries(e.target.value)} /></Field>
+        <Field label="Entry status"><select value={status} onChange={(e) => setStatus(e.target.value as EventRegistration["status"])}><option value="entered">Entered</option><option value="waitlist">Wait list</option></select></Field>
+        <Field label="Contestant notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" /></Field>
+      </div>
+      <FormActions onCancel={onCancel} submitLabel={event.competitionType === "pick-and-draw" ? "Add to Draw Pot" : "Register rider"} />
+    </form>
+  );
+}
+
+function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel }: { event: ArenaEvent; team?: Team; contestants: Contestant[]; drawPosition: number; onSubmit: (team: Team) => void; onCancel: () => void }) {
+  const headers = contestants.filter((rider) => rider.role !== "Heeler");
+  const heelers = contestants.filter((rider) => rider.role !== "Header");
+  const [headerId, setHeaderId] = useState(team?.headerId ?? headers[0]?.id ?? "");
+  const [heelerId, setHeelerId] = useState(team?.heelerId ?? heelers.find((rider) => rider.id !== headerId)?.id ?? "");
+  const [notes, setNotes] = useState(team?.notes ?? "");
+  const handicap = teamHandicapTotal(headerId, heelerId, contestants);
+  const submit = (formEvent: FormEvent) => {
+    formEvent.preventDefault();
+    onSubmit({
+      id: team?.id ?? uid("team"),
+      eventId: event.id,
+      headerId,
+      heelerId,
+      drawPosition,
+      status: team?.status ?? "ready",
+      rawTime: team?.rawTime ?? null,
+      penalties: team?.penalties ?? 0,
+      notes,
+      round: team?.round ?? 1,
+      checkedIn: team?.checkedIn ?? false,
+      scratched: team?.scratched ?? false,
+      generated: team?.generated ?? false,
+      points: team?.points ?? 0,
+      headerEntryNumber: team?.headerEntryNumber ?? 1,
+      heelerEntryNumber: team?.heelerEntryNumber ?? 1,
+      headerFreeRun: team?.headerFreeRun ?? false,
+      heelerFreeRun: team?.heelerFreeRun ?? false,
+    });
+  };
+  return (
+    <form className="form-panel" onSubmit={submit}>
+      <div className="form-heading"><div><h3>{team ? "Edit team" : "Add team"}</h3><p>Entry #{drawPosition} for {event.name}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
+      <div className="form-grid">
         <Field label="Header"><select value={headerId} required onChange={(e) => setHeaderId(e.target.value)}>{headers.map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
         <Field label="Heeler"><select value={heelerId} required onChange={(e) => setHeelerId(e.target.value)}>{heelers.filter((rider) => rider.id !== headerId).map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
+        <Field label="Team notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" /></Field>
       </div>
-      <FormActions onCancel={onCancel} submitLabel="Add to draw" />
+      <div className={`handicap-preview ${handicap > event.handicapTotal ? "over" : ""}`}>
+        <span>Team handicap</span>
+        <strong>{handicap}</strong>
+        <small>Maximum {event.handicapTotal}</small>
+      </div>
+      <FormActions onCancel={onCancel} submitLabel={team ? "Save team" : "Add to draw"} />
     </form>
   );
 }
@@ -482,15 +1427,25 @@ function TeamForm({ event, contestants, drawPosition, onSubmit, onCancel }: { ev
 function RunDesk({
   event,
   teams,
+  registrations,
   contestants,
+  onUpdateEvent,
   onSave,
 }: {
   event?: ArenaEvent;
   teams: Team[];
+  registrations: EventRegistration[];
   contestants: Contestant[];
+  onUpdateEvent: (event: ArenaEvent) => void;
   onSave: (teamId: string, update: Partial<Team>) => void;
 }) {
-  const eventTeams = teams.filter((team) => team.eventId === event?.id).sort((a, b) => a.drawPosition - b.drawPosition);
+  const [selectedRound, setSelectedRound] = useState(1);
+  const roundCount = Math.max(event?.rounds ?? 1, 1);
+  const activeRound = Math.min(selectedRound, roundCount);
+  const allEventTeams = teams
+    .filter((team) => team.eventId === event?.id && !team.scratched)
+    .sort((a, b) => a.drawPosition - b.drawPosition);
+  const eventTeams = allEventTeams.filter((team) => team.round === activeRound);
   const nextTeam = eventTeams.find((team) => team.status === "ready");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = eventTeams.find((team) => team.id === selectedId) ?? nextTeam;
@@ -501,6 +1456,32 @@ function RunDesk({
   const standings = eventTeams
     .filter((team) => team.status === "complete" && team.rawTime !== null)
     .sort((a, b) => (a.rawTime! + a.penalties) - (b.rawTime! + b.penalties));
+  const paidEntryCount =
+    event?.competitionType === "draw-pot"
+      ? registrations
+          .filter((entry) => entry.eventId === event.id && entry.status === "entered")
+          .reduce((total, entry) => total + entry.entries, 0)
+      : eventTeams.length;
+  const purse = event ? calculatePurse(event, paidEntryCount) : 0;
+  const payouts = calculatePayouts(purse, standings.length, event?.payoutPercentages);
+  const riderStandings = useMemo(() => {
+    const stats = new Map<string, { contestantId: string; runs: number; qualified: number; noTimes: number; totalTime: number; points: number }>();
+    eventTeams.filter((team) => team.status !== "ready").forEach((team) => {
+      [team.headerId, team.heelerId].forEach((contestantId) => {
+        const current = stats.get(contestantId) ?? { contestantId, runs: 0, qualified: 0, noTimes: 0, totalTime: 0, points: 0 };
+        current.runs += 1;
+        if (team.status === "complete" && team.rawTime !== null) {
+          current.qualified += 1;
+          current.totalTime += team.rawTime + team.penalties;
+          current.points += team.points || 1;
+        } else {
+          current.noTimes += 1;
+        }
+        stats.set(contestantId, current);
+      });
+    });
+    return [...stats.values()].sort((a, b) => b.points - a.points || (a.totalTime / Math.max(a.qualified, 1)) - (b.totalTime / Math.max(b.qualified, 1)));
+  }, [eventTeams]);
 
   const chooseTeam = (team: Team) => {
     setSelectedId(team.id);
@@ -510,12 +1491,22 @@ function RunDesk({
   };
   const saveRun = (status: Team["status"]) => {
     if (!selected) return;
+    const total = Number(rawTime) + Number(penalties);
+    const exceededLimit = status === "complete" && event && total > event.timeLimit;
     onSave(selected.id, {
-      status,
+      status: exceededLimit ? "no-time" : status,
       rawTime: status === "complete" ? Number(rawTime) : null,
       penalties: status === "complete" ? Number(penalties) : 0,
-      notes,
+      notes: exceededLimit ? `${notes}${notes ? " · " : ""}Time limit exceeded` : notes,
+      points: status === "complete" && !exceededLimit ? 1 : 0,
     });
+    setSelectedId(null);
+    setRawTime("");
+    setPenalties("0");
+    setNotes("");
+  };
+  const changeRound = (round: number) => {
+    setSelectedRound(round);
     setSelectedId(null);
     setRawTime("");
     setPenalties("0");
@@ -525,9 +1516,30 @@ function RunDesk({
   return (
     <>
       <PageIntro title="Run desk" text={event ? `Record times and publish standings for ${event.name}.` : "Select an event to open the run desk."} />
+      {event && (
+        <div className="round-tabs" role="tablist" aria-label="Competition rounds">
+          {Array.from({ length: roundCount }, (_, index) => {
+            const round = index + 1;
+            const roundTeams = allEventTeams.filter((team) => team.round === round);
+            const completed = roundTeams.filter((team) => team.status !== "ready").length;
+            return (
+              <button
+                className={activeRound === round ? "active" : ""}
+                key={round}
+                role="tab"
+                aria-selected={activeRound === round}
+                onClick={() => changeRound(round)}
+              >
+                <span>Round {round}</span>
+                <small>{completed}/{roundTeams.length} runs</small>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="run-desk-grid">
         <section className="panel desk-entry">
-          <div className="desk-title"><span className="stat-icon"><Gauge size={21} /></span><div><span>Now roping</span><h3>{selected ? `Draw #${selected.drawPosition}` : "Draw complete"}</h3></div></div>
+          <div className="desk-title"><span className="stat-icon"><Gauge size={21} /></span><div><span>Round {activeRound} · Now roping</span><h3>{selected ? `Draw #${selected.drawPosition}` : "Round complete"}</h3></div></div>
           {selected ? (
             <>
               <div className="active-team">
@@ -535,6 +1547,7 @@ function RunDesk({
                 <i>&</i>
                 <div><span>Heeler</span><strong>{rider(selected.heelerId)}</strong></div>
               </div>
+              <div className="run-handicap"><span>Team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
               <div className="time-entry">
                 <label>Raw time <span>seconds</span></label>
                 <input type="number" min="0" step="0.01" value={rawTime} onChange={(e) => setRawTime(e.target.value)} placeholder="0.00" />
@@ -544,14 +1557,14 @@ function RunDesk({
                 {["0", "5", "10", "15"].map((value) => <button className={penalties === value ? "active" : ""} key={value} onClick={() => setPenalties(value)}>{value === "0" ? "Clean" : `+${value}s`}</button>)}
               </div>
               <Field label="Run notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional note" /></Field>
-              <div className="result-preview"><span>Official time</span><strong>{rawTime ? (Number(rawTime) + Number(penalties)).toFixed(2) : "—"}</strong></div>
+              <div className={`result-preview ${rawTime && event && Number(rawTime) + Number(penalties) > event.timeLimit ? "over-limit" : ""}`}><span>Official time {event ? `· ${event.timeLimit}s limit` : ""}</span><strong>{rawTime ? (Number(rawTime) + Number(penalties)).toFixed(2) : "—"}</strong></div>
               <div className="desk-actions"><button className="no-time-button" onClick={() => saveRun("no-time")}>Mark no time</button><button className="primary" disabled={!rawTime || Number(rawTime) <= 0} onClick={() => saveRun("complete")}><Check size={18} /> Save result</button></div>
             </>
           ) : <EmptyState text="Every team in this draw has a result." />}
         </section>
 
         <section className="panel run-queue">
-          <PanelHeading title="Run order" subtitle={`${eventTeams.filter((team) => team.status === "ready").length} teams remaining`} />
+          <PanelHeading title={`Round ${activeRound} run order`} subtitle={`${eventTeams.filter((team) => team.status === "ready").length} teams remaining`} />
           <div className="queue-scroll">
             {eventTeams.map((team) => (
               <button className={`queue-row ${selected?.id === team.id ? "active" : ""}`} key={team.id} onClick={() => chooseTeam(team)}>
@@ -565,19 +1578,64 @@ function RunDesk({
       </div>
 
       <section className="panel standings-panel">
-        <PanelHeading title="Official standings" subtitle={`${standings.length} qualified runs`} />
+        <div className="table-toolbar">
+          <div><h3>Round {activeRound} standings</h3><p>{standings.length} qualified runs · {event?.resultsPublished ? "Published live" : "Draft results"}</p></div>
+          <div className="toolbar-actions">
+            <button className="secondary" disabled={!eventTeams.length || !event} onClick={() => event && exportResultsCsv(event, eventTeams, contestants, activeRound)}><Download size={16} /> CSV / Excel</button>
+            <button className="secondary" disabled={!eventTeams.length} onClick={() => window.print()}><Printer size={16} /> Print / PDF</button>
+            {event && <button className="primary" onClick={() => onUpdateEvent({ ...event, resultsPublished: !event.resultsPublished })}>{event.resultsPublished ? "Unpublish" : "Publish live results"}</button>}
+          </div>
+        </div>
         <div className="data-table standings-table">
           <div className="table-row table-header"><span>Place</span><span>Team</span><span>Raw time</span><span>Penalty</span><span>Total</span></div>
           {standings.map((team, index) => (
             <div className="table-row" key={team.id}>
               <span><b className={`place place-${index + 1}`}>{index + 1}</b></span>
-              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>Draw #{team.drawPosition}</small></span>
+              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>Draw #{team.drawPosition}{activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
               <span>{team.rawTime?.toFixed(2)}</span>
               <span>{team.penalties ? `+${team.penalties}` : "—"}</span>
               <span><b className="total-time">{(team.rawTime! + team.penalties).toFixed(2)}</b></span>
             </div>
           ))}
           {!standings.length && <EmptyState text="Qualified runs will appear here." />}
+        </div>
+      </section>
+      {event?.competitionType === "round-robin" && (
+        <section className="panel standings-panel">
+          <PanelHeading title={`Round ${activeRound} leaderboard`} subtitle="Contestant points and averages for this round" />
+          <div className="data-table round-robin-table">
+            <div className="table-row table-header"><span>Place</span><span>Contestant</span><span>Points</span><span>Wins</span><span>Losses</span><span>Average</span></div>
+            {riderStandings.map((standing, index) => (
+              <div className="table-row" key={standing.contestantId}>
+                <span><b className={`place place-${index + 1}`}>{index + 1}</b></span>
+                <span><strong>{rider(standing.contestantId)}</strong>{index < 4 && <small className="finalist-label">Finalist</small>}</span>
+                <span>{standing.points}</span>
+                <span>{standing.qualified}</span>
+                <span>{standing.noTimes}</span>
+                <span>{standing.qualified ? (standing.totalTime / standing.qualified).toFixed(2) : "—"}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      <section className="panel payout-panel">
+        <div className="payout-summary">
+          <span className="stat-icon"><CircleDollarSign size={21} /></span>
+          <div><span>Calculated purse</span><strong>${purse.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><small>{paidEntryCount} paid entries + ${event?.addedMoney ?? 0} added money, after per-entry fees</small></div>
+        </div>
+        <div className="payout-places">
+          {payouts.length ? payouts.map((payout) => {
+            const team = standings[payout.place - 1];
+            const recipients = team
+              ? eligiblePayoutRecipients(team, contestants)
+              : "";
+            return (
+              <div key={payout.place}>
+                <span>{ordinal(payout.place)} place · {Math.round(payout.percentage * 100)}%<small>{recipients}</small></span>
+                <strong>${payout.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+              </div>
+            );
+          }) : <p>Qualified runs will populate the payout projection.</p>}
         </div>
       </section>
     </>
@@ -625,6 +1683,107 @@ function formatTime(time: string) {
 
 function initials(name: string) {
   return name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function exportDrawCsv(event: ArenaEvent, teams: Team[], contestants: Contestant[]) {
+  const name = (id: string) => contestants.find((contestant) => contestant.id === id)?.name ?? "Unknown";
+  const rows = [
+    ["Draw", "Round", "Header", "Header Entry", "Header Free Run", "Heeler", "Heeler Entry", "Heeler Free Run", "Handicap Total", "Checked In", "Status"],
+    ...teams.map((team) => [
+      team.drawPosition,
+      team.round,
+      name(team.headerId),
+      team.headerEntryNumber ?? 1,
+      team.headerFreeRun ? "FR" : "",
+      name(team.heelerId),
+      team.heelerEntryNumber ?? 1,
+      team.heelerFreeRun ? "FR" : "",
+      teamHandicapTotal(team.headerId, team.heelerId, contestants),
+      team.checkedIn ? "Yes" : "No",
+      team.scratched ? "Scratched" : team.status,
+    ]),
+  ];
+  downloadCsv(`${event.name}-draw.csv`, rows);
+}
+
+function exportResultsCsv(
+  event: ArenaEvent,
+  teams: Team[],
+  contestants: Contestant[],
+  round?: number,
+) {
+  const name = (id: string) => contestants.find((contestant) => contestant.id === id)?.name ?? "Unknown";
+  const rows = [
+    ["Draw", "Round", "Header", "Heeler", "Raw Time", "Penalty", "Total", "Status", "Notes"],
+    ...teams.map((team) => [
+      team.drawPosition,
+      team.round,
+      name(team.headerId),
+      name(team.heelerId),
+      team.rawTime ?? "",
+      team.penalties,
+      team.rawTime === null ? "" : team.rawTime + team.penalties,
+      team.status,
+      team.notes,
+    ]),
+  ];
+  downloadCsv(`${event.name}${round ? `-round-${round}` : ""}-results.csv`, rows);
+}
+
+function downloadCsv(filename: string, rows: (string | number)[][]) {
+  const csv = rows
+    .map((row) =>
+      row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","),
+    )
+    .join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.replace(/[^a-z0-9.-]+/gi, "-").toLowerCase();
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function ordinal(place: number) {
+  if (place === 1) return "1st";
+  if (place === 2) return "2nd";
+  if (place === 3) return "3rd";
+  return `${place}th`;
+}
+
+function eligiblePayoutRecipients(team: Team, contestants: Contestant[]) {
+  const name = (id: string) =>
+    contestants.find((contestant) => contestant.id === id)?.name ?? "Unknown";
+  if (team.headerFreeRun) return `${name(team.heelerId)} eligible · Header FR excluded`;
+  if (team.heelerFreeRun) return `${name(team.headerId)} eligible · Heeler FR excluded`;
+  return `${name(team.headerId)} & ${name(team.heelerId)} eligible`;
+}
+
+function resizeProfilePhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = reject;
+      image.onload = () => {
+        const maxSize = 512;
+        const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(image.width * scale);
+        canvas.height = Math.round(image.height * scale);
+        const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("Canvas is unavailable."));
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      image.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 export default App;

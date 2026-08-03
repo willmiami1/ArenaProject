@@ -5,11 +5,17 @@ inside a Wix site.
 
 ## Features
 
-- Event setup and active-event switching
+- Parent arena events with independent roping competitions underneath
+- Event and active-roping switching
+- Competition setup for Draw Pot, Pick Only, Pick and Draw, and Round Robin
+- Format-aware individual or team registration
+- Automatic partner draws, round-robin schedules, redraw history, and draw locks
 - Contestant roster with header/heeler positions
 - Team entry and randomized draw order
 - Run desk for times, penalties, no-times, and notes
-- Live standings and event overview
+- Live standings, round-robin points, and event overview
+- Configurable fees, purse calculations, and payout splits
+- Check-in, wait list, scratches, CSV/Excel exports, and printable PDF reports
 - Browser-based persistence with no server required
 
 ## Development
