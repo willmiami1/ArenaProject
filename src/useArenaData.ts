@@ -8,6 +8,10 @@ import type { ArenaData, ArenaMeet } from "./types";
 import { isWixEmbed, requestWixData } from "./wixBridge";
 
 const STORAGE_KEY = "arena-command-data-v1";
+const LEGACY_SAMPLE_MEETS = new Set([
+  "Summer Buckle Series",
+  "Friday Night Jackpot",
+]);
 
 export type PersistenceStatus =
   | "loading"
@@ -70,7 +74,21 @@ function normalizeData(parsed: ArenaData): ArenaData {
 function loadLocalData(): ArenaData {
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved ? normalizeData(JSON.parse(saved) as ArenaData) : seedData;
+    if (!saved) return seedData;
+
+    const parsed = JSON.parse(saved) as ArenaData;
+    const hasLegacySampleEvents =
+      parsed.meets?.length === LEGACY_SAMPLE_MEETS.size &&
+      parsed.meets.every((meet) => LEGACY_SAMPLE_MEETS.has(meet.name));
+
+    if (hasLegacySampleEvents) {
+      return normalizeData({
+        ...seedData,
+        contestants: parsed.contestants ?? seedData.contestants,
+      });
+    }
+
+    return normalizeData(parsed);
   } catch (error) {
     console.error("Could not load local arena data.", error);
     return seedData;
