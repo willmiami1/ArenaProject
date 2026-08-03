@@ -315,7 +315,7 @@ main { grid-column: 2; min-width: 0; }
 .status-dot.no-time { background: #bf6159; }
 .standings-panel { overflow: hidden; }
 .standings-panel + .standings-panel { margin-top: 17px; }
-.standings-table .table-row { grid-template-columns: .35fr 1.6fr .7fr .7fr .7fr; }
+.standings-table .table-row { min-width: 700px; grid-template-columns: .35fr 1.6fr .65fr .7fr .7fr .9fr; }
 .standings-table .table-row > span:nth-child(n+3) { text-align: right; }
 .standings-table small { display: block; margin-top: 3px; color: #929a95; font-size: 9px; }
 .total-time { font-family: "Manrope", sans-serif; font-size: 15px; }
