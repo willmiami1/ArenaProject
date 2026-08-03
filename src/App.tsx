@@ -12,6 +12,7 @@ import {
   Copy,
   Dices,
   Download,
+  FileBarChart,
   Gauge,
   GitFork,
   Handshake,
@@ -34,6 +35,7 @@ import {
   X,
 } from "lucide-react";
 import { useArenaData } from "./useArenaData";
+import { ReportsModule } from "./ReportsModule";
 import {
   calculatePayouts,
   calculatePurse,
@@ -62,6 +64,7 @@ const navItems: { id: View; label: string; icon: typeof Gauge }[] = [
   { id: "contestants", label: "Contestants", icon: UserRound },
   { id: "teams", label: "Teams & Draw", icon: UsersRound },
   { id: "run-desk", label: "Run Desk", icon: Gauge },
+  { id: "reports", label: "Reports", icon: FileBarChart },
 ];
 
 const uid = (prefix: string) =>
@@ -416,6 +419,7 @@ function App() {
               }
             />
           )}
+          {view === "reports" && <ReportsModule data={data} />}
         </div>
       </main>
       {mobileOpen && <button className="scrim" onClick={() => setMobileOpen(false)} aria-label="Close menu" />}
@@ -774,6 +778,7 @@ function MeetForm({
     date: meet?.date ?? "",
     startTime: meet?.startTime ?? "18:00",
     location: meet?.location ?? "",
+    producer: meet?.producer ?? "",
   });
   const submit = (formEvent: FormEvent) => {
     formEvent.preventDefault();
@@ -785,6 +790,7 @@ function MeetForm({
       <div className="form-grid">
         <Field label="Event name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Saturday Night Jackpot" /></Field>
         <Field label="Arena"><input required value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Arena name" /></Field>
+        <Field label="Producer"><input value={form.producer} onChange={(e) => setForm({ ...form, producer: e.target.value })} placeholder="Producer or organization" /></Field>
         <Field label="Event date"><input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
         <Field label="Start time"><input required type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></Field>
       </div>
@@ -1044,6 +1050,9 @@ function ContestantForm({
     photo: contestant?.photo ?? "",
     phone: contestant?.phone ?? "",
     hometown: contestant?.hometown ?? "",
+    email: contestant?.email ?? "",
+    membershipNumber: contestant?.membershipNumber ?? "",
+    categoryNumber: contestant?.categoryNumber ?? "",
   });
   const [photoError, setPhotoError] = useState("");
   const handlePhoto = async (file?: File) => {
@@ -1064,12 +1073,15 @@ function ContestantForm({
     event.preventDefault();
     onSubmit({
       id: contestant?.id ?? uid("rider"),
-      name: `${form.firstName.trim()} ${form.lastName.trim()}`,
+      name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
       role: form.role,
       headerHandicap: Number(form.headerHandicap),
       heelerHandicap: Number(form.heelerHandicap),
       phone: form.phone,
       hometown: form.hometown,
+      email: form.email,
+      membershipNumber: form.membershipNumber,
+      categoryNumber: form.categoryNumber,
       photo: form.photo,
     });
   };
@@ -1098,6 +1110,9 @@ function ContestantForm({
         <Field label="Header Handicap"><input required type="number" min="0" step="0.5" value={form.headerHandicap} onChange={(e) => setForm({ ...form, headerHandicap: e.target.value })} placeholder="0" /></Field>
         <Field label="Heeler Handicap"><input required type="number" min="0" step="0.5" value={form.heelerHandicap} onChange={(e) => setForm({ ...form, heelerHandicap: e.target.value })} placeholder="0" /></Field>
         <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555-0123" /></Field>
+        <Field label="Email"><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="rider@example.com" /></Field>
+        <Field label="Membership Number"><input value={form.membershipNumber} onChange={(e) => setForm({ ...form, membershipNumber: e.target.value })} placeholder="Membership #" /></Field>
+        <Field label="Category Number"><input value={form.categoryNumber} onChange={(e) => setForm({ ...form, categoryNumber: e.target.value })} placeholder="Category #" /></Field>
         <Field label="Hometown"><input value={form.hometown} onChange={(e) => setForm({ ...form, hometown: e.target.value })} placeholder="City, State" /></Field>
       </div>
       <FormActions onCancel={onCancel} submitLabel={contestant ? "Save changes" : "Add contestant"} />
@@ -1142,10 +1157,10 @@ function Teams({
   const eventTeams = teams.filter((team) => team.eventId === event?.id).sort((a, b) => a.drawPosition - b.drawPosition);
   const eventRegistrations = registrations.filter((entry) => entry.eventId === event?.id);
   const headerEntryCount = eventRegistrations
-    .filter((entry) => entry.role === "Header" && entry.status === "entered")
+    .filter((entry) => entry.role === "Header" && entry.status === "entered" && entry.paid !== false)
     .reduce((total, entry) => total + entry.entries, 0);
   const heelerEntryCount = eventRegistrations
-    .filter((entry) => entry.role === "Heeler" && entry.status === "entered")
+    .filter((entry) => entry.role === "Heeler" && entry.status === "entered" && entry.paid !== false)
     .reduce((total, entry) => total + entry.entries, 0);
   const rider = (id: string) => contestants.find((item) => item.id === id);
   const displayedTeams = eventTeams.filter((team) =>
@@ -1264,7 +1279,7 @@ function Teams({
                 <span><strong>{event.pickDrawRole === "header" ? headerEntryCount : event.pickDrawRole === "heeler" ? heelerEntryCount : Math.max(headerEntryCount, heelerEntryCount)}</strong> Round 1 draw teams</span>
               )}
               {event.competitionType === "round-robin" && (
-                <span><strong>{eventRegistrations.filter((entry) => entry.role === "Header" && entry.status === "entered").length * eventRegistrations.filter((entry) => entry.role === "Heeler" && entry.status === "entered").length}</strong> Round Robin teams</span>
+                <span><strong>{eventRegistrations.filter((entry) => entry.role === "Header" && entry.status === "entered" && entry.paid !== false).length * eventRegistrations.filter((entry) => entry.role === "Heeler" && entry.status === "entered" && entry.paid !== false).length}</strong> Round Robin teams</span>
               )}
               {event.competitionType === "draw-pot" && headerEntryCount !== heelerEntryCount && (
                 <span className="free-total"><strong>{Math.abs(headerEntryCount - heelerEntryCount)}</strong> Free {headerEntryCount > heelerEntryCount ? "heeler" : "header"} run{Math.abs(headerEntryCount - heelerEntryCount) === 1 ? "" : "s"}</span>
@@ -1276,6 +1291,7 @@ function Teams({
               <div className="registration-row" key={registration.id}>
                 <span className="person"><i>{initials(rider(registration.contestantId)?.name ?? "")}</i><span><strong>{rider(registration.contestantId)?.name}</strong><small>{registration.role} · {registration.entries} entr{registration.entries === 1 ? "y" : "ies"}</small></span></span>
                 <span className={`tag ${registration.status === "entered" ? "complete" : registration.status === "waitlist" ? "amber" : "no-time"}`}>{registration.status}</span>
+                <button className={registration.paid === false ? "secondary small-action" : "selected-button small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, paid: registration.paid === false })}>{registration.paid === false ? "Mark paid" : "Paid"}</button>
                 <button className={registration.checkedIn ? "selected-button small-action" : "secondary small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, checkedIn: !registration.checkedIn })}>{registration.checkedIn ? <><Check size={14} /> Checked in</> : "Check in"}</button>
                 <button className="secondary small-action" disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, status: registration.status === "scratched" ? "entered" : "scratched" })}>{registration.status === "scratched" ? "Restore" : "Scratch"}</button>
                 <button className="icon-action delete-action small-icon" disabled={event.drawLocked} title="Delete registration" onClick={() => onDeleteRegistration(registration.id)}><Trash2 size={14} /></button>
@@ -1363,6 +1379,7 @@ function IndividualRegistrationForm({
   );
   const [entries, setEntries] = useState("1");
   const [status, setStatus] = useState<EventRegistration["status"]>("entered");
+  const [paid, setPaid] = useState(true);
   const [notes, setNotes] = useState("");
   const submit = (formEvent: FormEvent) => {
     formEvent.preventDefault();
@@ -1375,6 +1392,7 @@ function IndividualRegistrationForm({
       checkedIn: false,
       status,
       notes,
+      paid,
     });
   };
   return (
@@ -1385,6 +1403,7 @@ function IndividualRegistrationForm({
         <Field label="Draw position"><select value={role} disabled={Boolean(requiredRole)} onChange={(e) => setRole(e.target.value as "Header" | "Heeler")}>{(!requiredRole || requiredRole === "Header") && <option>Header</option>}{(!requiredRole || requiredRole === "Heeler") && <option>Heeler</option>}</select></Field>
         <Field label="Number of entries"><input required type="number" min="1" max={event.entriesAllowed} value={entries} onChange={(e) => setEntries(e.target.value)} /></Field>
         <Field label="Entry status"><select value={status} onChange={(e) => setStatus(e.target.value as EventRegistration["status"])}><option value="entered">Entered</option><option value="waitlist">Wait list</option></select></Field>
+        <Field label="Payment status"><select value={paid ? "paid" : "unpaid"} onChange={(e) => setPaid(e.target.value === "paid")}><option value="paid">Paid</option><option value="unpaid">Unpaid</option></select></Field>
         <Field label="Contestant notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" /></Field>
       </div>
       <FormActions onCancel={onCancel} submitLabel={event.competitionType === "pick-and-draw" ? "Add to Draw Pot" : "Register rider"} />
@@ -1398,6 +1417,7 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel }
   const [headerId, setHeaderId] = useState(team?.headerId ?? headers[0]?.id ?? "");
   const [heelerId, setHeelerId] = useState(team?.heelerId ?? heelers.find((rider) => rider.id !== headerId)?.id ?? "");
   const [notes, setNotes] = useState(team?.notes ?? "");
+  const [paid, setPaid] = useState(team?.paid ?? true);
   const handicap = teamHandicapTotal(headerId, heelerId, contestants);
   const submit = (formEvent: FormEvent) => {
     formEvent.preventDefault();
@@ -1420,6 +1440,7 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel }
       heelerEntryNumber: team?.heelerEntryNumber ?? 1,
       headerFreeRun: team?.headerFreeRun ?? false,
       heelerFreeRun: team?.heelerFreeRun ?? false,
+      paid,
     });
   };
   return (
@@ -1429,6 +1450,7 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel }
         <Field label="Header"><select value={headerId} required onChange={(e) => setHeaderId(e.target.value)}>{headers.map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
         <Field label="Heeler"><select value={heelerId} required onChange={(e) => setHeelerId(e.target.value)}>{heelers.filter((rider) => rider.id !== headerId).map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
         <Field label="Team notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" /></Field>
+        <Field label="Payment status"><select value={paid ? "paid" : "unpaid"} onChange={(e) => setPaid(e.target.value === "paid")}><option value="paid">Paid</option><option value="unpaid">Unpaid</option></select></Field>
       </div>
       <div className={`handicap-preview ${handicap > event.handicapTotal ? "over" : ""}`}>
         <span>Team handicap</span>
@@ -1473,11 +1495,30 @@ function RunDesk({
     .filter((team) => team.status === "complete" && team.rawTime !== null)
     .sort((a, b) => (a.rawTime! + a.penalties) - (b.rawTime! + b.penalties));
   const paidEntryCount =
-    event?.competitionType === "draw-pot"
-      ? registrations
-          .filter((entry) => entry.eventId === event.id && entry.status === "entered")
-          .reduce((total, entry) => total + entry.entries, 0)
-      : eventTeams.length;
+    event
+      ? (event.competitionType === "pick-only" ||
+          event.competitionType === "pick-and-draw"
+          ? allEventTeams.filter(
+              (team) =>
+                team.round === 1 &&
+                !team.generated &&
+                !team.scratched &&
+                team.paid !== false,
+            ).length
+          : 0) +
+        (event.competitionType === "draw-pot" ||
+        event.competitionType === "round-robin" ||
+        event.competitionType === "pick-and-draw"
+          ? registrations
+              .filter(
+                (entry) =>
+                  entry.eventId === event.id &&
+                  entry.status === "entered" &&
+                  entry.paid !== false,
+              )
+              .reduce((total, entry) => total + entry.entries, 0)
+          : 0)
+      : 0;
   const purse = event ? calculatePurse(event, paidEntryCount) : 0;
   const payouts = calculatePayouts(purse, standings.length, event?.payoutPercentages);
   const riderStandings = useMemo(() => {

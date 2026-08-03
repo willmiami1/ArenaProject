@@ -1,4 +1,4 @@
-export type View = "overview" | "events" | "contestants" | "teams" | "run-desk";
+export type View = "overview" | "events" | "contestants" | "teams" | "run-desk" | "reports";
 export type EventStatus = "Upcoming" | "Live" | "Complete";
 export type RunStatus = "ready" | "complete" | "no-time";
 export type CompetitionType = "draw-pot" | "pick-only" | "pick-and-draw" | "round-robin";
@@ -11,6 +11,7 @@ export interface ArenaMeet {
   date: string;
   startTime: string;
   location: string;
+  producer?: string;
 }
 
 export interface ArenaEvent {
@@ -50,6 +51,9 @@ export interface Contestant {
   photo: string;
   phone: string;
   hometown: string;
+  membershipNumber?: string;
+  email?: string;
+  categoryNumber?: string;
 }
 
 export interface Team {
@@ -71,6 +75,10 @@ export interface Team {
   heelerEntryNumber?: number;
   headerFreeRun?: boolean;
   heelerFreeRun?: boolean;
+  steerNumber?: string;
+  arenaPosition?: string;
+  barrierPenalty?: boolean;
+  paid?: boolean;
 }
 
 export interface DrawSnapshot {
@@ -88,6 +96,7 @@ export interface EventRegistration {
   checkedIn: boolean;
   status: EntryStatus;
   notes: string;
+  paid?: boolean;
 }
 
 export interface ArenaData {

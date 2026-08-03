@@ -16,6 +16,12 @@ inside a Wix site.
 - Live standings, round-robin points, and event overview
 - Configurable fees, purse calculations, and payout splits
 - Check-in, wait list, scratches, CSV/Excel exports, and printable PDF reports
+- Reports workspace with 27 event and competition report templates
+- Searchable, sortable, paginated report previews with configurable filters and columns
+- Professional print/PDF layouts, real `.xlsx` workbooks, CSV, HTML downloads, and email actions
+- Financial, payout, draw, results, stock, contestant, team, judge, and arena-statistics reports
+- Role-based report access for administrators, producers, secretaries, announcers, and read-only users
+- Searchable report history with one-click regeneration and saved per-role column preferences
 - Browser-based persistence with no server required
 
 ## Development

@@ -126,6 +126,7 @@ const newTeam = (
   heelerEntryNumber,
   headerFreeRun,
   heelerFreeRun,
+  paid: true,
 });
 
 function drawPotTeams(
@@ -133,7 +134,12 @@ function drawPotTeams(
   registrations: EventRegistration[],
   contestants: Contestant[],
 ) {
-  const active = registrations.filter((entry) => entry.eventId === event.id && entry.status === "entered");
+  const active = registrations.filter(
+    (entry) =>
+      entry.eventId === event.id &&
+      entry.status === "entered" &&
+      entry.paid !== false,
+  );
   const headerEntries =
     active
       .filter((entry) => entry.role === "Header")
@@ -238,7 +244,9 @@ function pickAndDrawTeams(
   const baseTeams = fixedTeams.filter((team) => team.eventId === event.id && !team.generated && !team.scratched);
   const activeDrawEntries = registrations.filter(
     (registration) =>
-      registration.eventId === event.id && registration.status === "entered",
+      registration.eventId === event.id &&
+      registration.status === "entered" &&
+      registration.paid !== false,
   );
   const headers = activeDrawEntries
     .filter((registration) => registration.role === "Header")
@@ -369,7 +377,9 @@ function roundRobinTeams(
 ) {
   const active = registrations.filter(
     (registration) =>
-      registration.eventId === event.id && registration.status === "entered",
+      registration.eventId === event.id &&
+      registration.status === "entered" &&
+      registration.paid !== false,
   );
   const headerIds = [...new Set(
     active

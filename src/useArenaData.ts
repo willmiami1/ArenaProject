@@ -21,7 +21,7 @@ export type PersistenceStatus =
   | "error";
 
 function normalizeData(parsed: ArenaData): ArenaData {
-  const meets: ArenaMeet[] =
+  const meets: ArenaMeet[] = (
     parsed.meets ??
     parsed.events.map((event) => ({
       id: `meet-${event.id}`,
@@ -29,7 +29,11 @@ function normalizeData(parsed: ArenaData): ArenaData {
       date: event.date,
       startTime: event.startTime,
       location: event.location,
-    }));
+    }))
+  ).map((meet) => ({
+    ...meet,
+    producer: meet.producer ?? "",
+  }));
   const events = parsed.events.map((event) => ({
     ...defaultCompetitionSettings,
     ...event,
@@ -53,6 +57,7 @@ function normalizeData(parsed: ArenaData): ArenaData {
     points: team.points ?? 0,
     headerFreeRun: team.headerFreeRun ?? false,
     heelerFreeRun: team.heelerFreeRun ?? false,
+    paid: team.paid ?? true,
   }));
 
   return {
@@ -67,7 +72,10 @@ function normalizeData(parsed: ArenaData): ArenaData {
       photo: contestant.photo ?? "",
     })),
     teams: reconcileQualifiedAdvancements(teams, events),
-    registrations: parsed.registrations ?? [],
+    registrations: (parsed.registrations ?? []).map((registration) => ({
+      ...registration,
+      paid: registration.paid ?? true,
+    })),
   };
 }
 
