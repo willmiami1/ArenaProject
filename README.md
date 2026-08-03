@@ -12,6 +12,7 @@ inside a Wix site.
 - One Round 1 run per partner pairing by default, with optional repeat partner runs
 - Automatic partner draws, round-robin schedules, redraw history, and draw locks
 - Contestant roster with header/heeler positions
+- Downloadable and restorable contestant database backups
 - Team entry and randomized draw order
 - Run desk for times, penalties, no-times, and notes
 - Configurable Short Go limits that advance only the fastest qualified teams

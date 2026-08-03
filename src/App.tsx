@@ -30,6 +30,7 @@ import {
   Trophy,
   Trash2,
   Unlock,
+  Upload,
   UserRound,
   UsersRound,
   X,
@@ -290,6 +291,29 @@ function App() {
                     (team) => team.headerId !== contestantId && team.heelerId !== contestantId,
                   ),
                 }))
+              }
+              onImport={(contestants) =>
+                setData((current) => {
+                  const importedById = new Map(
+                    contestants.map((contestant) => [contestant.id, contestant]),
+                  );
+                  return {
+                    ...current,
+                    contestants: [
+                      ...current.contestants.map(
+                        (contestant) =>
+                          importedById.get(contestant.id) ?? contestant,
+                      ),
+                      ...contestants.filter(
+                        (contestant) =>
+                          !current.contestants.some(
+                            (currentContestant) =>
+                              currentContestant.id === contestant.id,
+                          ),
+                      ),
+                    ],
+                  };
+                })
               }
             />
           )}
@@ -955,18 +979,59 @@ function Contestants({
   onAdd,
   onUpdate,
   onDelete,
+  onImport,
 }: {
   contestants: Contestant[];
   onAdd: (contestant: Contestant) => void;
   onUpdate: (contestant: Contestant) => void;
   onDelete: (contestantId: string) => void;
+  onImport: (contestants: Contestant[]) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Contestant | null>(null);
   const [search, setSearch] = useState("");
+  const [backupMessage, setBackupMessage] = useState("");
   const filtered = contestants.filter((contestant) =>
     `${contestant.name} ${contestant.hometown} ${contestant.role} ${contestant.headerHandicap} ${contestant.heelerHandicap}`.toLowerCase().includes(search.toLowerCase()),
   );
+  const downloadBackup = () => {
+    const backup = {
+      format: "arena-command-contestants",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      contestants,
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(backup, null, 2)], {
+        type: "application/json",
+      }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `arena-contestants-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setBackupMessage(
+      `${contestants.length} contestant${contestants.length === 1 ? "" : "s"} downloaded.`,
+    );
+  };
+  const restoreBackup = async (file?: File) => {
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      const restored = validateContestantBackup(parsed);
+      onImport(restored);
+      setBackupMessage(
+        `${restored.length} contestant${restored.length === 1 ? "" : "s"} restored.`,
+      );
+    } catch (error) {
+      setBackupMessage(
+        error instanceof Error
+          ? error.message
+          : "The contestant backup could not be restored.",
+      );
+    }
+  };
 
   return (
     <>
@@ -986,10 +1051,20 @@ function Contestants({
           }}
         />
       )}
+      {backupMessage && (
+        <div className="notice">
+          <span>{backupMessage}</span>
+          <button onClick={() => setBackupMessage("")}><X size={16} /></button>
+        </div>
+      )}
       <div className="panel table-panel">
         <div className="table-toolbar">
           <div><h3>Rider roster</h3><p>{contestants.length} contestants on file</p></div>
-          <label className="search"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search riders" /></label>
+          <div className="roster-actions">
+            <label className="search"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search riders" /></label>
+            <button className="secondary" disabled={!contestants.length} onClick={downloadBackup}><Download size={16} /> Download database</button>
+            <label className="secondary import-database-button"><Upload size={16} /> Restore database<input type="file" accept="application/json,.json" onChange={(event) => { void restoreBackup(event.target.files?.[0]); event.target.value = ""; }} /></label>
+          </div>
         </div>
         <div className="data-table contestant-table">
           <div className="table-row table-header"><span>Contestant</span><span>Position</span><span>Header handicap</span><span>Heeler handicap</span><span>Hometown</span><span>Phone</span><span>Actions</span></div>
@@ -1036,6 +1111,65 @@ function Contestants({
       </div>
     </>
   );
+}
+
+function validateContestantBackup(value: unknown): Contestant[] {
+  if (!value || typeof value !== "object") {
+    throw new Error("Choose a valid Arena Command contestant backup.");
+  }
+  const backup = value as {
+    format?: unknown;
+    contestants?: unknown;
+  };
+  if (
+    backup.format !== "arena-command-contestants" ||
+    !Array.isArray(backup.contestants)
+  ) {
+    throw new Error("Choose a valid Arena Command contestant backup.");
+  }
+  if (backup.contestants.length > 10000) {
+    throw new Error("This backup contains too many contestant records.");
+  }
+
+  return backup.contestants.map((record, index) => {
+    if (!record || typeof record !== "object") {
+      throw new Error(`Contestant ${index + 1} is not valid.`);
+    }
+    const contestant = record as Partial<Contestant>;
+    if (
+      typeof contestant.id !== "string" ||
+      !contestant.id ||
+      typeof contestant.name !== "string" ||
+      !contestant.name.trim() ||
+      !["Header", "Heeler", "Both"].includes(contestant.role ?? "") ||
+      typeof contestant.headerHandicap !== "number" ||
+      !Number.isFinite(contestant.headerHandicap) ||
+      typeof contestant.heelerHandicap !== "number" ||
+      !Number.isFinite(contestant.heelerHandicap)
+    ) {
+      throw new Error(`Contestant ${index + 1} is not valid.`);
+    }
+    return {
+      id: contestant.id,
+      name: contestant.name.trim(),
+      role: contestant.role as Contestant["role"],
+      headerHandicap: contestant.headerHandicap,
+      heelerHandicap: contestant.heelerHandicap,
+      photo: typeof contestant.photo === "string" ? contestant.photo : "",
+      phone: typeof contestant.phone === "string" ? contestant.phone : "",
+      hometown:
+        typeof contestant.hometown === "string" ? contestant.hometown : "",
+      membershipNumber:
+        typeof contestant.membershipNumber === "string"
+          ? contestant.membershipNumber
+          : "",
+      email: typeof contestant.email === "string" ? contestant.email : "",
+      categoryNumber:
+        typeof contestant.categoryNumber === "string"
+          ? contestant.categoryNumber
+          : "",
+    };
+  });
 }
 
 function ContestantForm({
