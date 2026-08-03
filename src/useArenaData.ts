@@ -8,6 +8,7 @@ import type { ArenaData, ArenaMeet } from "./types";
 import { isWixEmbed, requestWixData } from "./wixBridge";
 
 const STORAGE_KEY = "arena-command-data-v1";
+const PARTICIPANT_DATABASE_VERSION = 2;
 const LEGACY_SAMPLE_MEETS = new Set([
   "Summer Buckle Series",
   "Friday Night Jackpot",
@@ -21,6 +22,8 @@ export type PersistenceStatus =
   | "error";
 
 function normalizeData(parsed: ArenaData): ArenaData {
+  const resetParticipants =
+    (parsed.participantDatabaseVersion ?? 1) < PARTICIPANT_DATABASE_VERSION;
   const meets: ArenaMeet[] = (
     parsed.meets ??
     parsed.events.map((event) => ({
@@ -47,8 +50,9 @@ function normalizeData(parsed: ArenaData): ArenaData {
       (Number(
         (event as typeof event & { handicapCategory?: string }).handicapCategory,
       ) || 99),
+    drawHistory: resetParticipants ? [] : event.drawHistory ?? [],
   }));
-  const teams = parsed.teams.map((team) => ({
+  const teams = (resetParticipants ? [] : parsed.teams).map((team) => ({
     ...team,
     round: team.round ?? 1,
     checkedIn: team.checkedIn ?? false,
@@ -62,20 +66,26 @@ function normalizeData(parsed: ArenaData): ArenaData {
 
   return {
     ...parsed,
+    participantDatabaseVersion: PARTICIPANT_DATABASE_VERSION,
     meets,
     events,
-    contestants: parsed.contestants.map((contestant) => ({
-      ...contestant,
-      role: (contestant.role as string) === "Either" ? "Both" : contestant.role,
-      headerHandicap: contestant.headerHandicap ?? 0,
-      heelerHandicap: contestant.heelerHandicap ?? 0,
-      photo: contestant.photo ?? "",
-    })),
+    contestants: (resetParticipants ? [] : parsed.contestants ?? []).map(
+      (contestant) => ({
+        ...contestant,
+        role:
+          (contestant.role as string) === "Either" ? "Both" : contestant.role,
+        headerHandicap: contestant.headerHandicap ?? 0,
+        heelerHandicap: contestant.heelerHandicap ?? 0,
+        photo: contestant.photo ?? "",
+      }),
+    ),
     teams: reconcileQualifiedAdvancements(teams, events),
-    registrations: (parsed.registrations ?? []).map((registration) => ({
-      ...registration,
-      paid: registration.paid ?? true,
-    })),
+    registrations: (resetParticipants ? [] : parsed.registrations ?? []).map(
+      (registration) => ({
+        ...registration,
+        paid: registration.paid ?? true,
+      }),
+    ),
   };
 }
 
@@ -92,6 +102,7 @@ function loadLocalData(): ArenaData {
     if (hasLegacySampleEvents) {
       return normalizeData({
         ...seedData,
+        participantDatabaseVersion: parsed.participantDatabaseVersion ?? 1,
         contestants: parsed.contestants ?? seedData.contestants,
       });
     }

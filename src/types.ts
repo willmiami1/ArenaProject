@@ -100,6 +100,7 @@ export interface EventRegistration {
 }
 
 export interface ArenaData {
+  participantDatabaseVersion: number;
   meets: ArenaMeet[];
   events: ArenaEvent[];
   contestants: Contestant[];

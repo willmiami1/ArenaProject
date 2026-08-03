@@ -56,6 +56,7 @@ export const loadArenaData = webMethod(Permissions.Admin, async () => {
     readAll(COLLECTIONS.registrations),
   ]);
   return {
+    participantDatabaseVersion: settings.participantDatabaseVersion || 1,
     meets,
     events,
     contestants,
@@ -78,6 +79,7 @@ export const saveArenaData = webMethod(Permissions.Admin, async (data) => {
     {
       _id: SETTINGS_ID,
       activeEventId: data.activeEventId || "",
+      participantDatabaseVersion: data.participantDatabaseVersion || 1,
       updatedAt: new Date(),
     },
     OPTIONS,

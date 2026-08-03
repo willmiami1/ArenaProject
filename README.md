@@ -43,7 +43,8 @@ The app is responsive and uses relative asset paths for embedded hosting.
 2. Create these Wix Data collections: `ArenaMeets`, `ArenaCompetitions`,
    `ArenaContestants`, `ArenaTeams`, `ArenaRegistrations`, and `ArenaSettings`.
 3. Add `appId` and `payload` text fields to the first five collections. Add
-   `activeEventId` (text) and `updatedAt` (date/time) to `ArenaSettings`.
+   `activeEventId` (text), `participantDatabaseVersion` (number), and `updatedAt`
+   (date/time) to `ArenaSettings`.
 4. Set every collection's permissions to **Admin only**.
 5. Copy `wix/backend/arena-data.web.js` into the Wix backend and copy
    `wix/page-code.js` into the page containing the app.
