@@ -2025,14 +2025,12 @@ function RunDesk({
           </div>
         </div>
         <div className="data-table standings-table">
-          <div className="table-row table-header"><span>Place</span><span>Team</span><span>Rounds</span><span>Raw time</span><span>Penalty</span><span>Total all rounds</span></div>
+          <div className="table-row table-header"><span>Place</span><span>Team</span><span>Rounds</span><span>Total time</span></div>
           {standings.map((team, index) => (
             <div className="table-row" key={team.id}>
               <span><b className={`place place-${index + 1}`}>{index + 1}</b></span>
               <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>Draw #{team.drawPosition}{activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
               <span>{entryRuns(team).filter((run) => run.status === "complete" && run.rawTime !== null).length} / {roundCount}</span>
-              <span>{team.rawTime?.toFixed(2)}</span>
-              <span>{team.penalties ? `+${team.penalties}` : "—"}</span>
               <span><b className="total-time">{qualifiedTotal(team).toFixed(2)}</b></span>
             </div>
           ))}
@@ -2161,7 +2159,7 @@ function exportResultsCsv(
     ? teams.filter((team) => team.round === round)
     : teams;
   const rows = [
-    ["Draw", "Round", "Rounds Completed", "Header", "Heeler", "Raw Time", "Penalty", "Run Total", "Total All Rounds", "Status", "Notes"],
+    ["Draw", "Round", "Rounds Completed", "Header", "Heeler", "Current Round Raw Time", "Penalty", "Run Total", "Total Time", "Status", "Notes"],
     ...displayedTeams.map((team) => {
       const completedRuns = teams.filter(
         (run) =>
