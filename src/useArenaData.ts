@@ -41,6 +41,7 @@ function normalizeData(parsed: ArenaData): ArenaData {
     ...defaultCompetitionSettings,
     ...event,
     parentEventId: event.parentEventId ?? `meet-${event.id}`,
+    allowRepeatPartners: event.allowRepeatPartners ?? false,
     producerFeePercent:
       event.producerFeePercent ??
       (event as typeof event & { producerFee?: number }).producerFee ??

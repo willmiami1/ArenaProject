@@ -54,6 +54,7 @@ export const defaultCompetitionSettings = {
   drawLocked: false,
   resultsPublished: false,
   entriesAllowed: 1,
+  allowRepeatPartners: false,
   handicapTotal: 99,
   timeLimit: 30,
   rounds: 1,
@@ -181,6 +182,7 @@ function drawPotTeams(
       );
     };
     let completedPairs: DrawPair[] | null = null;
+    let bestPairs: DrawPair[] = [];
 
     for (let attempt = 0; attempt < 100 && !completedPairs; attempt += 1) {
       const headers = shuffle(expandPool(headerEntries));
@@ -197,7 +199,7 @@ function drawPotTeams(
             eligiblePair(event, header.contestantId, heeler.contestantId, contestants) &&
             !roundUsed.has(pairKey(header.contestantId, heeler.contestantId)),
         );
-        if (heelerIndex < 0) {
+        if (heelerIndex < 0 && event.allowRepeatPartners) {
           heelerIndex = heelers.findIndex(
             (heeler, candidateIndex) =>
               candidateIndex >= index &&
@@ -214,11 +216,13 @@ function drawPotTeams(
         pairs.push({ header, heeler });
       }
 
+      if (pairs.length > bestPairs.length) bestPairs = pairs;
       if (!failed) completedPairs = pairs;
     }
 
-    if (!completedPairs) continue;
-    completedPairs.forEach(({ header, heeler }) => {
+    const selectedPairs = completedPairs ?? bestPairs;
+    if (!selectedPairs.length) continue;
+    selectedPairs.forEach(({ header, heeler }) => {
       used.add(pairKey(header.contestantId, heeler.contestantId));
       teams.push(newTeam(
         event.id,
@@ -278,10 +282,12 @@ function pickAndDrawTeams(
     return (
       shuffle(eligible).find(
         ({ headerId, heelerId }) => !used.has(pairKey(headerId, heelerId)),
-      ) ??
-      shuffle(eligible).find(({ headerId, heelerId }) =>
-        headerId === slotId || heelerId === slotId,
-      )
+      ) ?? (event.allowRepeatPartners
+        ? shuffle(eligible).find(
+            ({ headerId, heelerId }) =>
+              headerId === slotId || heelerId === slotId,
+          )
+        : undefined)
     );
   };
 
@@ -347,10 +353,11 @@ function pickAndDrawTeams(
           (candidate) =>
             eligiblePair(event, candidate.headerId, candidate.heelerId, contestants) &&
             !used.has(pairKey(candidate.headerId, candidate.heelerId)),
-        ) ??
-        shuffle(candidates).find((candidate) =>
-          eligiblePair(event, candidate.headerId, candidate.heelerId, contestants),
-        );
+        ) ?? (event.allowRepeatPartners
+          ? shuffle(candidates).find((candidate) =>
+              eligiblePair(event, candidate.headerId, candidate.heelerId, contestants),
+            )
+          : undefined);
       if (!selected) continue;
       used.add(pairKey(selected.headerId, selected.heelerId));
       generated.push(
@@ -382,24 +389,44 @@ function roundRobinTeams(
       registration.status === "entered" &&
       registration.paid !== false,
   );
-  const headerIds = [...new Set(
-    active
-      .filter((registration) => registration.role === "Header")
-      .map((registration) => registration.contestantId),
-  )];
-  const heelerIds = [...new Set(
-    active
-      .filter((registration) => registration.role === "Heeler")
-      .map((registration) => registration.contestantId),
-  )];
-  const pairings = headerIds.flatMap((header) =>
-    heelerIds
-      .filter((heelerId) => eligiblePair(event, header, heelerId, contestants))
-      .map((heelerId) => ({ headerId: header, heelerId })),
+  const headerEntries = active.filter(
+    (registration) => registration.role === "Header",
+  );
+  const heelerEntries = active.filter(
+    (registration) => registration.role === "Heeler",
+  );
+  const pairings = headerEntries.flatMap((header) =>
+    heelerEntries
+      .filter((heeler) =>
+        eligiblePair(
+          event,
+          header.contestantId,
+          heeler.contestantId,
+          contestants,
+        ),
+      )
+      .flatMap((heeler) => {
+        const runs = event.allowRepeatPartners
+          ? Math.max(header.entries, heeler.entries)
+          : 1;
+        return Array.from({ length: runs }, (_, index) => ({
+          headerId: header.contestantId,
+          heelerId: heeler.contestantId,
+          entryNumber: index + 1,
+        }));
+      }),
   );
 
   return shuffle(pairings).map((pair, index) =>
-    newTeam(event.id, pair.headerId, pair.heelerId, index + 1),
+    newTeam(
+      event.id,
+      pair.headerId,
+      pair.heelerId,
+      index + 1,
+      1,
+      pair.entryNumber,
+      pair.entryNumber,
+    ),
   );
 }
 

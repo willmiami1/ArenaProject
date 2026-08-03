@@ -865,6 +865,7 @@ function EventForm({
     pickDrawRole: event?.pickDrawRole ?? defaultCompetitionSettings.pickDrawRole,
     registrationOpen: event?.registrationOpen ?? true,
     entriesAllowed: (event?.entriesAllowed ?? 1).toString(),
+    allowRepeatPartners: event?.allowRepeatPartners ?? false,
     handicapTotal: (event?.handicapTotal ?? 99).toString(),
     timeLimit: (event?.timeLimit ?? 30).toString(),
     rounds: (event?.rounds ?? 1).toString(),
@@ -889,6 +890,7 @@ function EventForm({
       location: parent.location,
       entryFee: Number(form.entryFee) || 0,
       entriesAllowed: Number(form.entriesAllowed) || 1,
+      allowRepeatPartners: form.allowRepeatPartners,
       handicapTotal: Number(form.handicapTotal) || 0,
       timeLimit: Number(form.timeLimit) || 0,
       rounds: Number(form.rounds) || 1,
@@ -940,6 +942,7 @@ function EventForm({
       </div>
       <div className="toggle-grid">
         <label className="toggle-row"><input type="checkbox" checked={form.registrationOpen} onChange={(e) => setForm({ ...form, registrationOpen: e.target.checked })} /><span><strong>Registration open</strong><small>Allow new contestants and teams to enter.</small></span></label>
+        <label className="toggle-row"><input type="checkbox" checked={form.allowRepeatPartners} onChange={(e) => setForm({ ...form, allowRepeatPartners: e.target.checked })} /><span><strong>Allow repeat partner runs</strong><small>Permit the same header and heeler pairing to run more than once in Round 1.</small></span></label>
         <label className="toggle-row"><input type="checkbox" checked={form.incentivePayouts} onChange={(e) => setForm({ ...form, incentivePayouts: e.target.checked })} /><span><strong>Incentive payouts</strong><small>Track an additional incentive payout class.</small></span></label>
       </div>
       <FormActions onCancel={onCancel} submitLabel={event ? "Save roping" : "Add roping"} />
@@ -1187,7 +1190,7 @@ function Teams({
         item.headerId === team.headerId &&
         item.heelerId === team.heelerId,
     );
-    if (duplicate) {
+    if (duplicate && !event?.allowRepeatPartners) {
       setMessage("That header and heeler are already entered as a team.");
       return;
     }
@@ -1198,8 +1201,21 @@ function Teams({
       );
       return;
     }
-    if (editingTeam) onUpdateTeam(team);
-    else onAdd(team);
+    if (editingTeam) {
+      onUpdateTeam(team);
+    } else {
+      const pairingRun = eventTeams.filter(
+        (item) =>
+          item.round === 1 &&
+          item.headerId === team.headerId &&
+          item.heelerId === team.heelerId,
+      ).length + 1;
+      onAdd({
+        ...team,
+        headerEntryNumber: pairingRun,
+        heelerEntryNumber: pairingRun,
+      });
+    }
     setEditingTeam(null);
     setShowForm(false);
     setMessage("");
