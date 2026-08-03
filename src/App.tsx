@@ -1717,6 +1717,51 @@ function RunDesk({
   const [penalties, setPenalties] = useState("0");
   const [notes, setNotes] = useState("");
   const rider = (id: string) => contestants.find((item) => item.id === id)?.name ?? "Unknown";
+  const sameEntry = (left: Team, right: Team) =>
+    left.headerId === right.headerId &&
+    left.heelerId === right.heelerId &&
+    (left.headerEntryNumber ?? 1) === (right.headerEntryNumber ?? 1) &&
+    (left.heelerEntryNumber ?? 1) === (right.heelerEntryNumber ?? 1);
+  const entryRuns = (team: Team) =>
+    allEventTeams
+      .filter(
+        (run) =>
+          sameEntry(run, team) &&
+          run.round <= team.round,
+      )
+      .sort((a, b) => a.round - b.round);
+  const qualifiedTotal = (team: Team, beforeRound?: number) =>
+    allEventTeams
+      .filter(
+        (run) =>
+          sameEntry(run, team) &&
+          run.round < (beforeRound ?? team.round + 1) &&
+          run.status === "complete" &&
+          run.rawTime !== null,
+      )
+      .reduce((total, run) => total + run.rawTime! + run.penalties, 0);
+  const cumulativeRunLabel = (team: Team) => {
+    const runs = entryRuns(team);
+    const parts = Array.from({ length: team.round }, (_, index) => {
+      const round = index + 1;
+      const run = runs.find((item) => item.round === round);
+      const time =
+        run?.status === "complete" && run.rawTime !== null
+          ? (run.rawTime + run.penalties).toFixed(2)
+          : run?.status === "no-time"
+            ? "NT"
+            : "--";
+      return `R${round} ${time}`;
+    });
+    const hasNoTime = runs.some((run) => run.status === "no-time");
+    const total = qualifiedTotal(team);
+    const totalLabel = hasNoTime
+      ? "No average"
+      : team.status === "ready"
+        ? `${total.toFixed(2)} prior`
+        : total.toFixed(2);
+    return `${parts.join(" + ")} = ${totalLabel}`;
+  };
   const standings = eventTeams
     .filter((team) => team.status === "complete" && team.rawTime !== null)
     .sort((a, b) => (a.rawTime! + a.penalties) - (b.rawTime! + b.penalties));
@@ -1745,6 +1790,21 @@ function RunDesk({
       : 0;
   const purse = event ? calculatePurse(event, paidEntryCount) : 0;
   const payouts = calculatePayouts(purse, standings.length, event?.payoutPercentages);
+  const shortGoLeaderTotal =
+    activeRound === roundCount && roundCount > 1
+      ? eventTeams
+          .filter((team) => team.status === "complete" && team.rawTime !== null)
+          .map((team) => qualifiedTotal(team))
+          .sort((a, b) => a - b)[0]
+      : undefined;
+  const selectedPriorTotal =
+    selected && activeRound === roundCount && roundCount > 1
+      ? qualifiedTotal(selected, activeRound)
+      : 0;
+  const timeToFirst =
+    shortGoLeaderTotal === undefined
+      ? undefined
+      : shortGoLeaderTotal - selectedPriorTotal - 0.01;
   const riderStandings = useMemo(() => {
     const stats = new Map<string, { contestantId: string; runs: number; qualified: number; noTimes: number; totalTime: number; points: number }>();
     eventTeams.filter((team) => team.status !== "ready").forEach((team) => {
@@ -1908,6 +1968,13 @@ function RunDesk({
                 <div><span>Heeler</span><strong>{rider(selected.heelerId)}</strong></div>
               </div>
               <div className="run-handicap"><span>Team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
+              {event && activeRound === roundCount && roundCount > 1 && selected.status === "ready" && (
+                <div className="announcer-times">
+                  <div><span>Prior aggregate</span><strong>{selectedPriorTotal.toFixed(2)}s</strong></div>
+                  <div><span>To stay in the average</span><strong>{event.timeLimit.toFixed(2)}s or faster</strong></div>
+                  <div><span>To move into 1st</span><strong>{timeToFirst === undefined ? "Set the pace" : timeToFirst <= 0 ? "Current lead out of reach" : `${timeToFirst.toFixed(2)}s or faster`}</strong></div>
+                </div>
+              )}
               <div className="time-entry">
                 <label>Raw time <span>seconds</span></label>
                 <input type="number" min="0" step="0.01" value={rawTime} onChange={(e) => setRawTime(e.target.value)} placeholder="0.00" />
@@ -1930,7 +1997,7 @@ function RunDesk({
               <div className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""}`} key={team.id}>
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Ready"}</small></span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Ready"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>

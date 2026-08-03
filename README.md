@@ -18,6 +18,7 @@ inside a Wix site.
 - Run desk for times, penalties, no-times, and notes
 - Round 1 ride-in team entry directly from the Run Desk
 - Roll and unroll teams that are not ready, moving them behind the active running order
+- Round-by-round cumulative times and Short Go announcer targets for the average and first place
 - Configurable Short Go limits that advance only the fastest qualified teams
 - Final-round running orders listed from slowest qualifier to fastest qualifier
 - Live standings, round-robin points, and event overview

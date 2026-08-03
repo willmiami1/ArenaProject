@@ -279,6 +279,11 @@ main { grid-column: 2; min-width: 0; }
 .active-team i { color: #a5ada8; font-family: Georgia, serif; }
 .run-handicap { display: flex; align-items: center; justify-content: space-between; margin: -12px 0 18px; padding: 8px 11px; color: var(--muted); background: #f7f9f7; border-radius: 6px; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
 .run-handicap strong { color: var(--green); font-family: "Manrope", sans-serif; font-size: 12px; }
+.announcer-times { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: -7px 0 18px; }
+.announcer-times div { padding: 10px; background: #f7f2e8; border: 1px solid #ead8b7; border-radius: 7px; }
+.announcer-times span, .announcer-times strong { display: block; }
+.announcer-times span { color: #8c7449; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.announcer-times strong { margin-top: 4px; color: #654718; font-family: "Manrope", sans-serif; font-size: 12px; }
 .time-entry { display: grid; grid-template-columns: 1fr 145px; align-items: center; gap: 20px; margin-bottom: 14px; }
 .time-entry label span { display: block; margin-top: 3px; color: #9ba29e; font-size: 9px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .time-entry input { width: 100%; padding: 10px 12px; color: var(--ink); background: #fcfcfa; border: 1px solid #d8ddd9; border-radius: 7px; font-family: "Manrope", sans-serif; font-size: 25px; font-weight: 800; text-align: right; outline: 0; }
@@ -301,6 +306,7 @@ main { grid-column: 2; min-width: 0; }
 .queue-row strong, .queue-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queue-row strong { font-size: 11px; }
 .queue-row small { margin-top: 3px; color: #929a95; font-size: 9px; text-transform: capitalize; }
+.queue-row small.cumulative-times { color: #4e6759; font-weight: 700; text-transform: none; }
 .queue-row.rolled small { color: #9a651a; font-weight: 800; }
 .roll-team-button { padding: 6px 9px; color: #8b641f; background: #fff9ed; border: 1px solid #e6cc9e; border-radius: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .roll-team-button.active { color: #fff; background: #a87324; border-color: #a87324; }
@@ -473,6 +479,7 @@ main { grid-column: 2; min-width: 0; }
   .registration-list { min-width: 720px; }
   .run-desk-grid { grid-template-columns: minmax(0, 1fr); }
   .run-desk-round-controls { align-items: stretch; flex-direction: column; }
+  .announcer-times { grid-template-columns: 1fr; }
   .ride-in-button { align-self: flex-start; margin: -8px 0 17px; }
   .desk-entry { position: static; }
   .payout-panel { grid-template-columns: 1fr; }
