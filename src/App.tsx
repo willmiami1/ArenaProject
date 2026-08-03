@@ -7,6 +7,8 @@ import {
   ChevronDown,
   CircleDollarSign,
   Clock3,
+  Cloud,
+  CloudOff,
   Copy,
   Dices,
   Download,
@@ -66,7 +68,7 @@ const uid = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 function App() {
-  const [data, setData] = useArenaData();
+  const [data, setData, persistenceStatus] = useArenaData();
   const [view, setView] = useState<View>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
   const activeEvent =
@@ -128,6 +130,20 @@ function App() {
           <div>
             <span className="eyebrow">Arena workspace</span>
             <h1>{navItems.find((item) => item.id === view)?.label}</h1>
+          </div>
+          <div className={`persistence-status ${persistenceStatus}`}>
+            {persistenceStatus === "error" ? <CloudOff size={15} /> : <Cloud size={15} />}
+            <span>
+              {persistenceStatus === "loading"
+                ? "Connecting to Wix"
+                : persistenceStatus === "saving"
+                  ? "Saving"
+                  : persistenceStatus === "saved"
+                    ? "Saved to Wix"
+                    : persistenceStatus === "error"
+                      ? "Wix save failed"
+                      : "Local preview"}
+            </span>
           </div>
           <label className="event-switcher">
             <CalendarDays size={18} />
