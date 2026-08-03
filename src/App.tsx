@@ -413,6 +413,7 @@ function App() {
                       teamId,
                       update,
                       activeEvent?.rounds ?? 1,
+                      activeEvent?.shortGoTeams ?? 0,
                     ),
                   };
                 })
@@ -686,7 +687,7 @@ function Events({
                     <div className="competition-row-main">
                       <div className="event-card-tags"><span className={`tag ${event.status.toLowerCase()}`}>{event.status}</span><span className="tag neutral">{competitionName(event.competitionType)}</span></div>
                       <h3>{event.name}</h3>
-                      <p>${event.entryFee} entry · HC {event.handicapTotal} · {event.rounds} round{event.rounds === 1 ? "" : "s"} · {teams.filter((team) => team.eventId === event.id).length} teams</p>
+                      <p>${event.entryFee} entry · HC {event.handicapTotal} · {event.rounds} round{event.rounds === 1 ? "" : "s"}{event.rounds > 1 && event.shortGoTeams > 0 ? ` · Top ${event.shortGoTeams} Short Go` : ""} · {teams.filter((team) => team.eventId === event.id).length} teams</p>
                     </div>
                     <div className="event-actions">
                       <button className={event.id === activeEventId ? "selected-button" : "secondary"} onClick={() => onSelect(event.id)}>
@@ -867,6 +868,7 @@ function EventForm({
     handicapTotal: (event?.handicapTotal ?? 99).toString(),
     timeLimit: (event?.timeLimit ?? 30).toString(),
     rounds: (event?.rounds ?? 1).toString(),
+    shortGoTeams: (event?.shortGoTeams ?? 0).toString(),
     progressiveAfterRound: (event?.progressiveAfterRound ?? 0).toString(),
     addedMoney: (event?.addedMoney ?? 0).toString(),
     incentivePayouts: event?.incentivePayouts ?? false,
@@ -890,6 +892,7 @@ function EventForm({
       handicapTotal: Number(form.handicapTotal) || 0,
       timeLimit: Number(form.timeLimit) || 0,
       rounds: Number(form.rounds) || 1,
+      shortGoTeams: Math.max(0, Math.floor(Number(form.shortGoTeams) || 0)),
       progressiveAfterRound: Number(form.progressiveAfterRound) || 0,
       addedMoney: Number(form.addedMoney) || 0,
       officeCharge: Number(form.officeCharge) || 0,
@@ -924,6 +927,7 @@ function EventForm({
         <Field label="Handicap Total"><input required type="number" min="0" step="0.5" value={form.handicapTotal} onChange={(e) => setForm({ ...form, handicapTotal: e.target.value })} placeholder="10.5" /></Field>
         <Field label="Time limit (seconds)"><input required type="number" min="1" value={form.timeLimit} onChange={(e) => setForm({ ...form, timeLimit: e.target.value })} /></Field>
         <Field label="Number of rounds"><input required type="number" min="1" value={form.rounds} onChange={(e) => setForm({ ...form, rounds: e.target.value })} /></Field>
+        <Field label="Short Go teams (final round)"><input type="number" min="0" step="1" value={form.shortGoTeams} onChange={(e) => setForm({ ...form, shortGoTeams: e.target.value })} disabled={Number(form.rounds) < 2} /><small>Enter the maximum teams advancing to the final round. Use 0 for all qualified teams.</small></Field>
         <Field label="Progressive after round"><select value={form.progressiveAfterRound} onChange={(e) => setForm({ ...form, progressiveAfterRound: e.target.value })}><option value="0">Not progressive</option>{Array.from({ length: Math.max(Number(form.rounds), 1) }, (_, index) => <option value={index + 1} key={index + 1}>Round {index + 1}</option>)}</select></Field>
       </div>
       <h4 className="form-section-title">Fees and payouts</h4>

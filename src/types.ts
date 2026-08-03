@@ -32,6 +32,7 @@ export interface ArenaEvent {
   handicapTotal: number;
   timeLimit: number;
   rounds: number;
+  shortGoTeams: number;
   progressiveAfterRound: number;
   addedMoney: number;
   incentivePayouts: boolean;

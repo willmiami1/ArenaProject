@@ -50,6 +50,7 @@ function normalizeData(parsed: ArenaData): ArenaData {
       (Number(
         (event as typeof event & { handicapCategory?: string }).handicapCategory,
       ) || 99),
+    shortGoTeams: event.shortGoTeams ?? 0,
     drawHistory: resetParticipants ? [] : event.drawHistory ?? [],
   }));
   const teams = (resetParticipants ? [] : parsed.teams).map((team) => ({

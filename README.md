@@ -13,6 +13,7 @@ inside a Wix site.
 - Contestant roster with header/heeler positions
 - Team entry and randomized draw order
 - Run desk for times, penalties, no-times, and notes
+- Configurable Short Go limits that advance only the fastest qualified teams
 - Live standings, round-robin points, and event overview
 - Configurable fees, purse calculations, and payout splits
 - Check-in, wait list, scratches, CSV/Excel exports, and printable PDF reports
