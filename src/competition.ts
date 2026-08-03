@@ -522,7 +522,7 @@ export function applyRunResult(
 
   if (source.round >= maxRounds) return nextTeams;
   const nextRound = source.round + 1;
-  if (nextRound === maxRounds && shortGoTeams > 0) {
+  if (nextRound === maxRounds) {
     return syncShortGoFinalists(
       nextTeams,
       source.eventId,
@@ -574,7 +574,7 @@ function syncShortGoFinalists(
   maxRounds: number,
   shortGoTeams: number,
 ) {
-  if (maxRounds < 2 || shortGoTeams < 1) return teams;
+  if (maxRounds < 2) return teams;
 
   const finalRound = maxRounds;
   const qualifierRound = finalRound - 1;
@@ -619,7 +619,12 @@ function syncShortGoFinalists(
         a.total - b.total ||
         a.qualifier.drawPosition - b.qualifier.drawPosition,
     )
-    .slice(0, shortGoTeams);
+    .slice(0, shortGoTeams > 0 ? shortGoTeams : undefined)
+    .sort(
+      (a, b) =>
+        b.total - a.total ||
+        a.qualifier.drawPosition - b.qualifier.drawPosition,
+    );
 
   const withoutReadyFinalists = teams.filter(
     (team) =>
