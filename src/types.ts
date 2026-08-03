@@ -93,6 +93,7 @@ export interface EventRegistration {
   id: string;
   eventId: string;
   contestantId: string;
+  sourceTeamId?: string;
   role: "Header" | "Heeler";
   entries: number;
   checkedIn: boolean;

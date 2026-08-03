@@ -47,6 +47,92 @@ export const competitionTypes: {
 export const competitionName = (type: CompetitionType) =>
   competitionTypes.find((item) => item.id === type)?.name ?? "Competition";
 
+function pickDrawRegistrationRoles(
+  event: ArenaEvent,
+): EventRegistration["role"][] {
+  if (event.competitionType !== "pick-and-draw") return [];
+  if (event.pickDrawRole === "header") return ["Header"] as const;
+  if (event.pickDrawRole === "heeler") return ["Heeler"] as const;
+  return ["Header", "Heeler"] as const;
+}
+
+export function registrationsForPickedTeam(
+  event: ArenaEvent,
+  team: Team,
+): EventRegistration[] {
+  if (team.generated) return [];
+  return pickDrawRegistrationRoles(event).map((role): EventRegistration => ({
+    id: `registration-${team.id}-${role.toLowerCase()}`,
+    eventId: event.id,
+    contestantId: role === "Header" ? team.headerId : team.heelerId,
+    sourceTeamId: team.id,
+    role,
+    entries: 1,
+    checkedIn: team.checkedIn,
+    status: team.scratched ? "scratched" : "entered",
+    notes: "Automatically added from picked team.",
+    paid: team.paid !== false,
+  }));
+}
+
+export function reconcilePickDrawRegistrations(
+  registrations: EventRegistration[],
+  teams: Team[],
+  events: ArenaEvent[],
+) {
+  const next = [...registrations];
+  events
+    .filter((event) => event.competitionType === "pick-and-draw")
+    .forEach((event) => {
+      const fixedTeams = teams.filter(
+        (team) => team.eventId === event.id && !team.generated,
+      );
+      pickDrawRegistrationRoles(event).forEach((role) => {
+        const existingEntries = new Map<string, number>();
+        next
+          .filter(
+            (registration) =>
+              registration.eventId === event.id &&
+              registration.role === role &&
+              !registration.sourceTeamId &&
+              registration.status !== "scratched",
+          )
+          .forEach((registration) => {
+            existingEntries.set(
+              registration.contestantId,
+              (existingEntries.get(registration.contestantId) ?? 0) +
+                registration.entries,
+            );
+          });
+
+        fixedTeams
+          .filter(
+            (team) =>
+              !team.scratched &&
+              !next.some(
+                (registration) =>
+                  registration.sourceTeamId === team.id &&
+                  registration.role === role,
+              ),
+          )
+          .forEach((team) => {
+            const contestantId =
+              role === "Header" ? team.headerId : team.heelerId;
+            const coveredEntries = existingEntries.get(contestantId) ?? 0;
+            if (coveredEntries > 0) {
+              existingEntries.set(contestantId, coveredEntries - 1);
+              return;
+            }
+            const registration = registrationsForPickedTeam(event, team).find(
+              (entry) => entry.role === role,
+            );
+            if (registration) next.push(registration);
+          });
+      });
+    });
+  return next;
+}
+
 export const defaultCompetitionSettings = {
   competitionType: "pick-only" as CompetitionType,
   pickDrawRole: "heeler" as PickDrawRole,

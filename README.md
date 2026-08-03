@@ -8,6 +8,7 @@ inside a Wix site.
 - Parent arena events with independent roping competitions underneath
 - Event and active-roping switching
 - Competition setup for Draw Pot, Pick Only, Pick and Draw, and Round Robin
+- Automatic draw-pot entries from every Pick and Draw picked team
 - Format-aware individual or team registration
 - One Round 1 run per partner pairing by default, with optional repeat partner runs
 - Automatic partner draws, round-robin schedules, redraw history, and draw locks

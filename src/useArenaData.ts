@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { seedData } from "./data";
 import {
   defaultCompetitionSettings,
+  reconcilePickDrawRegistrations,
   reconcileQualifiedAdvancements,
 } from "./competition";
 import type { ArenaData, ArenaMeet } from "./types";
@@ -64,6 +65,13 @@ function normalizeData(parsed: ArenaData): ArenaData {
     paid: team.paid ?? true,
   }));
 
+  const registrations = (parsed.registrations ?? []).map(
+    (registration) => ({
+      ...registration,
+      paid: registration.paid ?? true,
+    }),
+  );
+
   return {
     ...parsed,
     participantDatabaseVersion: PARTICIPANT_DATABASE_VERSION,
@@ -80,11 +88,10 @@ function normalizeData(parsed: ArenaData): ArenaData {
       }),
     ),
     teams: reconcileQualifiedAdvancements(teams, events),
-    registrations: (parsed.registrations ?? []).map(
-      (registration) => ({
-        ...registration,
-        paid: registration.paid ?? true,
-      }),
+    registrations: reconcilePickDrawRegistrations(
+      registrations,
+      teams,
+      events,
     ),
   };
 }
