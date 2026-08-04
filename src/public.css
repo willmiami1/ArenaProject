@@ -141,7 +141,7 @@
 .public-spectator { padding: 70px 0 100px; }
 .public-spectator>a { font-size: 11px; font-weight: 800; }
 .public-spectator .public-page-head { padding: 42px 0 55px; }
-.public-spectator-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(320px,.8fr); gap: 34px; align-items: start; }
+.public-spectator-grid { display: grid; grid-template-columns: 1fr; gap: 34px; align-items: start; }
 .public-spectator-grid>form,.public-spectator-leaders { display: grid; gap: 18px; padding: clamp(24px,4vw,42px); background: #17130f; border: 1px solid rgba(234,220,198,.22); box-shadow: 8px 9px 0 rgba(166,108,67,.32); }
 .public-spectator-grid h2 { margin: 0 0 10px; font-family: "Manrope",sans-serif; font-size: 28px; }
 .public-spectator-grid label:not(.public-radio) { display: grid; gap: 7px; color: var(--public-cream); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
@@ -149,7 +149,7 @@
 .public-spectator-grid fieldset { display: flex; flex-wrap: wrap; gap: 22px; padding: 16px; border: 1px solid #80674f; }
 .public-spectator-grid legend { padding: 0 6px; color: var(--public-cream); font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .public-spectator-grid .public-radio input { width: 17px; min-height: auto; }
-.public-spectator-grid .public-pick-choices { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; padding: 12px; }
+.public-spectator-grid .public-pick-choices { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px; }
 .public-pick-card { position: relative; min-width: 0; display: grid; align-content: start; gap: 7px; padding: 10px; color: var(--public-cream); background: #0e0b09; border: 2px solid #5e4b3b; cursor: pointer; text-transform: none; letter-spacing: normal; }
 .public-pick-card:hover { border-color: var(--public-tan); }
 .public-pick-card.selected { color: #17130f; background: var(--public-tan); border-color: var(--public-cream); box-shadow: 0 0 0 3px rgba(166,108,67,.35); }
@@ -168,7 +168,7 @@
 .public-pick-card strong { overflow-wrap: anywhere; font-family: "Manrope",sans-serif; font-size: 14px; line-height: 1.25; }
 .public-pick-card small { color: var(--public-muted); font-size: 10px; }
 .public-pick-card.selected small { color: #674a33; }
-.public-pick-buttons { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.public-pick-buttons { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .public-pick-buttons .public-button:last-child { color: var(--public-cream); background: #59371f; }
 .public-pick-buttons .public-button:last-child:hover { color: #17130f; background: var(--public-cream); }
 .public-pick-cutoff { margin: -8px 0 0; color: var(--public-tan); font-size: 11px; font-weight: 700; }
