@@ -180,5 +180,21 @@ export function useArenaData() {
     return () => window.clearTimeout(timeout);
   }, [data, ready, wixConnected]);
 
+  useEffect(() => {
+    const syncLocalWindow = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY || !event.newValue) return;
+      try {
+        const nextData = normalizeData(JSON.parse(event.newValue) as ArenaData);
+        setData((current) =>
+          JSON.stringify(current) === event.newValue ? current : nextData,
+        );
+      } catch (error) {
+        console.error("Could not sync arena display data.", error);
+      }
+    };
+    window.addEventListener("storage", syncLocalWindow);
+    return () => window.removeEventListener("storage", syncLocalWindow);
+  }, []);
+
   return [data, setData, status] as const;
 }

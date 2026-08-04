@@ -20,6 +20,7 @@ inside a Wix site.
 - Roll and unroll teams that are not ready, moving them behind the active running order
 - Round-by-round cumulative times and Short Go announcer targets for the average and first place
 - Aggregate Results Standings ranked by total official time with completed-round counts
+- Full-screen 16:9 LED leaderboard with live aggregate standings and next-team display
 - Configurable Short Go limits that advance only the fastest qualified teams
 - Final-round running orders listed from slowest qualifier to fastest qualifier
 - Live standings, round-robin points, and event overview

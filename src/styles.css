@@ -430,6 +430,44 @@ main { grid-column: 2; min-width: 0; }
 .report-history-table .table-row { min-width: 920px; grid-template-columns: 1.1fr 1.4fr .8fr 1fr .55fr .35fr 36px; }
 .report-history-table small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
 
+.led-leaderboard { width: 100vw; min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; color: #f7fbf8; background: radial-gradient(circle at 50% -25%, #284d3c 0, #101b16 45%, #080d0b 100%); overflow: hidden; }
+.led-empty { place-items: center; font-family: "Manrope", sans-serif; font-size: clamp(28px, 5vw, 72px); font-weight: 800; }
+.led-header { min-height: 13vh; display: grid; grid-template-columns: minmax(0, 1.8fr) auto auto auto; align-items: center; gap: 2.5vw; padding: 1.5vh 2.2vw; background: rgba(4,9,7,.72); border-bottom: 2px solid #b8893c; }
+.led-brand { min-width: 0; display: flex; align-items: center; gap: 1.2vw; }
+.led-brand img { width: clamp(58px, 6vw, 110px); height: clamp(58px, 6vw, 110px); object-fit: contain; }
+.led-brand span, .led-round span, .led-clock span { display: block; color: #cfaa66; font-size: clamp(10px, 1vw, 18px); font-weight: 800; text-transform: uppercase; letter-spacing: .14em; }
+.led-brand h1 { margin: .3vh 0 0; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(24px, 2.6vw, 52px); line-height: 1; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.led-round { min-width: 12vw; padding: 1.2vh 1.3vw; background: #173528; border: 1px solid #35634e; border-radius: 10px; }
+.led-round strong { display: block; margin-top: .5vh; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.1vw, 40px); text-transform: uppercase; }
+.led-clock { text-align: right; }
+.led-clock strong { display: block; font-family: "Manrope", sans-serif; font-size: clamp(24px, 2.5vw, 48px); line-height: 1; }
+.led-clock span { margin-top: .5vh; }
+.led-fullscreen { display: flex; align-items: center; gap: .5vw; padding: 1.1vh .9vw; color: #f8e6c5; background: transparent; border: 1px solid #806839; border-radius: 8px; font-size: clamp(9px, .8vw, 14px); font-weight: 800; text-transform: uppercase; }
+.led-board { grid-column: 1; min-height: 0; padding: 2vh 2.2vw; overflow: hidden; }
+.led-table-header, .led-row { display: grid; grid-template-columns: 8vw minmax(0, 1fr) 11vw 16vw; align-items: center; gap: 1.2vw; }
+.led-table-header { padding: 0 1.3vw 1vh; color: #b8c7bf; font-size: clamp(10px, 1vw, 18px); font-weight: 800; text-transform: uppercase; letter-spacing: .12em; }
+.led-table-header span:nth-child(n+3) { text-align: right; }
+.led-rows { display: grid; gap: .65vh; }
+.led-row { min-height: 6.5vh; padding: .5vh 1.3vw; background: linear-gradient(90deg, rgba(31,56,45,.94), rgba(18,34,27,.94)); border: 1px solid rgba(121,157,138,.2); border-radius: 8px; box-shadow: inset 5px 0 #557363; }
+.led-row.led-place-1 { min-height: 7.5vh; background: linear-gradient(90deg, #6a4c1c, #322817); border-color: #b78b42; box-shadow: inset 7px 0 #e2b65f, 0 0 24px rgba(200,151,63,.15); }
+.led-row.led-place-2 { box-shadow: inset 5px 0 #aab6af; }
+.led-row.led-place-3 { box-shadow: inset 5px 0 #a66d42; }
+.led-place { font-family: "Manrope", sans-serif; font-size: clamp(28px, 3.4vw, 68px); font-weight: 900; line-height: 1; }
+.led-team { min-width: 0; display: flex; align-items: center; gap: .8vw; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(17px, 2vw, 39px); text-transform: uppercase; white-space: nowrap; }
+.led-team strong { overflow: hidden; text-overflow: ellipsis; }
+.led-team i { flex: 0 0 auto; color: #cfaa66; font-family: Georgia, serif; font-weight: 400; }
+.led-rounds { color: #c8d6ce; font-size: clamp(16px, 1.8vw, 34px); font-weight: 800; text-align: right; }
+.led-total { color: #f4c972; font-family: "Manrope", sans-serif; font-size: clamp(30px, 3.4vw, 68px); font-weight: 900; line-height: 1; text-align: right; }
+.led-waiting { min-height: 60vh; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 2vh; color: #82958a; font-family: "Manrope", sans-serif; font-size: clamp(24px, 3vw, 56px); text-transform: uppercase; }
+.led-footer { min-height: 9vh; display: flex; align-items: center; gap: 1.4vw; padding: 1.2vh 2.2vw; color: #fff; background: #b57a28; border-top: 2px solid #e5bd73; }
+.led-next-label { display: flex; align-items: center; gap: .7vw; padding-right: 1.4vw; border-right: 1px solid rgba(255,255,255,.35); font-size: clamp(12px, 1.1vw, 21px); text-transform: uppercase; }
+.led-next-label .live-dot { width: 12px; height: 12px; background: #fff; box-shadow: 0 0 14px rgba(255,255,255,.9); }
+.led-next-draw { font-size: clamp(15px, 1.4vw, 27px); font-weight: 800; text-transform: uppercase; }
+.led-next-team { overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.3vw, 44px); font-weight: 900; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.led-next-team i { color: #f7dfb2; font-family: Georgia, serif; }
+.led-rolled { padding: .6vh .7vw; color: #5c3a0d; background: #ffe0a5; border-radius: 6px; font-size: clamp(10px, 1vw, 18px); font-weight: 900; text-transform: uppercase; }
+.led-location { margin-left: auto; font-size: clamp(10px, 1vw, 18px); font-weight: 800; text-transform: uppercase; white-space: nowrap; }
+
 @media (max-width: 1100px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .two-column, .run-desk-grid { grid-template-columns: 1fr; }

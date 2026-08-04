@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   Camera,
@@ -20,7 +20,9 @@ import {
   ListOrdered,
   Lock,
   MapPin,
+  Maximize2,
   Menu,
+  MonitorUp,
   Plus,
   Pencil,
   Printer,
@@ -49,6 +51,7 @@ import {
   teamHandicapTotal,
 } from "./competition";
 import type {
+  ArenaData,
   ArenaEvent,
   ArenaMeet,
   CompetitionType,
@@ -72,12 +75,45 @@ const navItems: { id: View; label: string; icon: typeof Gauge }[] = [
 const uid = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+const sameTeamEntry = (left: Team, right: Team) =>
+  left.eventId === right.eventId &&
+  left.headerId === right.headerId &&
+  left.heelerId === right.heelerId &&
+  (left.headerEntryNumber ?? 1) === (right.headerEntryNumber ?? 1) &&
+  (left.heelerEntryNumber ?? 1) === (right.heelerEntryNumber ?? 1);
+
+const teamQualifiedTotal = (
+  team: Team,
+  teams: Team[],
+  beforeRound = team.round + 1,
+) =>
+  teams
+    .filter(
+      (run) =>
+        sameTeamEntry(run, team) &&
+        run.round < beforeRound &&
+        run.status === "complete" &&
+        run.rawTime !== null &&
+        !run.scratched,
+    )
+    .reduce((total, run) => total + run.rawTime! + run.penalties, 0);
+
 function App() {
   const [data, setData, persistenceStatus] = useArenaData();
   const [view, setView] = useState<View>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
   const activeEvent =
     data.events.find((event) => event.id === data.activeEventId) ?? data.events[0];
+  const displayParams = new URLSearchParams(window.location.search);
+  if (displayParams.get("display") === "leaderboard") {
+    return (
+      <LedLeaderboard
+        data={data}
+        eventId={displayParams.get("event") ?? activeEvent?.id}
+        requestedRound={Number(displayParams.get("round")) || undefined}
+      />
+    );
+  }
 
   const changeView = (next: View) => {
     setView(next);
@@ -488,6 +524,116 @@ function App() {
         </div>
       </main>
       {mobileOpen && <button className="scrim" onClick={() => setMobileOpen(false)} aria-label="Close menu" />}
+    </div>
+  );
+}
+
+function LedLeaderboard({
+  data,
+  eventId,
+  requestedRound,
+}: {
+  data: ArenaData;
+  eventId?: string;
+  requestedRound?: number;
+}) {
+  const [clock, setClock] = useState(new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const event =
+    data.events.find((item) => item.id === eventId) ??
+    data.events.find((item) => item.id === data.activeEventId) ??
+    data.events[0];
+  if (!event) {
+    return <div className="led-leaderboard led-empty">No competition selected</div>;
+  }
+  const round = Math.min(
+    Math.max(requestedRound ?? event.rounds, 1),
+    Math.max(event.rounds, 1),
+  );
+  const eventTeams = data.teams.filter(
+    (team) => team.eventId === event.id && !team.scratched,
+  );
+  const roundTeams = eventTeams
+    .filter((team) => team.round === round)
+    .sort(
+      (a, b) =>
+        Number(Boolean(a.rolled)) - Number(Boolean(b.rolled)) ||
+        a.drawPosition - b.drawPosition,
+    );
+  const standings = roundTeams
+    .filter((team) => team.status === "complete" && team.rawTime !== null)
+    .sort(
+      (a, b) =>
+        teamQualifiedTotal(a, eventTeams) -
+          teamQualifiedTotal(b, eventTeams) ||
+        a.drawPosition - b.drawPosition,
+    )
+    .slice(0, 10);
+  const nextTeam = roundTeams.find(
+    (team) => team.status === "ready" && !team.rolled,
+  ) ?? roundTeams.find((team) => team.status === "ready");
+  const rider = (id: string) =>
+    data.contestants.find((contestant) => contestant.id === id)?.name ??
+    "Unknown";
+  const meet = data.meets.find((item) => item.id === event.parentEventId);
+  const enterFullscreen = () => {
+    if (document.fullscreenElement) return;
+    void document.documentElement.requestFullscreen().catch((error) => {
+      console.error("Could not enter LED display fullscreen mode.", error);
+    });
+  };
+
+  return (
+    <div className="led-leaderboard">
+      <header className="led-header">
+        <div className="led-brand">
+          <img src="./destiny-ranch-arena-logo.png" alt="Destiny Ranch Arena" />
+          <div><span>{meet?.name ?? "Destiny Ranch Arena"}</span><h1>{event.name}</h1></div>
+        </div>
+        <div className="led-round"><span>Live leaderboard</span><strong>Round {round}</strong></div>
+        <div className="led-clock"><strong>{clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong><span>{clock.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</span></div>
+        <button className="led-fullscreen" onClick={enterFullscreen}><Maximize2 size={24} /> Full screen</button>
+      </header>
+
+      <main className="led-board">
+        <div className="led-table-header"><span>Place</span><span>Team</span><span>Rounds</span><span>Total time</span></div>
+        <div className="led-rows">
+          {standings.map((team, index) => {
+            const completedRounds = eventTeams.filter(
+              (run) =>
+                sameTeamEntry(run, team) &&
+                run.round <= round &&
+                run.status === "complete" &&
+                run.rawTime !== null,
+            ).length;
+            return (
+              <div className={`led-row led-place-${index + 1}`} key={team.id}>
+                <span className="led-place">{index + 1}</span>
+                <span className="led-team"><strong>{rider(team.headerId)}</strong><i>&</i><strong>{rider(team.heelerId)}</strong></span>
+                <span className="led-rounds">{completedRounds} / {event.rounds}</span>
+                <span className="led-total">{teamQualifiedTotal(team, eventTeams).toFixed(2)}</span>
+              </div>
+            );
+          })}
+          {!standings.length && <div className="led-waiting"><Trophy size={54} /><strong>Waiting for qualified results</strong></div>}
+        </div>
+      </main>
+
+      <footer className="led-footer">
+        <div className="led-next-label"><span className="live-dot" /><strong>Next team</strong></div>
+        {nextTeam ? (
+          <>
+            <span className="led-next-draw">Draw #{nextTeam.drawPosition}</span>
+            <span className="led-next-team">{rider(nextTeam.headerId)} <i>&</i> {rider(nextTeam.heelerId)}</span>
+            {nextTeam.rolled && <span className="led-rolled">Rolled</span>}
+          </>
+        ) : <span className="led-next-team">Round complete</span>}
+        <span className="led-location">{event.location}</span>
+      </footer>
     </div>
   );
 }
@@ -1913,29 +2059,16 @@ function RunDesk({
   const [penalties, setPenalties] = useState("0");
   const [notes, setNotes] = useState("");
   const rider = (id: string) => contestants.find((item) => item.id === id)?.name ?? "Unknown";
-  const sameEntry = (left: Team, right: Team) =>
-    left.headerId === right.headerId &&
-    left.heelerId === right.heelerId &&
-    (left.headerEntryNumber ?? 1) === (right.headerEntryNumber ?? 1) &&
-    (left.heelerEntryNumber ?? 1) === (right.heelerEntryNumber ?? 1);
   const entryRuns = (team: Team) =>
     allEventTeams
       .filter(
         (run) =>
-          sameEntry(run, team) &&
+          sameTeamEntry(run, team) &&
           run.round <= team.round,
       )
       .sort((a, b) => a.round - b.round);
   const qualifiedTotal = (team: Team, beforeRound?: number) =>
-    allEventTeams
-      .filter(
-        (run) =>
-          sameEntry(run, team) &&
-          run.round < (beforeRound ?? team.round + 1) &&
-          run.status === "complete" &&
-          run.rawTime !== null,
-      )
-      .reduce((total, run) => total + run.rawTime! + run.penalties, 0);
+    teamQualifiedTotal(team, allEventTeams, beforeRound);
   const cumulativeRunLabel = (team: Team) => {
     const runs = entryRuns(team);
     const parts = Array.from({ length: team.round }, (_, index) => {
@@ -2005,6 +2138,19 @@ function RunDesk({
     shortGoLeaderTotal === undefined
       ? undefined
       : shortGoLeaderTotal - selectedPriorTotal - 0.01;
+  const openLedLeaderboard = () => {
+    if (!event) return;
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("display", "leaderboard");
+    url.searchParams.set("event", event.id);
+    url.searchParams.set("round", String(activeRound));
+    window.open(
+      url.toString(),
+      "arena-led-leaderboard",
+      "popup,width=1920,height=1080",
+    );
+  };
   const riderStandings = useMemo(() => {
     const stats = new Map<string, { contestantId: string; runs: number; qualified: number; noTimes: number; totalTime: number; points: number }>();
     eventTeams.filter((team) => team.status !== "ready").forEach((team) => {
@@ -2215,6 +2361,7 @@ function RunDesk({
         <div className="table-toolbar">
           <div><h3>Round {activeRound} standings</h3><p>{standings.length} qualified average{standings.length === 1 ? "" : "s"} · {event?.resultsPublished ? "Published live" : "Draft results"}</p></div>
           <div className="toolbar-actions">
+            <button className="secondary" disabled={!eventTeams.length || !event} onClick={openLedLeaderboard}><MonitorUp size={16} /> LED leaderboard</button>
             <button className="secondary" disabled={!eventTeams.length || !event} onClick={() => event && exportResultsCsv(event, allEventTeams, contestants, activeRound)}><Download size={16} /> CSV / Excel</button>
             <button className="secondary" disabled={!eventTeams.length} onClick={() => window.print()}><Printer size={16} /> Print / PDF</button>
             {event && <button className="primary" onClick={() => onUpdateEvent({ ...event, resultsPublished: !event.resultsPublished })}>{event.resultsPublished ? "Unpublish" : "Publish live results"}</button>}
@@ -2346,11 +2493,6 @@ function exportResultsCsv(
   round?: number,
 ) {
   const name = (id: string) => contestants.find((contestant) => contestant.id === id)?.name ?? "Unknown";
-  const sameEntry = (left: Team, right: Team) =>
-    left.headerId === right.headerId &&
-    left.heelerId === right.heelerId &&
-    (left.headerEntryNumber ?? 1) === (right.headerEntryNumber ?? 1) &&
-    (left.heelerEntryNumber ?? 1) === (right.heelerEntryNumber ?? 1);
   const displayedTeams = round
     ? teams.filter((team) => team.round === round)
     : teams;
@@ -2359,7 +2501,7 @@ function exportResultsCsv(
     ...displayedTeams.map((team) => {
       const completedRuns = teams.filter(
         (run) =>
-          sameEntry(run, team) &&
+          sameTeamEntry(run, team) &&
           run.round <= team.round &&
           run.status === "complete" &&
           run.rawTime !== null,
