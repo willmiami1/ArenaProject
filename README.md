@@ -21,7 +21,7 @@ designed to run as an embedded web app inside a Wix site.
 - Roll and unroll teams that are not ready, moving them behind the active running order
 - Round-by-round cumulative times and Short Go announcer targets for the average and first place
 - Aggregate Results Standings ranked by total official time with completed-round counts
-- Full-screen 16:9 LED leaderboard with live aggregate standings, next-team display, and same-browser data preview
+- Full-screen 16:9 LED leaderboard with contestant portraits, live aggregate standings, a Now Roping banner, final-round target times, next-team display, and same-browser data preview
 - Permanent sidebar LED Screen shortcut for the active roping and latest generated round
 - Full workspace backup and restore for events, teams, registrations, results, and contestants
 - Wix-backed contestant portal with email and four-digit PIN login for personal entries, draws, teams, and results
