@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { defaultCompetitionSettings } from "./competition";
-import { contestantFinancials } from "./reports";
+import {
+  contestantFinancials,
+  emptyReportFilters,
+  generateReport,
+  reportDefinitions,
+} from "./reports";
 import type {
   ArenaData,
   ArenaEvent,
@@ -103,5 +108,42 @@ describe("contestant spending and earnings", () => {
     );
 
     expect(header).toMatchObject({ entries: 1, spent: 50 });
+  });
+});
+
+describe("event summary", () => {
+  it("counts contestant free-run slots once from Round 1", () => {
+    const workspace = data([
+      team({ headerFreeRun: true }),
+      team({
+        id: "round-2",
+        round: 2,
+        headerFreeRun: true,
+        heelerFreeRun: true,
+      }),
+      team({
+        id: "second-entry",
+        drawPosition: 2,
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+        heelerFreeRun: true,
+      }),
+    ]);
+    const definition = reportDefinitions.find(
+      (report) => report.id === "event-summary",
+    );
+
+    expect(definition).toBeDefined();
+    const report = generateReport(
+      workspace,
+      definition!,
+      emptyReportFilters(workspace),
+    );
+
+    expect(report.rows[0].freeRuns).toBe(2);
+    expect(report.columns).toContainEqual({
+      key: "freeRuns",
+      label: "Free Runs",
+    });
   });
 });

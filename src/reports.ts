@@ -717,6 +717,7 @@ const columns = {
     ["contestants", "Contestants"],
     ["entries", "Entries"],
     ["teams", "Teams"],
+    ["freeRuns", "Free Runs"],
     ["runs", "Runs"],
     ["average", "Average Time"],
     ["fastest", "Fastest Time"],
@@ -938,6 +939,15 @@ export function generateReport(
         contestants: eventContestants.size || data.contestants.length,
         entries: eventFinance.entries,
         teams: eventTeams.filter((team) => team.round === 1).length,
+        freeRuns: eventTeams
+          .filter((team) => team.round === 1)
+          .reduce(
+            (count, team) =>
+              count +
+              Number(Boolean(team.headerFreeRun)) +
+              Number(Boolean(team.heelerFreeRun)),
+            0,
+          ),
         runs: eventTeams.length,
         average: eventTimes.length
           ? (
