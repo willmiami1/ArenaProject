@@ -306,18 +306,22 @@ function publicProjection(workspace) {
             Number(left.drawPosition) - Number(right.drawPosition),
         )
         .map((team) => {
-          const names = new Map(
+          const contestants = new Map(
             workspace.contestants.map((contestant) => [
               contestant.id,
-              contestant.name,
+              contestant,
             ]),
           );
+          const header = contestants.get(team.headerId);
+          const heeler = contestants.get(team.heelerId);
           return {
             id: team.id,
             round: Number(team.round || 1),
             drawPosition: Number(team.drawPosition),
-            headerName: names.get(team.headerId) || "Unknown",
-            heelerName: names.get(team.heelerId) || "Unknown",
+            headerName: header?.name || "Unknown",
+            heelerName: heeler?.name || "Unknown",
+            headerPhoto: header?.photo || "",
+            heelerPhoto: heeler?.photo || "",
             steerNumber: team.steerNumber || "",
             closesAt: team.predictionClosesAt,
             open: Date.parse(team.predictionClosesAt) > Date.now(),

@@ -420,6 +420,10 @@ describe("workspace compatibility", () => {
         .competitions[0].predictionRuns[0]).toMatchObject({
           id: currentRun.id,
           open: false,
+          headerName: "Ada Header",
+          headerPhoto: "data:image/png;base64,secret",
+          heelerName: "Bo Heeler",
+          heelerPhoto: "",
         });
     });
 
