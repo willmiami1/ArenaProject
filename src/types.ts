@@ -31,6 +31,7 @@ export interface ArenaEvent {
   entriesAllowed: number;
   allowRepeatPartners: boolean;
   handicapTotal: number;
+  maxContestantHandicap: number;
   timeLimit: number;
   rounds: number;
   shortGoTeams: number;

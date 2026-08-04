@@ -282,6 +282,7 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
           <div><dt>Rounds</dt><dd>{competition.rounds}</dd></div>
           <div><dt>Time limit</dt><dd>{competition.timeLimit} seconds</dd></div>
           <div><dt>Handicap cap</dt><dd>#{competition.handicapTotal}</dd></div>
+          <div><dt>Highest contestant handicap</dt><dd>#{competition.maxContestantHandicap}</dd></div>
           <div><dt>Entry limit</dt><dd>{competition.entriesAllowed} per contestant</dd></div>
         </dl>
         <p>{competition.allowRepeatPartners ? "Repeat partnerships are allowed." : "Each partnership may enter once."}</p>
@@ -305,6 +306,37 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const individual = competition?.competitionType === "draw-pot" || competition?.competitionType === "round-robin";
+  const contestantCanEnter = (
+    contestant: SignupOptions["contestant"],
+    position: "Header" | "Heeler",
+  ) =>
+    (contestant.role === "Both" || contestant.role === position) &&
+    (position === "Header"
+      ? contestant.headerHandicap
+      : contestant.heelerHandicap) <= (competition?.maxContestantHandicap ?? 99);
+  const eligiblePartners = options && competition
+    ? options.partners.filter((partner) => {
+        const partnerPosition = role === "Header" ? "Heeler" : "Header";
+        const contestantHandicap =
+          role === "Header"
+            ? options.contestant.headerHandicap
+            : options.contestant.heelerHandicap;
+        const partnerHandicap =
+          partnerPosition === "Header"
+            ? partner.headerHandicap
+            : partner.heelerHandicap;
+        return (
+          contestantCanEnter(options.contestant, role) &&
+          (partner.role === "Both" || partner.role === partnerPosition) &&
+          partnerHandicap <= competition.maxContestantHandicap &&
+          contestantHandicap + partnerHandicap <= competition.handicapTotal
+        );
+      })
+    : [];
+  const hasEligibleRole =
+    Boolean(options) &&
+    (contestantCanEnter(options!.contestant, "Header") ||
+      contestantCanEnter(options!.contestant, "Heeler"));
 
   if (!competition) return <NotFound />;
   if (!competition.registrationOpen || competition.status === "Complete" || competition.drawLocked) {
@@ -324,7 +356,9 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
         window.crypto.randomUUID?.() ??
           `${Date.now()}-${result.contestant.id}-${competition.id}`,
       );
-      const possibleRole = result.contestant.role === "Heeler" ? "Heeler" : "Header";
+      const possibleRole = contestantCanEnter(result.contestant, "Header")
+        ? "Header"
+        : "Heeler";
       setRole(possibleRole);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not sign in.");
@@ -377,17 +411,18 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
           <fieldset>
             <legend>Your position</legend>
             {(["Header", "Heeler"] as const).map((value) => {
-              const disabled = options.contestant.role !== "Both" && options.contestant.role !== value;
+              const disabled = !contestantCanEnter(options.contestant, value);
               return <label className="public-radio" key={value}><input type="radio" name="role" value={value} disabled={disabled} checked={role === value} onChange={() => { setRole(value); setPartnerId(""); }} />{value}</label>;
             })}
           </fieldset>
+          {!hasEligibleRole && <p className="public-form-message" role="status">Your handicap is above the #{competition.maxContestantHandicap} limit for this roping.</p>}
           {individual ? (
             <label>Number of entries<input type="number" min={1} max={competition.entriesAllowed} value={entries} onChange={(event) => setEntries(Number(event.target.value))} /></label>
           ) : (
-            <label>Partner<select required value={partnerId} onChange={(event) => setPartnerId(event.target.value)}><option value="">Choose an eligible partner</option>{options.partners.filter((partner) => role === "Header" ? partner.role !== "Header" : partner.role !== "Heeler").map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select></label>
+            <label>Partner<select required value={partnerId} onChange={(event) => setPartnerId(event.target.value)}><option value="">Choose an eligible partner</option>{eligiblePartners.map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select></label>
           )}
           <p className="public-payment-note">Your entry will be pending until arena staff confirms payment.</p>
-          <button className="public-button primary" disabled={busy}>{busy ? "Submitting entry…" : "Submit entry"}</button>
+          <button className="public-button primary" disabled={busy || !hasEligibleRole || (!individual && !partnerId)}>{busy ? "Submitting entry…" : "Submit entry"}</button>
         </form>
       )}
       {message && <p className="public-form-message" role="status">{message}</p>}

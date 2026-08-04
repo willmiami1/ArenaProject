@@ -9,6 +9,7 @@ import { publicStandingRows } from "./standings";
 import { createOnlineSignup, mergeStaleOnlineEntries } from "./onlineSignup";
 import type { ArenaData, ArenaEvent, Contestant, Team } from "./types";
 import { canMountArenaCommand, localAdminAccess } from "./adminAccess";
+import { normalizeData } from "./useArenaData";
 
 const event = (overrides: Partial<ArenaEvent> = {}): ArenaEvent => ({
   ...defaultCompetitionSettings,
@@ -91,13 +92,20 @@ describe("public grouping and privacy", () => {
   });
 
   it("projects only public fields and gates unpublished results", () => {
-    const data = workspace(event({ resultsPublished: false }), [run()]);
+    const data = workspace(
+      event({ resultsPublished: false, maxContestantHandicap: 5 }),
+      [run()],
+    );
     const serialized = JSON.stringify(projectPublicArenaData(data, today));
     expect(serialized).not.toContain("ada@example.com");
     expect(serialized).not.toContain("data:image");
     expect(serialized).not.toContain("private");
     expect(serialized).not.toContain("checkedIn");
     expect(serialized).not.toContain("\"paid\"");
+    expect(
+      projectPublicArenaData(data, today).meets[0].competitions[0]
+        .maxContestantHandicap,
+    ).toBe(5);
     expect(projectPublicArenaData(data, today).meets[0].competitions[0].results).toEqual([]);
   });
 });
@@ -187,6 +195,94 @@ describe("online signup", () => {
     expect(() => createOnlineSignup(workspace(event({ handicapTotal: 7 })), { submissionId: "e", contestantId: "header", eventId: "competition-1", role: "Header", partnerId: "heeler" })).toThrow("handicap");
   });
 
+  it("rejects contestants above the individual handicap cap", () => {
+    const drawPot = workspace(event({
+      competitionType: "draw-pot",
+      maxContestantHandicap: 3,
+    }));
+    expect(() =>
+      createOnlineSignup(drawPot, {
+        submissionId: "capped-individual",
+        contestantId: "header",
+        eventId: "competition-1",
+        role: "Header",
+        entries: 1,
+      }),
+    ).toThrow("Contestant handicap");
+
+    const pickOnly = workspace(event({
+      competitionType: "pick-only",
+      maxContestantHandicap: 3,
+      handicapTotal: 10,
+    }));
+    expect(() =>
+      createOnlineSignup(pickOnly, {
+        submissionId: "capped-team",
+        contestantId: "header",
+        eventId: "competition-1",
+        role: "Header",
+        partnerId: "heeler",
+      }),
+    ).toThrow("contestant handicap");
+  });
+
+  it("allows a contestant whose handicap equals the individual cap", () => {
+    const created = createOnlineSignup(
+      workspace(event({
+        competitionType: "draw-pot",
+        maxContestantHandicap: 4,
+      })),
+      {
+        submissionId: "at-cap",
+        contestantId: "header",
+        eventId: "competition-1",
+        role: "Header",
+        entries: 1,
+      },
+    );
+
+    expect(created.registrations).toHaveLength(1);
+  });
+
+  it("does not generate draw teams with over-cap contestants", () => {
+    const competition = event({
+      competitionType: "draw-pot",
+      maxContestantHandicap: 3,
+      handicapTotal: 10,
+    });
+    const data = workspace(competition);
+    data.registrations = [
+      { id: "header-entry", eventId: competition.id, contestantId: "header", role: "Header", entries: 1, checkedIn: true, status: "entered", notes: "", paid: true },
+      { id: "heeler-entry", eventId: competition.id, contestantId: "heeler", role: "Heeler", entries: 1, checkedIn: true, status: "entered", notes: "", paid: true },
+    ];
+
+    expect(
+      generateCompetitionDraw(
+        competition,
+        data.registrations,
+        [],
+        data.contestants,
+      ),
+    ).toEqual([]);
+  });
+
+  it("excludes ineligible fixed teams when generating a draw", () => {
+    const competition = event({
+      competitionType: "pick-only",
+      maxContestantHandicap: 3,
+      handicapTotal: 10,
+    });
+
+    expect(
+      generateCompetitionDraw(
+        competition,
+        [],
+        [run({ status: "ready", rawTime: null })],
+        contestants,
+      ),
+    ).toEqual([]);
+  });
+
   it("enforces the fixed-team entry limit for the selected partner", () => {
     const data = workspace(event({ entriesAllowed: 1 }), [
       run({ id: "partner-entry", headerId: "other-header", heelerId: "heeler" }),
@@ -210,6 +306,15 @@ describe("online signup", () => {
         partnerId: "heeler",
       }),
     ).toThrow("Entry limit");
+  });
+});
+
+describe("workspace compatibility", () => {
+  it("defaults legacy ropings without an individual handicap cap", () => {
+    const legacy = workspace();
+    delete (legacy.events[0] as Partial<ArenaEvent>).maxContestantHandicap;
+
+    expect(normalizeData(legacy).events[0].maxContestantHandicap).toBe(99);
   });
 });
 

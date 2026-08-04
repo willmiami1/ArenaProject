@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultCompetitionSettings } from "./competition";
-import { roundTimeSheetHtml } from "./runDeskPrint";
+import { roundTimeSheetFileName, roundTimeSheetHtml } from "./runDeskPrint";
 import type { ArenaEvent, Contestant, Team } from "./types";
 
 const event: ArenaEvent = {
@@ -65,5 +65,11 @@ describe("Run Desk manual time sheet", () => {
     expect(html).toContain("Ada &lt;Header&gt;");
     expect(html).toContain("Bo &amp; Heeler");
     expect(html).not.toContain("Ada <Header>");
+  });
+
+  it("creates a safe downloadable file name", () => {
+    expect(roundTimeSheetFileName("Tuesday Roping #4", 2)).toBe(
+      "tuesday-roping-4-round-2-time-sheet.html",
+    );
   });
 });

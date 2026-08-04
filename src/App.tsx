@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   Camera,
@@ -13,6 +13,7 @@ import {
   Copy,
   Dices,
   Download,
+  Eye,
   FileBarChart,
   Gauge,
   GitFork,
@@ -45,7 +46,10 @@ import { PublicSite } from "./PublicSite";
 import { AdminAccessGate } from "./AdminAccessGate";
 import { parsePublicRoute } from "./publicData";
 import { ReportsModule } from "./ReportsModule";
-import { roundTimeSheetHtml } from "./runDeskPrint";
+import {
+  roundTimeSheetFileName,
+  roundTimeSheetHtml,
+} from "./runDeskPrint";
 import {
   authenticateContestant,
   isWixEmbed,
@@ -58,9 +62,11 @@ import {
   applyRunResult,
   competitionName,
   competitionTypes,
+  contestantEligibleForRole,
   defaultCompetitionSettings,
   generateCompetitionDraw,
   registrationsForPickedTeam,
+  teamEligibleForCompetition,
   teamHandicapTotal,
 } from "./competition";
 import type {
@@ -572,24 +578,6 @@ function StaffApp() {
                     event.id === updatedEvent.id ? updatedEvent : event,
                   ),
                 }))
-              }
-              onShuffle={(eventId) =>
-                setData((current) => {
-                  const eventTeams = current.teams
-                    .filter((team) => team.eventId === eventId)
-                    .map((team) => ({ team, order: Math.random() }))
-                    .sort((a, b) => a.order - b.order)
-                    .map(({ team }, index) => ({ ...team, drawPosition: index + 1 }));
-                  const positions = new Map(eventTeams.map((team) => [team.id, team.drawPosition]));
-                  return {
-                    ...current,
-                    teams: current.teams.map((team) =>
-                      positions.has(team.id)
-                        ? { ...team, drawPosition: positions.get(team.id)! }
-                        : team,
-                    ),
-                  };
-                })
               }
             />
           )}
@@ -1386,6 +1374,7 @@ function EventForm({
     entriesAllowed: (event?.entriesAllowed ?? 1).toString(),
     allowRepeatPartners: event?.allowRepeatPartners ?? false,
     handicapTotal: (event?.handicapTotal ?? 99).toString(),
+    maxContestantHandicap: (event?.maxContestantHandicap ?? 99).toString(),
     timeLimit: (event?.timeLimit ?? 30).toString(),
     rounds: (event?.rounds ?? 1).toString(),
     shortGoTeams: (event?.shortGoTeams ?? 0).toString(),
@@ -1411,6 +1400,7 @@ function EventForm({
       entriesAllowed: Number(form.entriesAllowed) || 1,
       allowRepeatPartners: form.allowRepeatPartners,
       handicapTotal: Number(form.handicapTotal) || 0,
+      maxContestantHandicap: Number(form.maxContestantHandicap) || 0,
       timeLimit: Number(form.timeLimit) || 0,
       rounds: Number(form.rounds) || 1,
       shortGoTeams: Math.max(0, Math.floor(Number(form.shortGoTeams) || 0)),
@@ -1446,6 +1436,7 @@ function EventForm({
         )}
         <Field label="Entries allowed"><input required type="number" min="1" value={form.entriesAllowed} onChange={(e) => setForm({ ...form, entriesAllowed: e.target.value })} /></Field>
         <Field label="Handicap Total"><input required type="number" min="0" step="0.5" value={form.handicapTotal} onChange={(e) => setForm({ ...form, handicapTotal: e.target.value })} placeholder="10.5" /></Field>
+        <Field label="Highest contestant handicap"><input required type="number" min="0" step="0.5" value={form.maxContestantHandicap} onChange={(e) => setForm({ ...form, maxContestantHandicap: e.target.value })} /><small>Contestants above this handicap in their entered position cannot participate.</small></Field>
         <Field label="Time limit (seconds)"><input required type="number" min="1" value={form.timeLimit} onChange={(e) => setForm({ ...form, timeLimit: e.target.value })} /></Field>
         <Field label="Number of rounds"><input required type="number" min="1" value={form.rounds} onChange={(e) => setForm({ ...form, rounds: e.target.value })} /></Field>
         <Field label="Short Go teams (final round)"><input type="number" min="0" step="1" value={form.shortGoTeams} onChange={(e) => setForm({ ...form, shortGoTeams: e.target.value })} disabled={Number(form.rounds) < 2} /><small>Enter the maximum teams advancing to the final round. Use 0 for all qualified teams.</small></Field>
@@ -1986,7 +1977,6 @@ function Teams({
   onDeleteRegistration,
   onCommitDraw,
   onUpdateEvent,
-  onShuffle,
 }: {
   event?: ArenaEvent;
   teams: Team[];
@@ -2000,7 +1990,6 @@ function Teams({
   onDeleteRegistration: (registrationId: string) => void;
   onCommitDraw: (eventId: string, teams: Team[]) => void;
   onUpdateEvent: (event: ArenaEvent) => void;
-  onShuffle: (eventId: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [entryMode, setEntryMode] = useState<"team" | "registration">("team");
@@ -2041,6 +2030,18 @@ function Teams({
       return;
     }
     const handicap = teamHandicapTotal(team.headerId, team.heelerId, contestants);
+    const header = rider(team.headerId);
+    const heeler = rider(team.heelerId);
+    if (
+      event &&
+      (!contestantEligibleForRole(event, header, "Header") ||
+        !contestantEligibleForRole(event, heeler, "Heeler"))
+    ) {
+      setMessage(
+        `Each contestant must be a #${event.maxContestantHandicap} or lower in the entered position.`,
+      );
+      return;
+    }
     if (event && handicap > event.handicapTotal) {
       setMessage(
         `Team handicap ${handicap} exceeds the event maximum of ${event.handicapTotal}.`,
@@ -2100,6 +2101,29 @@ function Teams({
     onCommitDraw(event.id, generated);
     setMessage(`Draw version ${event.drawHistory.length + 1} generated with ${generated.length} teams.`);
   };
+  const restoreDraw = (teams: Team[]) => {
+    if (!event) return;
+    const eligibleTeams = teams.filter((team) =>
+      teamEligibleForCompetition(event, team, contestants),
+    );
+    onCommitDraw(
+      event.id,
+      eligibleTeams.map((team) => ({
+        ...team,
+        id: uid("team"),
+        status: "ready",
+        rawTime: null,
+        penalties: 0,
+        rolled: false,
+      })),
+    );
+    const excluded = teams.length - eligibleTeams.length;
+    setMessage(
+      excluded
+        ? `Draw restored without ${excluded} team${excluded === 1 ? "" : "s"} that exceed current handicap limits.`
+        : `Draw restored with ${eligibleTeams.length} teams.`,
+    );
+  };
 
   return (
     <>
@@ -2124,6 +2148,13 @@ function Teams({
           contestants={contestants}
           registrations={eventRegistrations}
           onSubmit={(registration) => {
+            const contestant = rider(registration.contestantId);
+            if (!contestantEligibleForRole(event, contestant, registration.role)) {
+              setMessage(
+                `${contestant?.name ?? "Contestant"} exceeds the #${event.maxContestantHandicap} contestant limit for ${registration.role}.`,
+              );
+              return;
+            }
             const duplicate = eventRegistrations.some(
               (item) =>
                 item.contestantId === registration.contestantId &&
@@ -2193,7 +2224,7 @@ function Teams({
             <button className="secondary" disabled={!eventTeams.length} onClick={() => window.print()}><Printer size={16} /> Print / PDF</button>
             {event && <button className="secondary" onClick={() => onUpdateEvent({ ...event, drawLocked: !event.drawLocked })}>{event.drawLocked ? <><Unlock size={16} /> Unlock</> : <><Lock size={16} /> Lock draw</>}</button>}
             {event?.competitionType === "pick-only" && event.rounds === 1
-              ? <button className="primary" disabled={!eventTeams.length || event.drawLocked} onClick={() => onShuffle(event.id)}><RefreshCw size={16} /> Randomize order</button>
+              ? <button className="primary" disabled={!eventTeams.length || event.drawLocked} onClick={generateDraw}><RefreshCw size={16} /> Randomize order</button>
               : <button className="primary" disabled={!event || event.drawLocked} onClick={generateDraw}><Dices size={16} /> {eventTeams.length ? "Redraw" : "Generate draw"}</button>}
           </div>
         </div>
@@ -2222,7 +2253,7 @@ function Teams({
           {event.drawHistory.slice().reverse().map((snapshot, index) => (
             <div className="history-row" key={snapshot.id}>
               <div><strong>Version {event.drawHistory.length - index}</strong><small>{new Date(snapshot.createdAt).toLocaleString()} · {snapshot.teams.length} teams</small></div>
-              <button className="secondary" disabled={event.drawLocked} onClick={() => onCommitDraw(event.id, snapshot.teams.map((team) => ({ ...team, id: uid("team"), status: "ready", rawTime: null, penalties: 0, rolled: false })))}><RefreshCw size={14} /> Restore</button>
+              <button className="secondary" disabled={event.drawLocked} onClick={() => restoreDraw(snapshot.teams)}><RefreshCw size={14} /> Restore</button>
             </div>
           ))}
         </div>
@@ -2249,16 +2280,19 @@ function IndividualRegistrationForm({
       ? event.pickDrawRole === "header" ? "Header" : "Heeler"
       : null;
   const eligibleContestants = contestants.filter((contestant) =>
-    requiredRole === "Header"
-      ? contestant.role !== "Heeler"
-      : requiredRole === "Heeler"
-        ? contestant.role !== "Header"
-        : true,
+    requiredRole
+      ? contestantEligibleForRole(event, contestant, requiredRole)
+      : contestantEligibleForRole(event, contestant, "Header") ||
+        contestantEligibleForRole(event, contestant, "Heeler"),
   );
+  const firstEligibleRole = (contestant?: Contestant) =>
+    contestantEligibleForRole(event, contestant, "Header")
+      ? "Header"
+      : "Heeler";
   const [contestantId, setContestantId] = useState(eligibleContestants[0]?.id ?? "");
   const [role, setRole] = useState<"Header" | "Heeler">(
     requiredRole ??
-      (eligibleContestants[0]?.role === "Heeler" ? "Heeler" : "Header"),
+      firstEligibleRole(eligibleContestants[0]),
   );
   const [entries, setEntries] = useState("1");
   const [status, setStatus] = useState<EventRegistration["status"]>("entered");
@@ -2282,8 +2316,8 @@ function IndividualRegistrationForm({
     <form className="form-panel" onSubmit={submit}>
       <div className="form-heading"><div><h3>{event.competitionType === "pick-and-draw" ? "Add contestant to Draw Pot" : "Register rider"}</h3><p>Individual entry #{registrations.length + 1} for {event.name}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
       <div className="form-grid">
-        <Field label="Contestant"><select required value={contestantId} onChange={(e) => { const id = e.target.value; setContestantId(id); const contestant = eligibleContestants.find((item) => item.id === id); if (!requiredRole && (contestant?.role === "Header" || contestant?.role === "Heeler")) setRole(contestant.role); }}>{eligibleContestants.map((contestant) => <option value={contestant.id} key={contestant.id}>{contestant.name}</option>)}</select></Field>
-        <Field label="Draw position"><select value={role} disabled={Boolean(requiredRole)} onChange={(e) => setRole(e.target.value as "Header" | "Heeler")}>{(!requiredRole || requiredRole === "Header") && <option>Header</option>}{(!requiredRole || requiredRole === "Heeler") && <option>Heeler</option>}</select></Field>
+        <Field label="Contestant"><select required value={contestantId} onChange={(e) => { const id = e.target.value; setContestantId(id); const contestant = eligibleContestants.find((item) => item.id === id); if (!requiredRole && !contestantEligibleForRole(event, contestant, role)) setRole(firstEligibleRole(contestant)); }}>{eligibleContestants.map((contestant) => <option value={contestant.id} key={contestant.id}>{contestant.name}</option>)}</select></Field>
+        <Field label="Draw position"><select value={role} disabled={Boolean(requiredRole)} onChange={(e) => setRole(e.target.value as "Header" | "Heeler")}>{contestantEligibleForRole(event, eligibleContestants.find((contestant) => contestant.id === contestantId), "Header") && <option>Header</option>}{contestantEligibleForRole(event, eligibleContestants.find((contestant) => contestant.id === contestantId), "Heeler") && <option>Heeler</option>}</select></Field>
         <Field label="Number of entries"><input required type="number" min="1" max={event.entriesAllowed} value={entries} onChange={(e) => setEntries(e.target.value)} /></Field>
         <Field label="Entry status"><select value={status} onChange={(e) => setStatus(e.target.value as EventRegistration["status"])}><option value="entered">Entered</option><option value="waitlist">Wait list</option></select></Field>
         <Field label="Payment status"><select value={paid ? "paid" : "unpaid"} onChange={(e) => setPaid(e.target.value === "paid")}><option value="paid">Paid</option><option value="unpaid">Unpaid</option></select></Field>
@@ -2295,8 +2329,12 @@ function IndividualRegistrationForm({
 }
 
 function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel, rideIn = false }: { event: ArenaEvent; team?: Team; contestants: Contestant[]; drawPosition: number; onSubmit: (team: Team) => void; onCancel: () => void; rideIn?: boolean }) {
-  const headers = contestants.filter((rider) => rider.role !== "Heeler");
-  const heelers = contestants.filter((rider) => rider.role !== "Header");
+  const headers = contestants.filter((rider) =>
+    contestantEligibleForRole(event, rider, "Header"),
+  );
+  const heelers = contestants.filter((rider) =>
+    contestantEligibleForRole(event, rider, "Heeler"),
+  );
   const [headerId, setHeaderId] = useState(team?.headerId ?? headers[0]?.id ?? "");
   const [heelerId, setHeelerId] = useState(team?.heelerId ?? heelers.find((rider) => rider.id !== headerId)?.id ?? "");
   const [notes, setNotes] = useState(team?.notes ?? "");
@@ -2368,6 +2406,11 @@ function RunDesk({
   const [selectedRound, setSelectedRound] = useState(1);
   const [showRideInForm, setShowRideInForm] = useState(false);
   const [rideInMessage, setRideInMessage] = useState("");
+  const [timeSheetPreview, setTimeSheetPreview] = useState<{
+    html: string;
+    fileName: string;
+  } | null>(null);
+  const timeSheetFrame = useRef<HTMLIFrameElement>(null);
   const roundCount = Math.max(event?.rounds ?? 1, 1);
   const activeRound = Math.min(selectedRound, roundCount);
   const allEventTeams = teams
@@ -2479,19 +2522,26 @@ function RunDesk({
     if (selected) url.searchParams.set("team", selected.id);
     window.location.assign(url.toString());
   };
-  const printRoundTimeSheet = () => {
+  const previewRoundTimeSheet = () => {
     if (!event || !eventTeams.length) return;
-    const popup = window.open("", "_blank", "width=1200,height=800");
-    if (!popup) {
-      window.alert("Allow pop-ups to print the round time sheet.");
-      return;
-    }
-    popup.opener = null;
-    popup.document.write(
-      roundTimeSheetHtml(event, eventTeams, contestants, activeRound),
+    setTimeSheetPreview({
+      html: roundTimeSheetHtml(event, eventTeams, contestants, activeRound),
+      fileName: roundTimeSheetFileName(event.name, activeRound),
+    });
+  };
+  const printRoundTimeSheet = () => {
+    timeSheetFrame.current?.contentWindow?.print();
+  };
+  const downloadRoundTimeSheet = () => {
+    if (!timeSheetPreview) return;
+    const url = URL.createObjectURL(
+      new Blob([timeSheetPreview.html], { type: "text/html;charset=utf-8" }),
     );
-    popup.document.close();
-    popup.addEventListener("load", () => popup.print(), { once: true });
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = timeSheetPreview.fileName;
+    link.click();
+    URL.revokeObjectURL(url);
   };
   const riderStandings = useMemo(() => {
     const stats = new Map<string, { contestantId: string; runs: number; qualified: number; noTimes: number; totalTime: number; points: number }>();
@@ -2572,6 +2622,17 @@ function RunDesk({
       team.heelerId,
       contestants,
     );
+    const header = contestants.find((contestant) => contestant.id === team.headerId);
+    const heeler = contestants.find((contestant) => contestant.id === team.heelerId);
+    if (
+      !contestantEligibleForRole(event, header, "Header") ||
+      !contestantEligibleForRole(event, heeler, "Heeler")
+    ) {
+      setRideInMessage(
+        `Each contestant must be a #${event.maxContestantHandicap} or lower in the entered position.`,
+      );
+      return;
+    }
     if (handicap > event.handicapTotal) {
       setRideInMessage(
         `Team handicap ${handicap} exceeds the roping maximum of ${event.handicapTotal}.`,
@@ -2626,9 +2687,9 @@ function RunDesk({
             <button
               className="secondary"
               disabled={!eventTeams.length}
-              onClick={printRoundTimeSheet}
+              onClick={previewRoundTimeSheet}
             >
-              <Printer size={16} /> Print time sheet
+              <Eye size={16} /> Preview time sheet
             </button>
             {activeRound > 1 && (
               <button className="secondary" onClick={() => changeRound(activeRound - 1)}>
@@ -2658,6 +2719,43 @@ function RunDesk({
           onCancel={() => setShowRideInForm(false)}
           rideIn
         />
+      )}
+      {timeSheetPreview && (
+        <div className="time-sheet-preview-overlay" role="presentation">
+          <section
+            className="time-sheet-preview-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="time-sheet-preview-title"
+          >
+            <div className="time-sheet-preview-toolbar">
+              <div>
+                <strong id="time-sheet-preview-title">Round {activeRound} time sheet</strong>
+                <small>Preview the manual worksheet before printing or downloading it.</small>
+              </div>
+              <span />
+              <button className="secondary" onClick={downloadRoundTimeSheet}>
+                <Download size={16} /> Download
+              </button>
+              <button className="primary" onClick={printRoundTimeSheet}>
+                <Printer size={16} /> Print
+              </button>
+              <button
+                className="icon-button"
+                aria-label="Close time sheet preview"
+                onClick={() => setTimeSheetPreview(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <iframe
+              ref={timeSheetFrame}
+              className="time-sheet-preview-frame"
+              srcDoc={timeSheetPreview.html}
+              title={`Round ${activeRound} manual time sheet preview`}
+            />
+          </section>
+        </div>
       )}
       <div className="run-desk-grid">
         <section className="panel desk-entry">
@@ -2704,11 +2802,6 @@ function RunDesk({
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>
                     {team.rolled ? "Unroll" : "Roll"}
-                  </button>
-                )}
-                {team.status !== "ready" && (
-                  <button className="edit-result-button" onClick={() => chooseTeam(team)}>
-                    <Pencil size={13} /> Edit time
                   </button>
                 )}
                 <span className={`status-dot ${team.status}`} />

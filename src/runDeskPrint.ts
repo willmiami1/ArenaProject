@@ -7,6 +7,15 @@ const escapeHtml = (value: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+export function roundTimeSheetFileName(eventName: string, round: number) {
+  const safeName = eventName
+    .trim()
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+  return `${safeName || "roping"}-round-${round}-time-sheet.html`;
+}
+
 export function roundTimeSheetHtml(
   event: ArenaEvent,
   teams: Team[],

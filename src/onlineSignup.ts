@@ -1,4 +1,8 @@
-import { registrationsForPickedTeam, teamHandicapTotal } from "./competition";
+import {
+  contestantEligibleForRole,
+  registrationsForPickedTeam,
+  teamHandicapTotal,
+} from "./competition";
 import type {
   ArenaData,
   ArenaEvent,
@@ -76,6 +80,9 @@ export function createOnlineSignup(
     ) {
       throw new Error("The selected role is not eligible.");
     }
+    if (!contestantEligibleForRole(event, contestant, request.role)) {
+      throw new Error("Contestant handicap exceeds the competition limit.");
+    }
     const currentEntries = data.registrations
       .filter(
         (registration) =>
@@ -109,11 +116,13 @@ export function createOnlineSignup(
   if (!request.role) throw new Error("Choose your team position.");
   const headerId = request.role === "Header" ? contestant.id : partner.id;
   const heelerId = request.role === "Heeler" ? contestant.id : partner.id;
+  const header = data.contestants.find((item) => item.id === headerId);
+  const heeler = data.contestants.find((item) => item.id === heelerId);
   if (
-    (data.contestants.find((item) => item.id === headerId)?.role === "Heeler") ||
-    (data.contestants.find((item) => item.id === heelerId)?.role === "Header")
+    !contestantEligibleForRole(event, header, "Header") ||
+    !contestantEligibleForRole(event, heeler, "Heeler")
   ) {
-    throw new Error("The selected team positions are not eligible.");
+    throw new Error("A contestant handicap exceeds the competition limit.");
   }
   if (teamHandicapTotal(headerId, heelerId, data.contestants) > event.handicapTotal) {
     throw new Error("Team handicap exceeds the competition limit.");
@@ -208,6 +217,16 @@ export function eligibleSignupPartners(
     const heelerId = role === "Heeler" ? contestantId : partner.id;
     return (
       partner.role !== (role === "Header" ? "Header" : "Heeler") &&
+      contestantEligibleForRole(
+        event,
+        data.contestants.find((contestant) => contestant.id === headerId),
+        "Header",
+      ) &&
+      contestantEligibleForRole(
+        event,
+        data.contestants.find((contestant) => contestant.id === heelerId),
+        "Heeler",
+      ) &&
       teamHandicapTotal(headerId, heelerId, data.contestants) <= event.handicapTotal
     );
   });

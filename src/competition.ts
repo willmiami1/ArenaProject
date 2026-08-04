@@ -142,6 +142,7 @@ export const defaultCompetitionSettings = {
   entriesAllowed: 1,
   allowRepeatPartners: false,
   handicapTotal: 99,
+  maxContestantHandicap: 99,
   timeLimit: 30,
   rounds: 1,
   shortGoTeams: 0,
@@ -173,14 +174,33 @@ export function teamHandicapTotal(
   return (header?.headerHandicap ?? 0) + (heeler?.heelerHandicap ?? 0);
 }
 
+export function contestantEligibleForRole(
+  event: ArenaEvent,
+  contestant: Contestant | undefined,
+  role: EventRegistration["role"],
+) {
+  if (!contestant) return false;
+  const canRope =
+    contestant.role === "Both" || contestant.role === role;
+  const handicap =
+    role === "Header"
+      ? contestant.headerHandicap
+      : contestant.heelerHandicap;
+  return canRope && handicap <= (event.maxContestantHandicap ?? 99);
+}
+
 function eligiblePair(
   event: ArenaEvent,
   headerId: string,
   heelerId: string,
   contestants: Contestant[],
 ) {
+  const header = contestants.find((contestant) => contestant.id === headerId);
+  const heeler = contestants.find((contestant) => contestant.id === heelerId);
   return (
     headerId !== heelerId &&
+    contestantEligibleForRole(event, header, "Header") &&
+    contestantEligibleForRole(event, heeler, "Heeler") &&
     teamHandicapTotal(headerId, heelerId, contestants) <= event.handicapTotal
   );
 }
@@ -326,6 +346,14 @@ function drawPotTeams(
   return teams;
 }
 
+export function teamEligibleForCompetition(
+  event: ArenaEvent,
+  team: Pick<Team, "headerId" | "heelerId">,
+  contestants: Contestant[],
+) {
+  return eligiblePair(event, team.headerId, team.heelerId, contestants);
+}
+
 function pickAndDrawTeams(
   event: ArenaEvent,
   fixedTeams: Team[],
@@ -337,7 +365,8 @@ function pickAndDrawTeams(
       team.eventId === event.id &&
       !team.generated &&
       !team.scratched &&
-      team.paid !== false,
+      team.paid !== false &&
+      teamEligibleForCompetition(event, team, contestants),
   );
   const activeDrawEntries = registrations.filter(
     (registration) =>
@@ -587,7 +616,8 @@ export function generateCompetitionDraw(
       team.eventId === event.id &&
       !team.generated &&
       !team.scratched &&
-      team.paid !== false,
+      team.paid !== false &&
+      teamEligibleForCompetition(event, team, contestants),
   );
   return shuffle(baseTeams).map((team, index) => ({
     ...team,

@@ -46,6 +46,7 @@ export interface PublicCompetition {
   entriesAllowed: number;
   allowRepeatPartners: boolean;
   handicapTotal: number;
+  maxContestantHandicap: number;
   timeLimit: number;
   rounds: number;
   shortGoTeams: number;
@@ -147,6 +148,7 @@ export function projectPublicArenaData(
       entriesAllowed: event.entriesAllowed,
       allowRepeatPartners: event.allowRepeatPartners,
       handicapTotal: event.handicapTotal,
+      maxContestantHandicap: event.maxContestantHandicap ?? 99,
       timeLimit: event.timeLimit,
       rounds: event.rounds,
       shortGoTeams: event.shortGoTeams,

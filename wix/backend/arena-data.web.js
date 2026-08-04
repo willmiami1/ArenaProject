@@ -227,6 +227,7 @@ function publicProjection(workspace) {
       entriesAllowed: event.entriesAllowed,
       allowRepeatPartners: event.allowRepeatPartners === true,
       handicapTotal: event.handicapTotal,
+      maxContestantHandicap: Number(event.maxContestantHandicap ?? 99),
       timeLimit: event.timeLimit,
       rounds: event.rounds,
       shortGoTeams: event.shortGoTeams,
@@ -642,6 +643,9 @@ const contestantCanRole = (contestant, role) =>
   contestant.role === "Both" || contestant.role === role;
 const handicapTotal = (header, heeler) =>
   Number(header?.headerHandicap || 0) + Number(heeler?.heelerHandicap || 0);
+const contestantWithinHandicap = (event, contestant, role) =>
+  Number(role === "Header" ? contestant?.headerHandicap || 0 : contestant?.heelerHandicap || 0) <=
+  Number(event.maxContestantHandicap ?? 99);
 
 function availablePartners(workspace, event, contestant) {
   return workspace.contestants
@@ -649,11 +653,15 @@ function availablePartners(workspace, event, contestant) {
       if (partner.id === contestant.id) return false;
       const canHeeler =
         contestantCanRole(contestant, "Header") &&
+        contestantWithinHandicap(event, contestant, "Header") &&
         contestantCanRole(partner, "Heeler") &&
+        contestantWithinHandicap(event, partner, "Heeler") &&
         handicapTotal(contestant, partner) <= event.handicapTotal;
       const canHeader =
         contestantCanRole(contestant, "Heeler") &&
+        contestantWithinHandicap(event, contestant, "Heeler") &&
         contestantCanRole(partner, "Header") &&
+        contestantWithinHandicap(event, partner, "Header") &&
         handicapTotal(partner, contestant) <= event.handicapTotal;
       return canHeader || canHeeler;
     })
@@ -770,6 +778,9 @@ export const submitOnlineSignup = webMethod(
       ) {
         throw new Error("Choose a valid role and entry count.");
       }
+      if (!contestantWithinHandicap(event, contestant, request.role)) {
+        throw new Error("Contestant handicap exceeds the competition limit.");
+      }
       const entered = workspace.registrations
         .filter(
           (registration) =>
@@ -807,9 +818,11 @@ export const submitOnlineSignup = webMethod(
       const heeler = request.role === "Heeler" ? contestant : partner;
       if (
         !contestantCanRole(header, "Header") ||
-        !contestantCanRole(heeler, "Heeler")
+        !contestantCanRole(heeler, "Heeler") ||
+        !contestantWithinHandicap(event, header, "Header") ||
+        !contestantWithinHandicap(event, heeler, "Heeler")
       ) {
-        throw new Error("The selected team positions are not eligible.");
+        throw new Error("A contestant handicap exceeds the competition limit.");
       }
       if (handicapTotal(header, heeler) > event.handicapTotal) {
         throw new Error("Team handicap exceeds the competition limit.");

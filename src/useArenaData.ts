@@ -50,6 +50,7 @@ export function normalizeData(parsed: ArenaData): ArenaData {
       (Number(
         (event as typeof event & { handicapCategory?: string }).handicapCategory,
       ) || 99),
+    maxContestantHandicap: event.maxContestantHandicap ?? 99,
     shortGoTeams: event.shortGoTeams ?? 0,
     drawHistory: event.drawHistory ?? [],
   }));

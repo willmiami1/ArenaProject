@@ -313,7 +313,6 @@ main { grid-column: 2; min-width: 0; }
 .queue-row strong, .queue-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queue-row strong { font-size: 11px; }
 .queue-row small { margin-top: 3px; color: #929a95; font-size: 9px; text-transform: capitalize; }
-.edit-result-button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; color: var(--green); background: #eaf3ed; border: 1px solid #bbd4c4; border-radius: 6px; font-size: 9px; font-weight: 800; white-space: nowrap; }
 .queue-row small.cumulative-times { color: #4e6759; font-weight: 700; text-transform: none; }
 .queue-row.rolled small { color: #9a651a; font-weight: 800; }
 .roll-team-button { padding: 6px 9px; color: #8b641f; background: #fff9ed; border: 1px solid #e6cc9e; border-radius: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
@@ -321,6 +320,14 @@ main { grid-column: 2; min-width: 0; }
 .status-dot { width: 8px; height: 8px; background: #b6bdb9; border-radius: 50%; }
 .status-dot.complete { background: #4b9a6c; }
 .status-dot.no-time { background: #bf6159; }
+.time-sheet-preview-overlay { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(17,31,24,.72); }
+.time-sheet-preview-dialog { width: min(1200px, 100%); height: min(850px, calc(100vh - 48px)); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; background: #eef1ee; border-radius: 12px; box-shadow: 0 24px 70px rgba(0,0,0,.35); }
+.time-sheet-preview-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 14px; background: #fff; border-bottom: 1px solid var(--line); }
+.time-sheet-preview-toolbar > div { display: grid; gap: 2px; }
+.time-sheet-preview-toolbar strong { font: 800 13px "Manrope", sans-serif; }
+.time-sheet-preview-toolbar small { color: var(--muted); font-size: 9px; }
+.time-sheet-preview-toolbar > span { flex: 1; }
+.time-sheet-preview-frame { width: 100%; height: 100%; background: #fff; border: 0; }
 .standings-panel { overflow: hidden; }
 .standings-panel + .standings-panel { margin-top: 17px; }
 .standings-table .table-row { grid-template-columns: .35fr 1.6fr .65fr .9fr; }
