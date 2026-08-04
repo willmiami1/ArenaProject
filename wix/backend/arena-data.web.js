@@ -249,8 +249,6 @@ function spectatorLeaderboard(workspace, eventId, round) {
 }
 
 function publicProjection(workspace) {
-    const today = new Date();
-    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const competitions = workspace.events.map((event) => ({
       id: event.id,
       parentEventId: event.parentEventId,
@@ -338,28 +336,11 @@ function publicProjection(workspace) {
           ),
       ).flat(),
     }));
-    const order = { live: 0, future: 1, past: 2 };
     const meets = workspace.meets
       .map((meet) => {
         const children = competitions.filter(
           (competition) => competition.parentEventId === meet.id,
         );
-        const live = children.some((competition) => competition.status === "Live");
-        const allComplete =
-          children.length > 0 &&
-          children.every((competition) => competition.status === "Complete");
-        const group =
-          meet.status === "Live"
-            ? "live"
-            : meet.status === "Future"
-              ? "future"
-              : meet.status === "Past"
-                ? "past"
-                : live
-                  ? "live"
-                  : !allComplete && meet.date >= todayKey
-                    ? "future"
-                    : "past";
         return {
           id: meet.id,
           name: meet.name,
@@ -367,16 +348,13 @@ function publicProjection(workspace) {
           startTime: meet.startTime,
           location: meet.location,
           producer: meet.producer || "",
-          group,
           competitions: children,
         };
       })
       .sort((left, right) => {
-        if (left.group !== right.group) return order[left.group] - order[right.group];
-        const result = `${left.date}T${left.startTime}`.localeCompare(
+        return `${left.date}T${left.startTime}`.localeCompare(
           `${right.date}T${right.startTime}`,
         );
-        return left.group === "past" ? -result : result;
       });
     return { generatedAt: new Date().toISOString(), meets };
 }

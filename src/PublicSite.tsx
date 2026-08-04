@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { seedData } from "./data";
 import {
+  competitionGroup,
   parsePublicRoute,
   projectPublicArenaData,
   type PublicArenaData,
@@ -77,7 +78,9 @@ const formatTime = (time: string) => {
 };
 
 function Status({ value }: { value: string }) {
-  return <span className={`public-status ${value.toLowerCase()}`}>{value}</span>;
+  const label =
+    value === "Upcoming" ? "Future" : value === "Complete" ? "Past" : value;
+  return <span className={`public-status ${value.toLowerCase()}`}>{label}</span>;
 }
 
 const socialLinks = [
@@ -151,33 +154,33 @@ function PublicFooter() {
   );
 }
 
-function EventCard({ meet }: { meet: PublicMeet }) {
-  const open = meet.competitions.filter((event) => event.registrationOpen).length;
-  const published = meet.competitions.filter((event) => event.resultsPublished).length;
-  const liveCompetition = meet.competitions.find(
-    (competition) => competition.status === "Live",
-  );
+function RopingCard({
+  competition,
+}: {
+  competition: PublicCompetition;
+}) {
   return (
     <article className="public-event-card">
       <div className="public-date-block">
-        <span>{new Date(`${meet.date}T12:00:00`).toLocaleDateString("en-US", { month: "short" })}</span>
-        <strong>{meet.date.slice(-2)}</strong>
+        <span>{new Date(`${competition.date}T12:00:00`).toLocaleDateString("en-US", { month: "short" })}</span>
+        <strong>{competition.date.slice(-2)}</strong>
       </div>
       <div className="public-event-copy">
         <div className="public-card-topline">
-          <Status value={meet.group === "live" ? "Live" : meet.group === "future" ? "Upcoming" : "Complete"} />
-          <span>{meet.competitions.length} competition{meet.competitions.length === 1 ? "" : "s"}</span>
+          <Status value={competition.status} />
+          <span>{competition.competitionLabel}</span>
         </div>
-        <h3><a href={href("event", meet.id)}>{meet.name}</a></h3>
-        <p><MapPin size={15} /> {meet.location}</p>
-        <p><Clock3 size={15} /> {formatTime(meet.startTime)}</p>
+        <h3><a href={href("competition", competition.id)}>{competition.name}</a></h3>
+        <p><MapPin size={15} /> {competition.location}</p>
+        <p><Clock3 size={15} /> {formatTime(competition.startTime)}</p>
         <div className="public-card-badges">
-          {open > 0 && <span>{open} accepting entries</span>}
-          {published > 0 && <span>{published} result{published === 1 ? "" : "s"} posted</span>}
+          {competition.registrationOpen && <span>Accepting entries</span>}
+          {competition.resultsPublished && <span>Official results posted</span>}
+          <span>{competition.entryCount} entr{competition.entryCount === 1 ? "y" : "ies"}</span>
         </div>
-        <a className="public-text-link" href={href("event", meet.id)}>Event details <ArrowRight size={16} /></a>
-        {liveCompetition && (
-          <a className="public-button compact" href={href("spectator", liveCompetition.id)}>
+        <a className="public-text-link" href={href("competition", competition.id)}>Roping details <ArrowRight size={16} /></a>
+        {competition.status === "Live" && (
+          <a className="public-button compact" href={href("spectator", competition.id)}>
             Spectator picks
           </a>
         )}
@@ -311,6 +314,7 @@ function EventExplorer({ data }: { data: PublicArenaData }) {
     { key: "future", title: "Future Events", empty: "The next event will be posted soon." },
     { key: "past", title: "Past Events", empty: "Completed events will appear here." },
   ] as const;
+  const ropings = data.meets.flatMap((meet) => meet.competitions);
   return (
     <section className="public-event-explorer" id="events">
       <div className="public-section-heading">
@@ -319,7 +323,9 @@ function EventExplorer({ data }: { data: PublicArenaData }) {
       </div>
       <nav className="public-event-tabs" aria-label="Event date groups">
         {groups.map((group) => {
-          const count = data.meets.filter((meet) => meet.group === group.key).length;
+          const count = ropings.filter(
+            (competition) => competitionGroup(competition.status) === group.key,
+          ).length;
           return (
             <a href={`#events-${group.key}`} key={group.key}>
               <span>{group.title}</span><small>{count}</small>
@@ -329,12 +335,22 @@ function EventExplorer({ data }: { data: PublicArenaData }) {
       </nav>
       <div className="public-event-groups">
         {groups.map((group) => {
-          const meets = data.meets.filter((meet) => meet.group === group.key);
+          const competitions = ropings
+            .filter(
+              (competition) =>
+                competitionGroup(competition.status) === group.key,
+            )
+            .sort((left, right) => {
+              const comparison = `${left.date}T${left.startTime}`.localeCompare(
+                `${right.date}T${right.startTime}`,
+              );
+              return group.key === "past" ? -comparison : comparison;
+            });
           return (
             <section className="public-event-tab-panel" id={`events-${group.key}`} key={group.key}>
               <h3>{group.title}</h3>
-              {meets.length ? (
-                <div className="public-event-grid">{meets.map((meet) => <EventCard meet={meet} key={meet.id} />)}</div>
+              {competitions.length ? (
+                <div className="public-event-grid">{competitions.map((competition) => <RopingCard competition={competition} key={competition.id} />)}</div>
               ) : (
                 <p className="public-empty">{group.empty}</p>
               )}
@@ -416,7 +432,6 @@ function EventPage({ meet }: { meet?: PublicMeet }) {
     <>
       <section className="public-page-head">
         <a href={href("events")}>← All events</a>
-        <Status value={meet.group === "live" ? "Live" : meet.group === "future" ? "Upcoming" : "Complete"} />
         <h1>{meet.name}</h1>
         <div className="public-page-meta">
           <span><CalendarDays /> {formatDate(meet.date)}</span>

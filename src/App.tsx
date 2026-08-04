@@ -79,7 +79,6 @@ import type {
   Contestant,
   EventRegistration,
   EventStatus,
-  MeetStatus,
   PickDrawRole,
   Team,
   View,
@@ -96,6 +95,8 @@ const navItems: { id: View; label: string; icon: typeof Gauge }[] = [
 
 const uid = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const eventStatusLabel = (status: EventStatus) =>
+  status === "Upcoming" ? "Future" : status === "Complete" ? "Past" : "Live";
 
 const sameTeamEntry = (left: Team, right: Team) =>
   left.eventId === right.eventId &&
@@ -1243,10 +1244,7 @@ function Events({
                   <span>{new Date(`${meet.date}T12:00:00`).toLocaleDateString("en-US", { month: "short" })}</span>
                 </div>
                 <div className="meet-title">
-                  <div className="event-card-tags">
-                    <span className="eyebrow">Arena event</span>
-                    <span className={`tag ${meet.status === "Live" ? "live" : meet.status === "Past" ? "complete" : "upcoming"}`}>{meet.status ?? "Future"}</span>
-                  </div>
+                  <span className="eyebrow">Arena event</span>
                   <h2>{meet.name}</h2>
                   <p><MapPin size={14} /> {meet.location} <i /> <Clock3 size={14} /> {formatTime(meet.startTime)}</p>
                 </div>
@@ -1265,7 +1263,7 @@ function Events({
                   <article className={`competition-row ${event.id === activeEventId ? "selected" : ""}`} key={event.id}>
                     <span className="competition-icon">{event.competitionType === "draw-pot" ? <Dices size={20} /> : event.competitionType === "pick-only" ? <Handshake size={20} /> : event.competitionType === "pick-and-draw" ? <GitFork size={20} /> : <Repeat2 size={20} />}</span>
                     <div className="competition-row-main">
-                      <div className="event-card-tags"><span className={`tag ${event.status.toLowerCase()}`}>{event.status}</span><span className="tag neutral">{competitionName(event.competitionType)}</span></div>
+                      <div className="event-card-tags"><span className={`tag ${event.status.toLowerCase()}`}>{eventStatusLabel(event.status)}</span><span className="tag neutral">{competitionName(event.competitionType)}</span></div>
                       <h3>{event.name}</h3>
                       <p>${event.entryFee} entry · HC {event.handicapTotal} · {event.rounds} round{event.rounds === 1 ? "" : "s"}{event.rounds > 1 && event.shortGoTeams > 0 ? ` · Top ${event.shortGoTeams} Short Go` : ""} · {teams.filter((team) => team.eventId === event.id).length} teams</p>
                     </div>
@@ -1360,7 +1358,6 @@ function MeetForm({
     startTime: meet?.startTime ?? "18:00",
     location: meet?.location ?? "",
     producer: meet?.producer ?? "",
-    status: meet?.status ?? "Future" as MeetStatus,
   });
   const submit = (formEvent: FormEvent) => {
     formEvent.preventDefault();
@@ -1375,7 +1372,6 @@ function MeetForm({
         <Field label="Producer"><input value={form.producer} onChange={(e) => setForm({ ...form, producer: e.target.value })} placeholder="Producer or organization" /></Field>
         <Field label="Event date"><input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
         <Field label="Start time"><input required type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></Field>
-        <Field label="Front page section"><select required value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as MeetStatus })}><option value="Future">Future</option><option value="Live">Live</option><option value="Past">Past</option></select></Field>
       </div>
       <FormActions onCancel={onCancel} submitLabel={meet ? "Save event" : "Create event"} />
     </form>
@@ -1501,7 +1497,7 @@ function EventForm({
       <div className="form-grid">
         <Field label="Roping name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="#10.5 Draw Pot" /></Field>
         <Field label="Entry fee"><input required min="0" type="number" value={form.entryFee} onChange={(e) => setForm({ ...form, entryFee: e.target.value })} /></Field>
-        <Field label="Status"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EventStatus })}><option>Upcoming</option><option>Live</option><option>Complete</option></select></Field>
+        <Field label="Front page status"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EventStatus })}><option value="Upcoming">Future</option><option value="Live">Live</option><option value="Complete">Past</option></select></Field>
       </div>
       <h4 className="form-section-title">Competition rules</h4>
       <div className="form-grid">

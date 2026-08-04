@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultCompetitionSettings, generateCompetitionDraw } from "./competition";
 import {
-  meetGroup,
+  competitionGroup,
   parsePublicRoute,
   projectPublicArenaData,
 } from "./publicData";
@@ -91,16 +91,10 @@ describe("public routing", () => {
 
 describe("public grouping and privacy", () => {
   const today = new Date(2026, 7, 3);
-  it("lets explicit live status win and handles future/all-complete", () => {
-    expect(meetGroup({ date: "2020-01-01" }, [{ status: "Live" }], today)).toBe("live");
-    expect(meetGroup({ date: "2026-08-03" }, [{ status: "Upcoming" }], today)).toBe("future");
-    expect(meetGroup({ date: "2026-08-30" }, [{ status: "Complete" }], today)).toBe("past");
-  });
-
-  it("uses the parent event's selected front-page section", () => {
-    expect(meetGroup({ date: "2030-01-01", status: "Past" }, [], today)).toBe("past");
-    expect(meetGroup({ date: "2020-01-01", status: "Future" }, [], today)).toBe("future");
-    expect(meetGroup({ date: "2030-01-01", status: "Live" }, [], today)).toBe("live");
+  it("groups each roping from its own status", () => {
+    expect(competitionGroup("Live")).toBe("live");
+    expect(competitionGroup("Upcoming")).toBe("future");
+    expect(competitionGroup("Complete")).toBe("past");
   });
 
   it("projects only public fields and gates unpublished results", () => {

@@ -86,7 +86,6 @@ export interface PublicMeet {
   startTime: string;
   location: string;
   producer: string;
-  group: "live" | "future" | "past";
   competitions: PublicCompetition[];
 }
 
@@ -110,34 +109,17 @@ export function parsePublicRoute(search: string): PublicRoute {
   return { kind: "home" };
 }
 
-const localDate = (value: Date) =>
-  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-
-export function meetGroup(
-  meet: Pick<ArenaMeet, "date" | "status">,
-  competitions: Pick<ArenaEvent, "status">[],
-  today = new Date(),
-): PublicMeet["group"] {
-  if (meet.status === "Live") return "live";
-  if (meet.status === "Future") return "future";
-  if (meet.status === "Past") return "past";
-  if (competitions.some((event) => event.status === "Live")) return "live";
-  const allComplete =
-    competitions.length > 0 &&
-    competitions.every((event) => event.status === "Complete");
-  if (!allComplete && meet.date >= localDate(today)) return "future";
-  return "past";
-}
+export const competitionGroup = (
+  status: EventStatus,
+): "live" | "future" | "past" =>
+  status === "Live" ? "live" : status === "Complete" ? "past" : "future";
 
 export function sortPublicMeets(meets: PublicMeet[]) {
-  const order = { live: 0, future: 1, past: 2 };
-  return [...meets].sort((left, right) => {
-    if (left.group !== right.group) return order[left.group] - order[right.group];
-    const comparison = `${left.date}T${left.startTime}`.localeCompare(
+  return [...meets].sort((left, right) =>
+    `${left.date}T${left.startTime}`.localeCompare(
       `${right.date}T${right.startTime}`,
-    );
-    return left.group === "past" ? -comparison : comparison;
-  });
+    ),
+  );
 }
 
 export function projectPublicArenaData(
@@ -238,7 +220,6 @@ export function projectPublicArenaData(
           startTime: meet.startTime,
           location: meet.location,
           producer: meet.producer ?? "",
-          group: meetGroup(meet, children, today),
           competitions: children,
         };
       }),
