@@ -290,11 +290,14 @@ main { grid-column: 2; min-width: 0; }
 .active-team i { color: #a5ada8; font-family: Georgia, serif; }
 .run-handicap { display: flex; align-items: center; justify-content: space-between; margin: -12px 0 18px; padding: 8px 11px; color: var(--muted); background: #f7f9f7; border-radius: 6px; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
 .run-handicap strong { color: var(--green); font-family: "Manrope", sans-serif; font-size: 12px; }
-.prediction-cutoff-control { display: grid; grid-template-columns: minmax(0,1fr) 205px auto; align-items: end; gap: 9px; margin: -8px 0 18px; padding: 11px; background: #f7f2e8; border: 1px solid #ead8b7; border-radius: 7px; }
+.prediction-cutoff-control { display: grid; grid-template-columns: minmax(0,1fr) 205px minmax(190px,auto); align-items: end; gap: 9px; margin: -8px 0 18px; padding: 11px; background: #f7f2e8; border: 1px solid #ead8b7; border-radius: 7px; }
 .prediction-cutoff-control span,.prediction-cutoff-control small { display: block; }
 .prediction-cutoff-control span { color: #654718; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 .prediction-cutoff-control small { margin-top: 3px; color: #8c7449; font-size: 9px; }
 .prediction-cutoff-control input { min-height: 39px; padding: 7px 9px; color: var(--ink); background: #fff; border: 1px solid #dcc9a9; border-radius: 6px; font-size: 11px; }
+.prediction-close-button { min-height: 48px; padding: 9px 14px; color: #fff; background: #9a342d; border: 1px solid #bd554d; border-radius: 6px; font-size: 10px; font-weight: 900; line-height: 1.25; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; }
+.prediction-close-button:hover { background: #b13f36; }
+.prediction-close-button.closed,.prediction-close-button:disabled { color: #d7c9b7; background: #4b4138; border-color: #6e6053; cursor: default; }
 .announcer-times { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: -7px 0 18px; }
 .announcer-times div { padding: 10px; background: #f7f2e8; border: 1px solid #ead8b7; border-radius: 7px; }
 .announcer-times span, .announcer-times strong { display: block; }
@@ -736,6 +739,7 @@ main { grid-column: 2; min-width: 0; }
   .run-desk-round-controls { align-items: stretch; flex-direction: column; }
   .run-desk-round-actions { align-self: flex-start; margin: -8px 0 17px; }
   .announcer-times { grid-template-columns: 1fr; }
+  .prediction-cutoff-control { grid-template-columns: 1fr; }
   .desk-entry { position: static; }
   .payout-panel { grid-template-columns: 1fr; }
   .reports-hero { align-items: flex-start; flex-direction: column; }

@@ -2523,6 +2523,10 @@ function RunDesk({
     eventTeams.find((team) => team.status === "ready");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = eventTeams.find((team) => team.id === selectedId) ?? nextTeam;
+  const spectatorPicksClosed = Boolean(
+    selected?.predictionClosesAt &&
+      Date.parse(selected.predictionClosesAt) <= Date.now(),
+  );
   const [rawTime, setRawTime] = useState("");
   const [penalties, setPenalties] = useState("0");
   const [notes, setNotes] = useState("");
@@ -2879,12 +2883,15 @@ function RunDesk({
                     }
                   />
                   <button
-                    className="secondary"
+                    className={`prediction-close-button${spectatorPicksClosed ? " closed" : ""}`}
+                    disabled={spectatorPicksClosed}
                     onClick={() =>
                       onSetPredictionCutoff(selected.id, new Date().toISOString())
                     }
                   >
-                    Close now
+                    {spectatorPicksClosed
+                      ? "Spectator Picks Closed"
+                      : "Close Spectator Picks Before Gate Opens"}
                   </button>
                 </div>
               )}
