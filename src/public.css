@@ -54,6 +54,7 @@
 .public-event-tab-panel { scroll-margin-top: 105px; }
 .public-event-tab-panel>h3 { margin: 0 0 24px; color: var(--public-cream); font-family: "Manrope",sans-serif; font-size: clamp(24px,3vw,38px); }
 .public-event-card { min-height: 300px; display: grid; grid-template-columns: 110px 1fr; background: #17130f; border: 1px solid rgba(234,220,198,.2); box-shadow: 6px 7px 0 rgba(166,108,67,.35); }
+.public-event-card.live { grid-template-columns: 110px minmax(0,1fr) 165px; }
 .public-date-block { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--public-cream); background: #59371f; }
 .public-date-block span { color: #d9cab7; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .15em; }
 .public-date-block strong { margin-top: 4px; font-family: "Manrope",sans-serif; font-size: 46px; }
@@ -65,6 +66,12 @@
 .public-card-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0; }
 .public-card-badges span { padding: 5px 8px; color: #583a25; background: #ead7bd; font-size: 9px; font-weight: 700; }
 .public-text-link { display: inline-flex; align-items: center; gap: 7px; margin-top: auto; font-size: 11px; font-weight: 800; }
+.public-live-actions { display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 22px; background: #211a14; border-left: 1px solid rgba(234,220,198,.2); }
+.public-live-results { min-height: 125px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 16px 10px; color: #17130f; background: var(--public-tan); text-align: center; }
+.public-live-results:hover { background: var(--public-cream); }
+.public-live-results strong { font-family: "Manrope",sans-serif; font-size: 18px; text-transform: uppercase; letter-spacing: .05em; }
+.public-live-results span { font-size: 9px; font-weight: 700; }
+.public-live-actions .public-button { width: 100%; justify-content: center; text-align: center; }
 .public-empty { margin: 0; padding: 35px; color: var(--public-muted); background: rgba(234,220,198,.05); border: 1px dashed #796653; line-height: 1.6; }
 .public-trust-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; margin-top: 100px; background: rgba(234,220,198,.24); border: 1px solid rgba(234,220,198,.18); }
 .public-hero>.public-trust-strip { grid-column: 1/-1; width: 100%; margin-top: 12px; }
@@ -194,6 +201,10 @@
   .public-hero-media { width: 86vw; }
   .public-actions { display: grid; }
   .public-event-card { grid-template-columns: 75px 1fr; }
+  .public-event-card.live { grid-template-columns: 75px 1fr; }
+  .public-live-actions { grid-column: 2; flex-direction: row; align-items: stretch; padding: 14px 17px 20px; border-top: 1px solid rgba(234,220,198,.2); border-left: 0; }
+  .public-live-results { min-height: 68px; flex: 1; }
+  .public-live-actions .public-button { width: auto; flex: 1; }
   .public-event-tabs { grid-template-columns: 1fr; }
   .public-flyer-grid { grid-template-columns: 1fr; gap: 28px; }
   .public-date-block strong { font-size: 34px; }

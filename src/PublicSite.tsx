@@ -160,7 +160,7 @@ function RopingCard({
   competition: PublicCompetition;
 }) {
   return (
-    <article className="public-event-card">
+    <article className={`public-event-card${competition.status === "Live" ? " live" : ""}`}>
       <div className="public-date-block">
         <span>{new Date(`${competition.date}T12:00:00`).toLocaleDateString("en-US", { month: "short" })}</span>
         <strong>{competition.date.slice(-2)}</strong>
@@ -175,16 +175,22 @@ function RopingCard({
         <p><Clock3 size={15} /> {formatTime(competition.startTime)}</p>
         <div className="public-card-badges">
           {competition.registrationOpen && <span>Accepting entries</span>}
-          {competition.resultsPublished && <span>Official results posted</span>}
           <span>{competition.entryCount} entr{competition.entryCount === 1 ? "y" : "ies"}</span>
         </div>
         <a className="public-text-link" href={href("competition", competition.id)}>Roping details <ArrowRight size={16} /></a>
-        {competition.status === "Live" && (
+      </div>
+      {competition.status === "Live" && (
+        <aside className="public-live-actions">
+          <a className="public-live-results" href={`${href("competition", competition.id)}#results`}>
+            <Trophy size={22} />
+            <strong>Results</strong>
+            <span>{competition.resultsPublished ? "View live standings" : "Standings pending"}</span>
+          </a>
           <a className="public-button compact" href={href("spectator", competition.id)}>
             Spectator picks
           </a>
-        )}
-      </div>
+        </aside>
+      )}
     </article>
   );
 }
@@ -508,7 +514,7 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
           <p>{competition.allowRepeatPartners ? "Repeat partnerships are allowed." : "Each partnership may enter once."}</p>
         </section>
       )}
-      <section className="public-detail-section">
+      <section className="public-detail-section" id="results">
         <div className="public-section-heading"><h2>{competition.status === "Live" ? "Live standings" : "Official results"}</h2>{competition.resultsPublished && <span>Published by arena staff</span>}</div>
         <ResultsTable competition={competition} />
       </section>
