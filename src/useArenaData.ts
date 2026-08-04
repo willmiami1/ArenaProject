@@ -32,10 +32,24 @@ export function normalizeData(parsed: ArenaData): ArenaData {
       startTime: event.startTime,
       location: event.location,
     }))
-  ).map((meet) => ({
-    ...meet,
-    producer: meet.producer ?? "",
-  }));
+  ).map((meet) => {
+    const meetEvents = parsed.events.filter(
+      (event) => (event.parentEventId ?? `meet-${event.id}`) === meet.id,
+    );
+    return {
+      ...meet,
+      producer: meet.producer ?? "",
+      status:
+        meet.status ??
+        (meetEvents.some((event) => event.status === "Live")
+          ? "Live"
+          : (meetEvents.length > 0 &&
+                meetEvents.every((event) => event.status === "Complete")) ||
+              meet.date < new Date().toISOString().slice(0, 10)
+            ? "Past"
+            : "Future"),
+    };
+  });
   const events = parsed.events.map((event) => ({
     ...defaultCompetitionSettings,
     ...event,

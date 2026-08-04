@@ -1,5 +1,6 @@
 export type View = "overview" | "events" | "contestants" | "teams" | "run-desk" | "reports";
 export type EventStatus = "Upcoming" | "Live" | "Complete";
+export type MeetStatus = "Future" | "Live" | "Past";
 export type RunStatus = "ready" | "complete" | "no-time";
 export type CompetitionType = "draw-pot" | "pick-only" | "pick-and-draw" | "round-robin";
 export type PickDrawRole = "header" | "heeler" | "both";
@@ -12,6 +13,7 @@ export interface ArenaMeet {
   startTime: string;
   location: string;
   producer?: string;
+  status?: MeetStatus;
 }
 
 export interface ArenaEvent {

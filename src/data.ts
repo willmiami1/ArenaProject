@@ -11,6 +11,7 @@ export const seedData: ArenaData = {
       startTime: "20:30",
       location: "Destiny Arena",
       producer: "Destiny Ranch Arena",
+      status: "Future",
     },
   ],
   events: [

@@ -114,10 +114,13 @@ const localDate = (value: Date) =>
   `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 
 export function meetGroup(
-  meet: Pick<ArenaMeet, "date">,
+  meet: Pick<ArenaMeet, "date" | "status">,
   competitions: Pick<ArenaEvent, "status">[],
   today = new Date(),
 ): PublicMeet["group"] {
+  if (meet.status === "Live") return "live";
+  if (meet.status === "Future") return "future";
+  if (meet.status === "Past") return "past";
   if (competitions.some((event) => event.status === "Live")) return "live";
   const allComplete =
     competitions.length > 0 &&

@@ -348,11 +348,18 @@ function publicProjection(workspace) {
         const allComplete =
           children.length > 0 &&
           children.every((competition) => competition.status === "Complete");
-        const group = live
-          ? "live"
-          : !allComplete && meet.date >= todayKey
-            ? "future"
-            : "past";
+        const group =
+          meet.status === "Live"
+            ? "live"
+            : meet.status === "Future"
+              ? "future"
+              : meet.status === "Past"
+                ? "past"
+                : live
+                  ? "live"
+                  : !allComplete && meet.date >= todayKey
+                    ? "future"
+                    : "past";
         return {
           id: meet.id,
           name: meet.name,

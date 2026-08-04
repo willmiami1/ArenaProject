@@ -79,6 +79,7 @@ import type {
   Contestant,
   EventRegistration,
   EventStatus,
+  MeetStatus,
   PickDrawRole,
   Team,
   View,
@@ -1242,7 +1243,10 @@ function Events({
                   <span>{new Date(`${meet.date}T12:00:00`).toLocaleDateString("en-US", { month: "short" })}</span>
                 </div>
                 <div className="meet-title">
-                  <span className="eyebrow">Arena event</span>
+                  <div className="event-card-tags">
+                    <span className="eyebrow">Arena event</span>
+                    <span className={`tag ${meet.status === "Live" ? "live" : meet.status === "Past" ? "complete" : "upcoming"}`}>{meet.status ?? "Future"}</span>
+                  </div>
                   <h2>{meet.name}</h2>
                   <p><MapPin size={14} /> {meet.location} <i /> <Clock3 size={14} /> {formatTime(meet.startTime)}</p>
                 </div>
@@ -1356,6 +1360,7 @@ function MeetForm({
     startTime: meet?.startTime ?? "18:00",
     location: meet?.location ?? "",
     producer: meet?.producer ?? "",
+    status: meet?.status ?? "Future" as MeetStatus,
   });
   const submit = (formEvent: FormEvent) => {
     formEvent.preventDefault();
@@ -1370,6 +1375,7 @@ function MeetForm({
         <Field label="Producer"><input value={form.producer} onChange={(e) => setForm({ ...form, producer: e.target.value })} placeholder="Producer or organization" /></Field>
         <Field label="Event date"><input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
         <Field label="Start time"><input required type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></Field>
+        <Field label="Front page section"><select required value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as MeetStatus })}><option value="Future">Future</option><option value="Live">Live</option><option value="Past">Past</option></select></Field>
       </div>
       <FormActions onCancel={onCancel} submitLabel={meet ? "Save event" : "Create event"} />
     </form>

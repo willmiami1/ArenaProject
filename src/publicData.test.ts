@@ -97,6 +97,12 @@ describe("public grouping and privacy", () => {
     expect(meetGroup({ date: "2026-08-30" }, [{ status: "Complete" }], today)).toBe("past");
   });
 
+  it("uses the parent event's selected front-page section", () => {
+    expect(meetGroup({ date: "2030-01-01", status: "Past" }, [], today)).toBe("past");
+    expect(meetGroup({ date: "2020-01-01", status: "Future" }, [], today)).toBe("future");
+    expect(meetGroup({ date: "2030-01-01", status: "Live" }, [], today)).toBe("live");
+  });
+
   it("projects only public fields and gates unpublished results", () => {
     const data = workspace(
       event({ resultsPublished: false, maxContestantHandicap: 5 }),
