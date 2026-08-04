@@ -408,6 +408,21 @@ describe("workspace compatibility", () => {
       ).toThrow("closed");
     });
 
+    it("shows the current ready team even before a pick cutoff is configured", () => {
+      const competition = event({ status: "Live" });
+      const currentRun = run({
+        status: "ready",
+        rawTime: null,
+        predictionClosesAt: undefined,
+      });
+
+      expect(projectPublicArenaData(workspace(competition, [currentRun]), now)
+        .competitions[0].predictionRuns[0]).toMatchObject({
+          id: currentRun.id,
+          open: false,
+        });
+    });
+
     it("scores Cowboys on a qualified run and Steer on a no-time", () => {
       const competition = event({ status: "Live" });
       const data = workspace(competition, [

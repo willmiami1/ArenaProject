@@ -76,7 +76,7 @@ export interface PublicPredictionRun {
   headerName: string;
   heelerName: string;
   steerNumber: string;
-  closesAt: string;
+  closesAt?: string;
   open: boolean;
 }
 
@@ -176,8 +176,7 @@ export function projectPublicArenaData(
           (team) =>
             team.eventId === event.id &&
             !team.scratched &&
-            team.status === "ready" &&
-            Boolean(team.predictionClosesAt),
+            team.status === "ready",
         )
         .sort(
           (left, right) =>
@@ -191,7 +190,7 @@ export function projectPublicArenaData(
           headerName: contestantNames.get(team.headerId) ?? "Unknown",
           heelerName: contestantNames.get(team.heelerId) ?? "Unknown",
           steerNumber: team.steerNumber ?? "",
-          closesAt: team.predictionClosesAt!,
+          closesAt: team.predictionClosesAt,
           open: predictionIsOpen(team, today),
         })),
       spectatorLeaderboards: Array.from(

@@ -298,8 +298,7 @@ function publicProjection(workspace) {
           (team) =>
             team.eventId === event.id &&
             !team.scratched &&
-            team.status === "ready" &&
-            Boolean(team.predictionClosesAt),
+            team.status === "ready",
         )
         .sort(
           (left, right) =>

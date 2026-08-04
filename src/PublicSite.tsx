@@ -215,7 +215,9 @@ function SpectatorPage({
   if (!competition || competition.status !== "Live") {
     return <NotFound />;
   }
-  const selectedRun = competition.predictionRuns.find((run) => run.open);
+  const selectedRun =
+    competition.predictionRuns.find((run) => run.open) ??
+    competition.predictionRuns[0];
   const teamId = selectedRun?.id ?? "";
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -287,7 +289,12 @@ function SpectatorPage({
         <form onSubmit={submit}>
           <h2>Play Cowboys X Steer</h2>
           <label>Name<input required maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
-          {selectedRun && <p className="public-pick-cutoff">Picks close {new Date(selectedRun.closesAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}
+          {selectedRun?.open && selectedRun.closesAt && (
+            <p className="public-pick-cutoff">Picks close {new Date(selectedRun.closesAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>
+          )}
+          {selectedRun && !selectedRun.open && (
+            <p className="public-pick-cutoff">Spectator picks are closed for this team.</p>
+          )}
           {selectedRun && (
             <fieldset className="public-pick-choices">
               <legend>Choose who wins this run</legend>
@@ -319,10 +326,10 @@ function SpectatorPage({
           )}
           {!selectedRun && <p className="public-empty">Waiting for the next cowboy team.</p>}
           <div className="public-pick-buttons">
-            <button className="public-button" type="submit" value="cowboys" disabled={busy || !teamId}>
+            <button className="public-button" type="submit" value="cowboys" disabled={busy || !teamId || !selectedRun?.open}>
               {busy ? "Saving…" : "Choose Cowboys"}
             </button>
-            <button className="public-button" type="submit" value="steer" disabled={busy || !teamId}>
+            <button className="public-button" type="submit" value="steer" disabled={busy || !teamId || !selectedRun?.open}>
               {busy ? "Saving…" : "Choose Steer"}
             </button>
           </div>
