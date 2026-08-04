@@ -123,6 +123,22 @@ function App() {
   const setActiveEvent = (eventId: string) => {
     setData((current) => ({ ...current, activeEventId: eventId }));
   };
+  const openActiveLedScreen = () => {
+    if (!activeEvent) return;
+    const eventTeams = data.teams.filter(
+      (team) => team.eventId === activeEvent.id && !team.scratched,
+    );
+    const latestRound = Math.max(
+      1,
+      ...eventTeams.map((team) => team.round),
+    );
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("display", "leaderboard");
+    url.searchParams.set("event", activeEvent.id);
+    url.searchParams.set("round", String(latestRound));
+    window.location.assign(url.toString());
+  };
 
   return (
     <div className="app-shell">
@@ -152,6 +168,10 @@ function App() {
               {label}
             </button>
           ))}
+          <button disabled={!activeEvent} onClick={openActiveLedScreen}>
+            <MonitorUp size={19} />
+            LED Screen
+          </button>
         </nav>
 
         <div className="sidebar-event">
