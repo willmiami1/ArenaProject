@@ -94,7 +94,7 @@ export interface Team {
 export interface Spectator {
   id: string;
   name: string;
-  phone: string;
+  phone?: string;
   createdAt: string;
 }
 

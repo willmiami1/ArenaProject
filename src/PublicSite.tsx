@@ -206,12 +206,12 @@ function SpectatorPage({
   const [name, setName] = useState(
     () => window.sessionStorage.getItem("arena-spectator-name") ?? "",
   );
-  const [phone, setPhone] = useState(
-    () => window.sessionStorage.getItem("arena-spectator-phone") ?? "",
-  );
   const [choice, setChoice] = useState<SpectatorChoice>("cowboys");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    window.sessionStorage.removeItem("arena-spectator-phone");
+  }, []);
   if (!competition || competition.status !== "Live") {
     return <NotFound />;
   }
@@ -229,7 +229,6 @@ function SpectatorPage({
       if (isWixEmbed()) {
         result = await submitSpectatorPrediction({
           name,
-          phone,
           eventId: competition.id,
           teamId,
           choice: submittedChoice,
@@ -245,7 +244,6 @@ function SpectatorPage({
         workspace.spectatorPredictions ??= [];
         const created = createSpectatorPrediction(workspace, {
           name,
-          phone,
           eventId: competition.id,
           teamId,
           choice: submittedChoice,
@@ -263,7 +261,6 @@ function SpectatorPage({
         };
       }
       window.sessionStorage.setItem("arena-spectator-name", name.trim());
-      window.sessionStorage.setItem("arena-spectator-phone", phone);
       setMessage(
         result.existing
           ? "Your pick for this run was already recorded."
@@ -288,9 +285,8 @@ function SpectatorPage({
       </div>
       <div className="public-spectator-grid">
         <form onSubmit={submit}>
-          <h2>Spectator sign-in</h2>
+          <h2>Play Cowboys X Steer</h2>
           <label>Name<input required maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
-          <label>Phone number<input required type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
           {selectedRun && <p className="public-pick-cutoff">Picks close {new Date(selectedRun.closesAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}
           {selectedRun && (
             <fieldset className="public-pick-choices">

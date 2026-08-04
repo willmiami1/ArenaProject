@@ -208,9 +208,9 @@ function publishedResults(event, teams, contestants) {
 }
 
 const predictionOutcome = (team) =>
-  team.status === "complete" && team.rawTime !== null
+  team.rawTime !== null
     ? "cowboys"
-    : team.status === "no-time"
+    : team.status === "no-time" || team.status === "complete"
       ? "steer"
       : null;
 
@@ -1197,12 +1197,8 @@ export const submitSpectatorPrediction = webMethod(
       throw new Error("Invalid spectator prediction.");
     }
     const name = String(request.name || "").trim().replace(/\s+/g, " ");
-    const phone = String(request.phone || "").replace(/\D/g, "");
     if (name.length < 2 || name.length > 80) {
       throw new Error("Enter your full name.");
-    }
-    if (phone.length < 10 || phone.length > 15) {
-      throw new Error("Enter a valid phone number.");
     }
     const workspace = await readWorkspace();
     const event = workspace.events.find((item) => item.id === request.eventId);
@@ -1219,23 +1215,20 @@ export const submitSpectatorPrediction = webMethod(
     ) {
       throw new Error("Predictions are closed for this run.");
     }
-    const spectatorId = `spectator-${createHash("sha256")
-      .update(phone)
+    const normalizedName = name.toLowerCase();
+    const existingSpectator = workspace.spectators.find(
+      (item) => String(item.name || "").trim().toLowerCase() === normalizedName,
+    );
+    const spectatorId = existingSpectator?.id || `spectator-${createHash("sha256")
+      .update(normalizedName)
       .digest("hex")
       .slice(0, 24)}`;
-    const spectator = workspace.spectators.find(
+    const spectator = existingSpectator || workspace.spectators.find(
       (item) => item.id === spectatorId,
     );
-    if (
-      spectator &&
-      spectator.name.trim().toLowerCase() !== name.toLowerCase()
-    ) {
-      throw new Error("That phone number is registered to a different name.");
-    }
     let nextSpectator = spectator || {
       id: spectatorId,
       name,
-      phone,
       createdAt: new Date().toISOString(),
     };
     const predictionId = `prediction-${spectatorId}-${team.id}`;
@@ -1256,9 +1249,9 @@ export const submitSpectatorPrediction = webMethod(
           );
           if (
             !persistedSpectator ||
-            persistedSpectator.name.trim().toLowerCase() !== name.toLowerCase()
+            persistedSpectator.name.trim().toLowerCase() !== normalizedName
           ) {
-            throw new Error("That phone number is registered to a different name.");
+            throw new Error("That spectator name could not be registered.");
           }
           nextSpectator = persistedSpectator;
         }

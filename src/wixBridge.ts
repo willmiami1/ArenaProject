@@ -173,7 +173,6 @@ export function submitOnlineSignup(
 
 export function submitSpectatorPrediction(request: {
   name: string;
-  phone: string;
   eventId: string;
   teamId: string;
   choice: SpectatorChoice;

@@ -15,8 +15,6 @@ export interface SpectatorLeaderboardRow {
   correct: number;
 }
 
-const normalizedPhone = (phone: string) => phone.replace(/\D/g, "");
-
 export function predictionIsOpen(team: Team, now = new Date()) {
   return (
     team.status === "ready" &&
@@ -73,7 +71,6 @@ export function createSpectatorPrediction(
   data: ArenaData,
   request: {
     name: string;
-    phone: string;
     eventId: string;
     teamId: string;
     choice: SpectatorChoice;
@@ -81,12 +78,8 @@ export function createSpectatorPrediction(
   now = new Date(),
 ) {
   const name = request.name.trim().replace(/\s+/g, " ");
-  const phone = normalizedPhone(request.phone);
   if (name.length < 2 || name.length > 80) {
     throw new Error("Enter your full name.");
-  }
-  if (phone.length < 10 || phone.length > 15) {
-    throw new Error("Enter a valid phone number.");
   }
   if (request.choice !== "steer" && request.choice !== "cowboys") {
     throw new Error("Choose Steer or Cowboys.");
@@ -102,16 +95,12 @@ export function createSpectatorPrediction(
     throw new Error("Predictions are closed for this run.");
   }
   let spectator = data.spectators.find(
-    (item) => normalizedPhone(item.phone) === phone,
+    (item) => item.name.trim().toLowerCase() === name.toLowerCase(),
   );
-  if (spectator && spectator.name.toLowerCase() !== name.toLowerCase()) {
-    throw new Error("That phone number is registered to a different name.");
-  }
   if (!spectator) {
     spectator = {
-      id: `spectator-${now.getTime()}-${phone.slice(-4)}`,
+      id: `spectator-${now.getTime()}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30)}`,
       name,
-      phone,
       createdAt: now.toISOString(),
     };
   }

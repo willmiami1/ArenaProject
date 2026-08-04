@@ -338,7 +338,7 @@ describe("workspace compatibility", () => {
   describe("spectator predictions", () => {
     const now = new Date("2026-08-04T18:00:00Z");
 
-    it("accepts one free pick before cutoff and keeps phone private", () => {
+    it("accepts one free pick per display name before cutoff", () => {
       const competition = event({ status: "Live" });
       const activeRun = run({
         status: "ready",
@@ -350,7 +350,6 @@ describe("workspace compatibility", () => {
         data,
         {
           name: "Taylor Fan",
-          phone: "(555) 867-5309",
           eventId: competition.id,
           teamId: activeRun.id,
           choice: "cowboys",
@@ -369,8 +368,20 @@ describe("workspace compatibility", () => {
         id: activeRun.id,
         open: true,
       });
-      expect(JSON.stringify(publicData)).not.toContain("5558675309");
       expect(JSON.stringify(publicData)).not.toContain(created.spectator.id);
+
+      const repeated = createSpectatorPrediction(
+        updated,
+        {
+          name: "  taylor   fan ",
+          eventId: competition.id,
+          teamId: activeRun.id,
+          choice: "steer",
+        },
+        now,
+      );
+      expect(repeated.existing).toBe(true);
+      expect(repeated.spectatorPredictions).toHaveLength(1);
     });
 
     it("rejects picks at or after the administrator cutoff", () => {
@@ -388,7 +399,6 @@ describe("workspace compatibility", () => {
           data,
           {
             name: "Taylor Fan",
-            phone: "5558675309",
             eventId: competition.id,
             teamId: "team-1",
             choice: "steer",
