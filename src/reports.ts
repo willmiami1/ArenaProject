@@ -1,5 +1,5 @@
 import { calculatePayouts, calculatePurse, competitionName } from "./competition";
-import { aggregateStandings } from "./standings";
+import { aggregateStandings, teamEntryKey } from "./standings";
 import type {
   ArenaData,
   ArenaEvent,
@@ -20,6 +20,7 @@ export type ReportKind =
   | "summary"
   | "financial"
   | "contestant"
+  | "contestant-financial"
   | "team"
   | "registration"
   | "status"
@@ -115,6 +116,7 @@ export const reportDefinitions: ReportDefinition[] = [
   { id: "event-arena", title: "Arena Statistics", description: "Runs, clean catches, no-times, penalties, and time trends.", section: "event", category: "Statistics", kind: "arena", roles: allRoles },
 
   { id: "competition-registration", title: "Registration List", description: "Entries, payment, check-in, and scratch status.", section: "competition", category: "Competition Reports", kind: "registration", roles: financialRoles },
+  { id: "competition-contestant-financials", title: "Contestant Spending & Earnings", description: "Entry spending, payout earnings, net results, and places for each contestant.", section: "competition", category: "Financial Reports", kind: "contestant-financial", roles: financialRoles },
   { id: "competition-contestants", title: "Contestant List", description: "Contestants entered in the selected competition.", section: "competition", category: "Competition Reports", kind: "contestant", roles: operationsRoles },
   { id: "competition-teams", title: "Team List", description: "Complete selected-competition team roster.", section: "competition", category: "Competition Reports", kind: "team", roles: operationsRoles },
   { id: "competition-draw", title: "Draw Sheets", description: "Print-ready draw order and arena positions.", section: "competition", category: "Draw Reports", kind: "draw", roles: liveRoles },
@@ -425,9 +427,77 @@ function contestantRows(
     });
 }
 
-function contestantWinnings(data: ArenaData, events: ArenaEvent[]) {
-  const winnings = new Map<string, number>();
+export interface ContestantFinancialSummary {
+  contestantId: string;
+  entries: number;
+  spent: number;
+  earnings: number;
+  net: number;
+  places: string[];
+}
+
+export function contestantFinancials(
+  data: ArenaData,
+  events: ArenaEvent[],
+): ContestantFinancialSummary[] {
+  const summaries = new Map<string, ContestantFinancialSummary>();
+  const ensureSummary = (contestantId: string) => {
+    const existing = summaries.get(contestantId);
+    if (existing) return existing;
+    const created = {
+      contestantId,
+      entries: 0,
+      spent: 0,
+      earnings: 0,
+      net: 0,
+      places: [],
+    };
+    summaries.set(contestantId, created);
+    return created;
+  };
+
   events.forEach((event) => {
+    const eventTeams = data.teams.filter(
+      (team) => team.eventId === event.id && !team.scratched,
+    );
+    const eventRegistrations = data.registrations.filter(
+      (registration) =>
+        registration.eventId === event.id &&
+        registration.status !== "scratched",
+    );
+
+    eventTeams.forEach((team) => {
+      ensureSummary(team.headerId);
+      ensureSummary(team.heelerId);
+    });
+    eventRegistrations.forEach((registration) => {
+      const summary = ensureSummary(registration.contestantId);
+      if (event.competitionType === "pick-only") return;
+      summary.entries += registration.entries;
+      if (registration.paid !== false) {
+        summary.spent += registration.entries * event.entryFee;
+      }
+    });
+
+    eventTeams
+      .filter((team) => team.round === 1 && !team.generated)
+      .forEach((team) => {
+        const contestantIds = [...new Set([team.headerId, team.heelerId])];
+        contestantIds.forEach((contestantId) => {
+          ensureSummary(contestantId).entries += 1;
+        });
+        if (team.paid === false) return;
+        const payingContestants = team.headerFreeRun
+          ? [team.heelerId]
+          : team.heelerFreeRun
+            ? [team.headerId]
+            : contestantIds;
+        const share = event.entryFee / Math.max(payingContestants.length, 1);
+        payingContestants.forEach((contestantId) => {
+          ensureSummary(contestantId).spent += share;
+        });
+      });
+
     const standings = aggregateStandings(event, data.teams).filter(
       (standing) => standing.qualified,
     );
@@ -440,18 +510,42 @@ function contestantWinnings(data: ArenaData, events: ArenaEvent[]) {
     payouts.forEach((payout) => {
       const standing = standings[payout.place - 1];
       if (!standing) return;
-      const share = payout.amount / 2;
-      winnings.set(
-        standing.headerId,
-        (winnings.get(standing.headerId) ?? 0) + share,
+      const sourceTeam = eventTeams.find(
+        (team) => teamEntryKey(team) === standing.key,
       );
-      winnings.set(
-        standing.heelerId,
-        (winnings.get(standing.heelerId) ?? 0) + share,
-      );
+      const recipients = sourceTeam?.headerFreeRun
+        ? [standing.heelerId]
+        : sourceTeam?.heelerFreeRun
+          ? [standing.headerId]
+          : [...new Set([standing.headerId, standing.heelerId])];
+      const share = payout.amount / Math.max(recipients.length, 1);
+      recipients.forEach((contestantId) => {
+        const summary = ensureSummary(contestantId);
+        summary.earnings += share;
+        summary.places.push(`${event.name}: #${payout.place}`);
+      });
     });
   });
-  return winnings;
+
+  return [...summaries.values()]
+    .map((summary) => ({
+      ...summary,
+      net: summary.earnings - summary.spent,
+    }))
+    .sort((left, right) =>
+      contestantName(data.contestants, left.contestantId).localeCompare(
+        contestantName(data.contestants, right.contestantId),
+      ),
+    );
+}
+
+function contestantWinnings(data: ArenaData, events: ArenaEvent[]) {
+  return new Map(
+    contestantFinancials(data, events).map((summary) => [
+      summary.contestantId,
+      summary.earnings,
+    ]),
+  );
 }
 
 function registrationRows(
@@ -660,6 +754,15 @@ const columns = {
     ["competitions", "Competitions"],
     ["checkedIn", "Checked In"],
     ["winnings", "Winnings"],
+  ],
+  "contestant-financial": [
+    ["name", "Contestant"],
+    ["role", "Header / Heeler"],
+    ["entries", "Entries"],
+    ["spent", "Amount Spent"],
+    ["earnings", "Amount Earned"],
+    ["net", "Net"],
+    ["places", "Paying Places"],
   ],
   registration: [
     ["competition", "Competition"],
@@ -904,6 +1007,21 @@ export function generateReport(
     });
   } else if (definition.kind === "contestant") {
     rows = contestantRows(data, events, teams, registrations, filters);
+  } else if (definition.kind === "contestant-financial") {
+    rows = contestantFinancials(data, events).map((summary) => {
+      const contestant = data.contestants.find(
+        (item) => item.id === summary.contestantId,
+      );
+      return {
+        name: contestant?.name ?? "Unknown",
+        role: contestant?.role ?? "—",
+        entries: summary.entries,
+        spent: money(summary.spent),
+        earnings: money(summary.earnings),
+        net: money(summary.net),
+        places: summary.places.join(", ") || "—",
+      };
+    });
   } else if (definition.kind === "registration") {
     rows = registrationRows(data, events, registrations);
   } else if (definition.kind === "status") {
