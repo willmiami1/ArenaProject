@@ -127,6 +127,7 @@ function StaffApp() {
         data={data}
         eventId={displayParams.get("event") ?? activeEvent?.id}
         requestedRound={Number(displayParams.get("round")) || undefined}
+        requestedTeamId={displayParams.get("team") ?? undefined}
       />
     );
   }
@@ -760,10 +761,12 @@ function LedLeaderboard({
   data,
   eventId,
   requestedRound,
+  requestedTeamId,
 }: {
   data: ArenaData;
   eventId?: string;
   requestedRound?: number;
+  requestedTeamId?: string;
 }) {
   const [clock, setClock] = useState(new Date());
   useEffect(() => {
@@ -801,9 +804,23 @@ function LedLeaderboard({
         a.drawPosition - b.drawPosition,
     )
     .slice(0, 10);
-  const nextTeam = roundTeams.find(
+  const defaultCurrentTeam = roundTeams.find(
     (team) => team.status === "ready" && !team.rolled,
   ) ?? roundTeams.find((team) => team.status === "ready");
+  const currentTeam =
+    roundTeams.find(
+      (team) => team.id === requestedTeamId && team.status === "ready",
+    ) ?? defaultCurrentTeam;
+  const nextTeam =
+    roundTeams.find(
+      (team) =>
+        team.status === "ready" &&
+        !team.rolled &&
+        team.id !== currentTeam?.id,
+    ) ??
+    roundTeams.find(
+      (team) => team.status === "ready" && team.id !== currentTeam?.id,
+    );
   const rider = (id: string) =>
     data.contestants.find((contestant) => contestant.id === id);
   const ledRider = (id: string) => {
@@ -851,6 +868,21 @@ function LedLeaderboard({
           <button className="led-fullscreen" onClick={leaveDisplay}><X size={24} /> Back to Run Desk</button>
         </div>
       </header>
+
+      <section className="led-current-team">
+        <div className="led-current-label">
+          <span className="live-dot" />
+          <span>Now roping</span>
+          <strong>{currentTeam ? `Draw #${currentTeam.drawPosition}` : "Round complete"}</strong>
+        </div>
+        {currentTeam && (
+          <div className="led-current-riders">
+            {ledRider(currentTeam.headerId)}
+            <i>&</i>
+            {ledRider(currentTeam.heelerId)}
+          </div>
+        )}
+      </section>
 
       <main className="led-board">
         <div className="led-table-header"><span>Place</span><span>Team</span><span>Rounds</span><span>Total time</span></div>
@@ -2419,6 +2451,7 @@ function RunDesk({
     url.searchParams.set("display", "leaderboard");
     url.searchParams.set("event", event.id);
     url.searchParams.set("round", String(activeRound));
+    if (selected) url.searchParams.set("team", selected.id);
     window.location.assign(url.toString());
   };
   const riderStandings = useMemo(() => {

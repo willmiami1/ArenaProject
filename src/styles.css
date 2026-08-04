@@ -437,7 +437,7 @@ main { grid-column: 2; min-width: 0; }
 .report-history-table .table-row { min-width: 920px; grid-template-columns: 1.1fr 1.4fr .8fr 1fr .55fr .35fr 36px; }
 .report-history-table small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
 
-.led-leaderboard { width: 100vw; min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; color: #f7fbf8; background: radial-gradient(circle at 50% -25%, #284d3c 0, #101b16 45%, #080d0b 100%); overflow: hidden; }
+.led-leaderboard { width: 100vw; min-height: 100vh; display: grid; grid-template-rows: auto auto 1fr auto; color: #f7fbf8; background: radial-gradient(circle at 50% -25%, #284d3c 0, #101b16 45%, #080d0b 100%); overflow: hidden; }
 .led-empty { place-items: center; font-family: "Manrope", sans-serif; font-size: clamp(28px, 5vw, 72px); font-weight: 800; }
 .led-header { min-height: 13vh; display: grid; grid-template-columns: minmax(0, 1.8fr) auto auto auto; align-items: center; gap: 2.5vw; padding: 1.5vh 2.2vw; background: rgba(4,9,7,.72); border-bottom: 2px solid #b8893c; }
 .led-brand { min-width: 0; display: flex; align-items: center; gap: 1.2vw; }
@@ -451,20 +451,29 @@ main { grid-column: 2; min-width: 0; }
 .led-clock span { margin-top: .5vh; }
 .led-header-actions { display: flex; align-items: stretch; gap: .5vw; }
 .led-fullscreen { display: flex; align-items: center; gap: .5vw; padding: 1.1vh .9vw; color: #f8e6c5; background: transparent; border: 1px solid #806839; border-radius: 8px; font-size: clamp(9px, .8vw, 14px); font-weight: 800; text-transform: uppercase; }
+.led-current-team { min-height: 10vh; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 2vw; padding: 1vh 2.2vw; background: linear-gradient(90deg, #a86d1f, #6f4518); border-bottom: 2px solid #e4b860; }
+.led-current-label { display: grid; grid-template-columns: auto auto; align-items: center; gap: .2vh .65vw; padding-right: 2vw; border-right: 1px solid rgba(255,255,255,.35); text-transform: uppercase; }
+.led-current-label .live-dot { width: 13px; height: 13px; background: #fff; border-radius: 50%; box-shadow: 0 0 14px rgba(255,255,255,.9); }
+.led-current-label span:not(.live-dot) { font-size: clamp(11px, 1vw, 18px); font-weight: 900; letter-spacing: .12em; }
+.led-current-label strong { grid-column: 1 / -1; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.2vw, 42px); }
+.led-current-riders { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 1.2vw; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(22px, 2.7vw, 50px); text-transform: uppercase; white-space: nowrap; }
+.led-current-riders .led-rider { flex: 1 1 0; justify-content: center; }
+.led-current-riders .led-avatar { width: clamp(44px, 7vh, 92px); height: clamp(44px, 7vh, 92px); border-color: #ffe0a5; }
+.led-current-riders i { flex: 0 0 auto; color: #ffe0a5; font-family: Georgia, serif; }
 .led-board { grid-column: 1; min-height: 0; padding: 2vh 2.2vw; overflow: hidden; }
 .led-table-header, .led-row { display: grid; grid-template-columns: 8vw minmax(0, 1fr) 11vw 16vw; align-items: center; gap: 1.2vw; }
 .led-table-header { padding: 0 1.3vw 1vh; color: #b8c7bf; font-size: clamp(10px, 1vw, 18px); font-weight: 800; text-transform: uppercase; letter-spacing: .12em; }
 .led-table-header span:nth-child(n+3) { text-align: right; }
 .led-rows { display: grid; gap: .65vh; }
-.led-row { min-height: 6.5vh; padding: .5vh 1.3vw; background: linear-gradient(90deg, rgba(31,56,45,.94), rgba(18,34,27,.94)); border: 1px solid rgba(121,157,138,.2); border-radius: 8px; box-shadow: inset 5px 0 #557363; }
-.led-row.led-place-1 { min-height: 7.5vh; background: linear-gradient(90deg, #6a4c1c, #322817); border-color: #b78b42; box-shadow: inset 7px 0 #e2b65f, 0 0 24px rgba(200,151,63,.15); }
+.led-row { min-height: 5.5vh; padding: .35vh 1.3vw; background: linear-gradient(90deg, rgba(31,56,45,.94), rgba(18,34,27,.94)); border: 1px solid rgba(121,157,138,.2); border-radius: 8px; box-shadow: inset 5px 0 #557363; }
+.led-row.led-place-1 { min-height: 6.3vh; background: linear-gradient(90deg, #6a4c1c, #322817); border-color: #b78b42; box-shadow: inset 7px 0 #e2b65f, 0 0 24px rgba(200,151,63,.15); }
 .led-row.led-place-2 { box-shadow: inset 5px 0 #aab6af; }
 .led-row.led-place-3 { box-shadow: inset 5px 0 #a66d42; }
 .led-place { font-family: "Manrope", sans-serif; font-size: clamp(28px, 3.4vw, 68px); font-weight: 900; line-height: 1; }
 .led-team { min-width: 0; display: flex; align-items: center; gap: .8vw; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(17px, 2vw, 39px); text-transform: uppercase; white-space: nowrap; }
 .led-rider { min-width: 0; display: flex; align-items: center; gap: .55vw; overflow: hidden; }
 .led-rider strong { overflow: hidden; text-overflow: ellipsis; }
-.led-avatar { flex: 0 0 auto; width: clamp(32px, 4.8vh, 66px); height: clamp(32px, 4.8vh, 66px); display: grid; place-items: center; overflow: hidden; color: #fff3d7; background: #365545; border: 2px solid rgba(226,182,95,.72); border-radius: 50%; font-size: clamp(10px, 1vw, 18px); font-style: normal; font-weight: 900; letter-spacing: .04em; }
+.led-avatar { flex: 0 0 auto; width: clamp(28px, 4.2vh, 58px); height: clamp(28px, 4.2vh, 58px); display: grid; place-items: center; overflow: hidden; color: #fff3d7; background: #365545; border: 2px solid rgba(226,182,95,.72); border-radius: 50%; font-size: clamp(10px, 1vw, 18px); font-style: normal; font-weight: 900; letter-spacing: .04em; }
 .led-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .led-team i { flex: 0 0 auto; color: #cfaa66; font-family: Georgia, serif; font-weight: 400; }
 .led-rounds { color: #c8d6ce; font-size: clamp(16px, 1.8vw, 34px); font-weight: 800; text-align: right; }
