@@ -219,6 +219,9 @@ function SpectatorPage({
   const teamId = selectedRun?.id ?? "";
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    const submittedValue = ((event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value;
+    const submittedChoice: SpectatorChoice = submittedValue === "steer" ? "steer" : "cowboys";
+    setChoice(submittedChoice);
     setBusy(true);
     setMessage("");
     try {
@@ -229,7 +232,7 @@ function SpectatorPage({
           phone,
           eventId: competition.id,
           teamId,
-          choice,
+          choice: submittedChoice,
         });
         if (!result) throw new Error("Prediction could not be saved.");
         onLocalUpdate(result.publicData);
@@ -245,7 +248,7 @@ function SpectatorPage({
           phone,
           eventId: competition.id,
           teamId,
-          choice,
+          choice: submittedChoice,
         });
         workspace.spectators = created.spectators;
         workspace.spectatorPredictions = created.spectatorPredictions;
@@ -319,9 +322,14 @@ function SpectatorPage({
             </fieldset>
           )}
           {!selectedRun && <p className="public-empty">Waiting for the next cowboy team.</p>}
-          <button className="public-button" disabled={busy || !teamId}>
-            {busy ? "Saving…" : choice === "cowboys" ? "Choose Cowboys" : "Choose Steer"}
-          </button>
+          <div className="public-pick-buttons">
+            <button className="public-button" type="submit" value="cowboys" disabled={busy || !teamId}>
+              {busy ? "Saving…" : "Choose Cowboys"}
+            </button>
+            <button className="public-button" type="submit" value="steer" disabled={busy || !teamId}>
+              {busy ? "Saving…" : "Choose Steer"}
+            </button>
+          </div>
           {message && <p className="public-form-message" role="status">{message}</p>}
         </form>
         <div className="public-spectator-leaders">
