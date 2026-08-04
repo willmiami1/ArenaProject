@@ -155,7 +155,7 @@
 .public-pick-card.selected { color: #17130f; background: var(--public-tan); border-color: var(--public-cream); box-shadow: 0 0 0 3px rgba(166,108,67,.35); }
 .public-pick-card input { position: absolute; width: 1px; min-height: 1px; opacity: 0; pointer-events: none; }
 .public-steer-picture { width: 100%; min-height: 276px; display: grid; place-items: center; color: var(--public-cream); background: #59371f; }
-.public-steer-picture img { width: 100%; height: 276px; object-fit: cover; object-position: center 42%; }
+.public-steer-picture img { width: 100%; height: 276px; padding: 8px; background: #2b1b12; object-fit: contain; object-position: center; }
 .public-cowboy-roster { min-height: 276px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1px; background: #806047; }
 .public-cowboy-rider { min-width: 0; display: grid; justify-items: center; align-content: center; gap: 5px; padding: 10px; color: var(--public-cream); background: #59371f; text-align: center; }
 .public-cowboy-rider>small { color: #fff; font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: .12em; }
