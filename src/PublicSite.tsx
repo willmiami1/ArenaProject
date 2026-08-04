@@ -311,40 +311,36 @@ function EventExplorer({ data }: { data: PublicArenaData }) {
     { key: "future", title: "Future Events", empty: "The next event will be posted soon." },
     { key: "past", title: "Past Events", empty: "Completed events will appear here." },
   ] as const;
-  const [selectedGroup, setSelectedGroup] = useState<(typeof groups)[number]["key"]>(
-    data.meets.some((meet) => meet.group === "live") ? "live" : "future",
-  );
-  const selected = groups.find((group) => group.key === selectedGroup)!;
-  const meets = data.meets.filter((meet) => meet.group === selectedGroup);
   return (
     <section className="public-event-explorer" id="events">
       <div className="public-section-heading">
         <div><span>Destiny Ranch Arena</span><h2>Events</h2></div>
         <span>Choose an event book</span>
       </div>
-      <div className="public-event-tabs" role="tablist" aria-label="Event date groups">
+      <nav className="public-event-tabs" aria-label="Event date groups">
         {groups.map((group) => {
           const count = data.meets.filter((meet) => meet.group === group.key).length;
           return (
-            <button
-              className={selectedGroup === group.key ? "active" : ""}
-              role="tab"
-              aria-selected={selectedGroup === group.key}
-              onClick={() => setSelectedGroup(group.key)}
-              key={group.key}
-            >
+            <a href={`#events-${group.key}`} key={group.key}>
               <span>{group.title}</span><small>{count}</small>
-            </button>
+            </a>
           );
         })}
-      </div>
-      <div className="public-event-tab-panel" role="tabpanel">
-        <h3>{selected.title}</h3>
-        {meets.length ? (
-          <div className="public-event-grid">{meets.map((meet) => <EventCard meet={meet} key={meet.id} />)}</div>
-        ) : (
-          <p className="public-empty">{selected.empty}</p>
-        )}
+      </nav>
+      <div className="public-event-groups">
+        {groups.map((group) => {
+          const meets = data.meets.filter((meet) => meet.group === group.key);
+          return (
+            <section className="public-event-tab-panel" id={`events-${group.key}`} key={group.key}>
+              <h3>{group.title}</h3>
+              {meets.length ? (
+                <div className="public-event-grid">{meets.map((meet) => <EventCard meet={meet} key={meet.id} />)}</div>
+              ) : (
+                <p className="public-empty">{group.empty}</p>
+              )}
+            </section>
+          );
+        })}
       </div>
     </section>
   );

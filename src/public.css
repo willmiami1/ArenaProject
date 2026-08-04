@@ -47,10 +47,11 @@
 .public-event-explorer { scroll-margin-top: 105px; padding: 24px 0 100px; }
 .public-event-explorer .public-section-heading>div>span { display: block; margin-bottom: 7px; color: var(--public-brown); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .14em; }
 .public-event-tabs { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; margin-bottom: 42px; background: rgba(234,220,198,.25); border: 1px solid rgba(234,220,198,.22); }
-.public-event-tabs button { min-height: 86px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 22px; color: var(--public-muted); background: #17130f; border: 0; font-family: "Manrope",sans-serif; font-size: 14px; font-weight: 800; text-align: left; }
-.public-event-tabs button:hover { color: var(--public-cream); background: #211912; }
-.public-event-tabs button.active { color: #17130f; background: var(--public-tan); }
+.public-event-tabs a { min-height: 86px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 22px; color: var(--public-muted); background: #17130f; border: 0; font-family: "Manrope",sans-serif; font-size: 14px; font-weight: 800; text-align: left; }
+.public-event-tabs a:hover { color: #17130f; background: var(--public-tan); }
 .public-event-tabs small { min-width: 30px; height: 30px; display: grid; place-items: center; color: inherit; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; }
+.public-event-groups { display: grid; gap: clamp(60px,8vw,105px); }
+.public-event-tab-panel { scroll-margin-top: 105px; }
 .public-event-tab-panel>h3 { margin: 0 0 24px; color: var(--public-cream); font-family: "Manrope",sans-serif; font-size: clamp(24px,3vw,38px); }
 .public-event-card { min-height: 300px; display: grid; grid-template-columns: 110px 1fr; background: #17130f; border: 1px solid rgba(234,220,198,.2); box-shadow: 6px 7px 0 rgba(166,108,67,.35); }
 .public-date-block { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--public-cream); background: #59371f; }
