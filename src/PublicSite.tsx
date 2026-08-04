@@ -78,9 +78,6 @@ const formatTime = (time: string) => {
   });
 };
 
-const initials = (name: string) =>
-  name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-
 function Status({ value }: { value: string }) {
   const label =
     value === "Upcoming" ? "Future" : value === "Complete" ? "Past" : value;
@@ -308,29 +305,9 @@ function SpectatorPage({
                   checked={choice === "cowboys"}
                   onChange={() => setChoice("cowboys")}
                 />
-                <span className="public-cowboy-team-picture">
-                  <span className="public-cowboy-rider">
-                    <span className="public-cowboy-avatar">
-                      {selectedRun.headerPhoto
-                        ? <img src={selectedRun.headerPhoto} alt={`${selectedRun.headerName} profile`} />
-                        : <span aria-hidden="true">{initials(selectedRun.headerName)}</span>}
-                    </span>
-                    <small>Header</small>
-                    <strong>{selectedRun.headerName}</strong>
-                  </span>
-                  <i>&amp;</i>
-                  <span className="public-cowboy-rider">
-                    <span className="public-cowboy-avatar">
-                      {selectedRun.heelerPhoto
-                        ? <img src={selectedRun.heelerPhoto} alt={`${selectedRun.heelerName} profile`} />
-                        : <span aria-hidden="true">{initials(selectedRun.heelerName)}</span>}
-                    </span>
-                    <small>Heeler</small>
-                    <strong>{selectedRun.heelerName}</strong>
-                  </span>
-                </span>
+                <img src="./team-roping-hero.png" alt="" />
                 <span>Cowboy team</span>
-                <strong>Catch</strong>
+                <strong>{selectedRun.headerName} &amp; {selectedRun.heelerName}</strong>
                 <small>Cowboys catch</small>
               </label>
               <label className={`public-pick-card steer${choice === "steer" ? " selected" : ""}`}>
