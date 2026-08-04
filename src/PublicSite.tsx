@@ -43,6 +43,19 @@ import {
 } from "./contestantAccount";
 import type { ArenaData } from "./types";
 
+const localWorkspaceKey = "arena-command-data-v1";
+
+function loadLocalPublicData() {
+  const saved = window.localStorage.getItem(localWorkspaceKey);
+  if (!saved) return projectPublicArenaData(seedData);
+  try {
+    return projectPublicArenaData(JSON.parse(saved) as ArenaData);
+  } catch (error) {
+    console.error("Arena Command local workspace could not be loaded.", error);
+    return projectPublicArenaData(seedData);
+  }
+}
+
 const href = (page: string, id?: string) =>
   `?page=${encodeURIComponent(page)}${id ? `&id=${encodeURIComponent(id)}` : ""}`;
 const eventsHref = `${href("home")}#events`;
@@ -211,7 +224,7 @@ function SpectatorPage({
         if (!result) throw new Error("Prediction could not be saved.");
         onLocalUpdate(result.publicData);
       } else {
-        const saved = window.localStorage.getItem("arena-command-data-v1");
+        const saved = window.localStorage.getItem(localWorkspaceKey);
         const workspace = saved
           ? (JSON.parse(saved) as ArenaData)
           : structuredClone(seedData);
@@ -227,7 +240,7 @@ function SpectatorPage({
         workspace.spectators = created.spectators;
         workspace.spectatorPredictions = created.spectatorPredictions;
         window.localStorage.setItem(
-          "arena-command-data-v1",
+          localWorkspaceKey,
           JSON.stringify(workspace),
         );
         onLocalUpdate(projectPublicArenaData(workspace));
@@ -586,7 +599,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       if (isWixEmbed()) {
         result = await createContestantAccount(competition.id, account);
       } else {
-        const saved = window.localStorage.getItem("arena-command-data-v1");
+        const saved = window.localStorage.getItem(localWorkspaceKey);
         const workspace = saved
           ? (JSON.parse(saved) as ArenaData)
           : structuredClone(seedData);
@@ -599,7 +612,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
         );
         workspace.contestants = created.contestants;
         window.localStorage.setItem(
-          "arena-command-data-v1",
+          localWorkspaceKey,
           JSON.stringify(workspace),
         );
         result = {
@@ -736,11 +749,19 @@ function NotFound() {
 
 export function PublicSite({ route = parsePublicRoute(window.location.search) }: { route?: PublicRoute }) {
   const [data, setData] = useState<PublicArenaData | null>(() =>
-    isWixEmbed() ? null : projectPublicArenaData(seedData),
+    isWixEmbed() ? null : loadLocalPublicData(),
   );
   const [error, setError] = useState("");
   useEffect(() => {
-    if (!isWixEmbed()) return;
+    if (!isWixEmbed()) {
+      const refresh = () => setData(loadLocalPublicData());
+      window.addEventListener("focus", refresh);
+      window.addEventListener("storage", refresh);
+      return () => {
+        window.removeEventListener("focus", refresh);
+        window.removeEventListener("storage", refresh);
+      };
+    }
     let cancelled = false;
     loadPublicArenaData()
       .then((result) => { if (!cancelled) setData(result); })
