@@ -2694,6 +2694,22 @@ function RunDesk({
     setPenalties("0");
     setNotes("");
   };
+  const clearRunResult = () => {
+    if (!selected || selected.status === "ready") return;
+    if (!window.confirm(`Clear the result for Draw #${selected.drawPosition} and mark this team Not run yet?`)) return;
+    onSave(selected.id, {
+      status: "ready",
+      rawTime: null,
+      penalties: 0,
+      notes: "",
+      points: 0,
+      rolled: false,
+    });
+    setSelectedId(selected.id);
+    setRawTime("");
+    setPenalties("0");
+    setNotes("");
+  };
   const changeRound = (round: number) => {
     setSelectedRound(round);
     setSelectedId(null);
@@ -2912,7 +2928,11 @@ function RunDesk({
               </div>
               <Field label="Run notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional note" /></Field>
               <div className={`result-preview ${rawTime && event && Number(rawTime) + Number(penalties) > event.timeLimit ? "over-limit" : ""}`}><span>Official time {event ? `· ${event.timeLimit}s limit` : ""}</span><strong>{rawTime ? (Number(rawTime) + Number(penalties)).toFixed(2) : "—"}</strong></div>
-              <div className="desk-actions"><button className="no-time-button" onClick={() => saveRun("no-time")}>Mark no time</button><button className="primary" disabled={!rawTime || Number(rawTime) <= 0} onClick={() => saveRun("complete")}><Check size={18} /> {isEditingResult ? "Save corrected time" : "Save result"}</button></div>
+              <div className={`desk-actions${isEditingResult ? " editing" : ""}`}>
+                {isEditingResult && <button className="clear-result-button" onClick={clearRunResult}>Clear result / Not run yet</button>}
+                <button className="no-time-button" onClick={() => saveRun("no-time")}>Mark no time</button>
+                <button className="primary" disabled={!rawTime || Number(rawTime) <= 0} onClick={() => saveRun("complete")}><Check size={18} /> {isEditingResult ? "Save corrected time" : "Save result"}</button>
+              </div>
             </>
           ) : <EmptyState text="Every team in this draw has a result." />}
         </section>
@@ -2924,7 +2944,7 @@ function RunDesk({
               <div className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""}`} key={team.id}>
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Ready"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>

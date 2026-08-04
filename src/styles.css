@@ -314,6 +314,9 @@ main { grid-column: 2; min-width: 0; }
 .result-preview span { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .result-preview strong { font-family: "Manrope", sans-serif; font-size: 24px; }
 .desk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
+.desk-actions.editing { grid-template-columns: 1fr 1fr; }
+.clear-result-button { grid-column: 1 / -1; min-height: 40px; color: #8b302b; background: #fff1ef; border: 1px solid #d9a19c; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.clear-result-button:hover { color: #fff; background: #9a342d; border-color: #9a342d; }
 .run-queue { order: 1; overflow: hidden; }
 .queue-scroll { max-height: 640px; overflow-y: auto; }
 .queue-row { width: 100%; min-height: 62px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 7px 20px; color: var(--ink); background: #fff; border-bottom: 1px solid #efefeb; text-align: left; }
