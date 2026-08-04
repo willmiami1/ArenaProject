@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ArrowRight,
+  Beef,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -208,7 +209,9 @@ function SpectatorPage({
   const [phone, setPhone] = useState(
     () => window.sessionStorage.getItem("arena-spectator-phone") ?? "",
   );
-  const [teamId, setTeamId] = useState(competition?.predictionRuns[0]?.id ?? "");
+  const [teamId, setTeamId] = useState(
+    competition?.predictionRuns.find((run) => run.open)?.id ?? "",
+  );
   const [choice, setChoice] = useState<SpectatorChoice>("cowboys");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -294,11 +297,35 @@ function SpectatorPage({
             ))}
           </select></label>
           {selectedRun && <p className="public-pick-cutoff">Picks close {new Date(selectedRun.closesAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}
-          <fieldset><legend>Your pick</legend>
-            {(["cowboys", "steer"] as const).map((value) => (
-              <label className="public-radio" key={value}><input type="radio" checked={choice === value} onChange={() => setChoice(value)} />{value === "cowboys" ? "Cowboys catch" : "Steer gets away"}</label>
-            ))}
-          </fieldset>
+          {selectedRun && (
+            <fieldset className="public-pick-choices">
+              <legend>Choose who wins this run</legend>
+              <label className={`public-pick-card${choice === "cowboys" ? " selected" : ""}`}>
+                <input
+                  type="radio"
+                  name="spectator-pick"
+                  checked={choice === "cowboys"}
+                  onChange={() => setChoice("cowboys")}
+                />
+                <img src="./team-roping-hero.png" alt="" />
+                <span>Cowboy team</span>
+                <strong>{selectedRun.headerName} &amp; {selectedRun.heelerName}</strong>
+                <small>Cowboys catch</small>
+              </label>
+              <label className={`public-pick-card steer${choice === "steer" ? " selected" : ""}`}>
+                <input
+                  type="radio"
+                  name="spectator-pick"
+                  checked={choice === "steer"}
+                  onChange={() => setChoice("steer")}
+                />
+                <span className="public-steer-picture"><Beef aria-hidden="true" /></span>
+                <span>Steer</span>
+                <strong>Steer gets away</strong>
+                <small>Pick the steer</small>
+              </label>
+            </fieldset>
+          )}
           <button className="public-button" disabled={busy || !teamId}>{busy ? "Saving…" : "Lock in free pick"}</button>
           {message && <p className="public-form-message" role="status">{message}</p>}
         </form>
