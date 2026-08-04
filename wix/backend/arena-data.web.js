@@ -10,6 +10,8 @@ const COLLECTIONS = {
   contestants: "ArenaContestants",
   teams: "ArenaTeams",
   registrations: "ArenaRegistrations",
+  spectators: "ArenaSpectators",
+  spectatorPredictions: "ArenaSpectatorPredictions",
 };
 const SETTINGS_COLLECTION = "ArenaSettings";
 const CREDENTIALS_COLLECTION = "ArenaContestantCredentials";
@@ -132,12 +134,14 @@ async function readWorkspace() {
       .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
       .catch(() => null),
   ]);
-  const [meets, events, contestants, teams, registrations] = await Promise.all([
+  const [meets, events, contestants, teams, registrations, spectators, spectatorPredictions] = await Promise.all([
     readAll(COLLECTIONS.meets),
     readAll(COLLECTIONS.events),
     readAll(COLLECTIONS.contestants),
     readAll(COLLECTIONS.teams),
     readAll(COLLECTIONS.registrations),
+    readAll(COLLECTIONS.spectators),
+    readAll(COLLECTIONS.spectatorPredictions),
   ]);
   return {
     participantDatabaseVersion: settings?.participantDatabaseVersion || 1,
@@ -152,6 +156,8 @@ async function readWorkspace() {
     contestants,
     teams,
     registrations,
+    spectators,
+    spectatorPredictions,
     activeEventId: settings?.activeEventId || "",
   };
 }
@@ -201,6 +207,47 @@ function publishedResults(event, teams, contestants) {
       }));
 }
 
+const predictionOutcome = (team) =>
+  team.status === "complete" && team.rawTime !== null
+    ? "cowboys"
+    : team.status === "no-time"
+      ? "steer"
+      : null;
+
+function spectatorLeaderboard(workspace, eventId, round) {
+  const spectators = new Map(
+    workspace.spectators.map((spectator) => [spectator.id, spectator]),
+  );
+  const teams = new Map(workspace.teams.map((team) => [team.id, team]));
+  const rows = new Map();
+  workspace.spectatorPredictions
+    .filter(
+      (prediction) =>
+        prediction.eventId === eventId && Number(prediction.round) === round,
+    )
+    .forEach((prediction) => {
+      const spectator = spectators.get(prediction.spectatorId);
+      const team = teams.get(prediction.teamId);
+      if (!spectator || !team) return;
+      const current = rows.get(spectator.id) || {
+        spectatorId: spectator.id,
+        name: spectator.name,
+        round,
+        picks: 0,
+        correct: 0,
+      };
+      current.picks += 1;
+      if (predictionOutcome(team) === prediction.choice) current.correct += 1;
+      rows.set(spectator.id, current);
+    });
+  return [...rows.values()].sort(
+    (left, right) =>
+      right.correct - left.correct ||
+      right.picks - left.picks ||
+      left.name.localeCompare(right.name),
+  );
+}
+
 function publicProjection(workspace) {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -247,6 +294,49 @@ function publicProjection(workspace) {
           )
           .reduce((sum, registration) => sum + Number(registration.entries || 0), 0),
       results: publishedResults(event, workspace.teams, workspace.contestants),
+      predictionRuns: workspace.teams
+        .filter(
+          (team) =>
+            team.eventId === event.id &&
+            !team.scratched &&
+            team.status === "ready" &&
+            Boolean(team.predictionClosesAt),
+        )
+        .sort(
+          (left, right) =>
+            Number(left.round) - Number(right.round) ||
+            Number(left.drawPosition) - Number(right.drawPosition),
+        )
+        .map((team) => {
+          const names = new Map(
+            workspace.contestants.map((contestant) => [
+              contestant.id,
+              contestant.name,
+            ]),
+          );
+          return {
+            id: team.id,
+            round: Number(team.round || 1),
+            drawPosition: Number(team.drawPosition),
+            headerName: names.get(team.headerId) || "Unknown",
+            heelerName: names.get(team.heelerId) || "Unknown",
+            steerNumber: team.steerNumber || "",
+            closesAt: team.predictionClosesAt,
+            open: Date.parse(team.predictionClosesAt) > Date.now(),
+          };
+        }),
+      spectatorLeaderboards: Array.from(
+        { length: Math.max(Number(event.rounds || 1), 1) },
+        (_, index) =>
+          spectatorLeaderboard(workspace, event.id, index + 1).map(
+            ({ name, round, picks, correct }) => ({
+              name,
+              round,
+              picks,
+              correct,
+            }),
+          ),
+      ).flat(),
     }));
     const order = { live: 0, future: 1, past: 2 };
     const meets = workspace.meets
@@ -362,6 +452,8 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     registrations: onlineChanged
       ? mergeOnline(data.registrations || [], latest.registrations)
       : data.registrations || [],
+    spectators: latest.spectators,
+    spectatorPredictions: latest.spectatorPredictions,
   };
   const removableIds = (records) =>
     new Set(
@@ -394,6 +486,16 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       COLLECTIONS.registrations,
       next.registrations,
       removableIds(latest.registrations),
+    ),
+    syncRecords(
+      COLLECTIONS.spectators,
+      next.spectators,
+      removableIds(latest.spectators),
+    ),
+    syncRecords(
+      COLLECTIONS.spectatorPredictions,
+      next.spectatorPredictions,
+      removableIds(latest.spectatorPredictions),
     ),
   ]);
   await Promise.all([
@@ -485,6 +587,163 @@ export const setContestantPin = webMethod(
       OPTIONS,
     );
     return { configured: true };
+  },
+);
+
+export const createContestantAccount = webMethod(
+  Permissions.Anyone,
+  async (request) => {
+    if (!validAppId(request.competitionId)) {
+      throw new Error("Competition is unavailable.");
+    }
+    const name = String(request.name || "").trim().replace(/\s+/g, " ");
+    const email = normalizeEmail(request.email);
+    const phone = String(request.phone || "").replace(/\D/g, "");
+    const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ");
+    const role = String(request.role || "");
+    const headerHandicap = role === "Heeler" ? 0 : Number(request.headerHandicap);
+    const heelerHandicap = role === "Header" ? 0 : Number(request.heelerHandicap);
+    if (name.length < 2 || name.length > 100) {
+      throw new Error("Enter your full name.");
+    }
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      email.length > 254
+    ) {
+      throw new Error("Enter a valid email address.");
+    }
+    if (phone.length < 10 || phone.length > 15) {
+      throw new Error("Enter a valid phone number.");
+    }
+    if (!["Header", "Heeler", "Both"].includes(role)) {
+      throw new Error("Choose your roping position.");
+    }
+    if (
+      !validPin(request.pin) ||
+      !Number.isFinite(headerHandicap) ||
+      !Number.isFinite(heelerHandicap) ||
+      headerHandicap < 0 ||
+      heelerHandicap < 0 ||
+      headerHandicap > 20 ||
+      heelerHandicap > 20
+    ) {
+      throw new Error("Enter valid handicaps and a four-digit PIN.");
+    }
+    const workspace = await readWorkspace();
+    const event = workspace.events.find(
+      (item) => item.id === request.competitionId,
+    );
+    if (
+      !event ||
+      event.status !== "Upcoming" ||
+      !event.registrationOpen ||
+      event.drawLocked
+    ) {
+      throw new Error("This competition is not accepting new accounts.");
+    }
+    const duplicateEmail = await wixData
+      .query(CREDENTIALS_COLLECTION)
+      .eq("emailNormalized", email)
+      .limit(1)
+      .find(OPTIONS);
+    if (duplicateEmail.items.length) {
+      throw new Error("A contestant account already uses that email.");
+    }
+    if (
+      workspace.contestants.some(
+        (contestant) => normalizeEmail(contestant.email) === email,
+      )
+    ) {
+      throw new Error("A contestant account already uses that email.");
+    }
+    if (
+      workspace.contestants.some(
+        (contestant) =>
+          String(contestant.phone || "").replace(/\D/g, "") === phone,
+      )
+    ) {
+      throw new Error("A contestant account already uses that phone number.");
+    }
+    const contestantId = `contestant-${createHash("sha256")
+      .update(`contestant-phone:${phone}`)
+      .digest("hex")
+      .slice(0, 24)}`;
+    const contestant = {
+      id: contestantId,
+      name,
+      email,
+      phone,
+      hometown,
+      role,
+      headerHandicap,
+      heelerHandicap,
+      photo: "",
+    };
+    const credentialId = createHash("sha256")
+      .update(`contestant-credential:${email}`)
+      .digest("hex")
+      .slice(0, 32);
+    const pepper = await getSecret(PIN_PEPPER_SECRET);
+    const salt = randomBytes(16).toString("hex");
+    try {
+      await wixData.insert(
+        CREDENTIALS_COLLECTION,
+        {
+          _id: credentialId,
+          contestantId,
+          emailNormalized: email,
+          pinSalt: salt,
+          pinHash: pinHash(request.pin, salt, pepper),
+          failedAttempts: 0,
+          lockedUntil: null,
+          updatedAt: new Date(),
+        },
+        OPTIONS,
+      );
+    } catch {
+      throw new Error("A contestant account already uses that email.");
+    }
+    try {
+      const inserted = await insertUniqueArenaRecord(
+        COLLECTIONS.contestants,
+        contestant,
+      );
+      if (!inserted) {
+        throw new Error("A contestant account already uses that phone number.");
+      }
+    } catch (error) {
+      await wixData
+        .remove(CREDENTIALS_COLLECTION, credentialId, OPTIONS)
+        .catch(() => null);
+      throw error;
+    }
+    await wixData.save(
+      SETTINGS_COLLECTION,
+      {
+        _id: ONLINE_REVISION_ID,
+        value: workspace.onlineRevision + 1,
+        updatedAt: new Date(),
+      },
+      OPTIONS,
+    );
+    const updatedWorkspace = {
+      ...workspace,
+      contestants: [...workspace.contestants, contestant],
+    };
+    return {
+      contestant: {
+        id: contestant.id,
+        name: contestant.name,
+        role: contestant.role,
+        headerHandicap: contestant.headerHandicap,
+        heelerHandicap: contestant.heelerHandicap,
+      },
+      partners:
+        event.competitionType === "pick-only" ||
+        event.competitionType === "pick-and-draw"
+          ? availablePartners(updatedWorkspace, event, contestant)
+          : [],
+    };
   },
 );
 
@@ -719,6 +978,27 @@ async function insertArenaRecord(collectionId, record) {
   return true;
 }
 
+async function insertUniqueArenaRecord(collectionId, record) {
+  const storageId = createHash("sha256")
+    .update(`${collectionId}:${record.id}`)
+    .digest("hex")
+    .slice(0, 32);
+  try {
+    await wixData.insert(
+      collectionId,
+      { _id: storageId, appId: record.id, payload: JSON.stringify(record) },
+      OPTIONS,
+    );
+    return true;
+  } catch (error) {
+    const existing = await wixData
+      .get(collectionId, storageId, OPTIONS)
+      .catch(() => null);
+    if (existing?.appId === record.id) return false;
+    throw error;
+  }
+}
+
 export const submitOnlineSignup = webMethod(
   Permissions.Anyone,
   async (request) => {
@@ -916,6 +1196,116 @@ export const submitOnlineSignup = webMethod(
         ? `Your entry in ${event.name} is already confirmed and pending payment.`
         : `Entry confirmed for ${event.name}. Payment is due with arena staff.`,
       existing: repeated,
+    };
+  },
+);
+
+export const submitSpectatorPrediction = webMethod(
+  Permissions.Anyone,
+  async (request) => {
+    if (
+      !validAppId(request.eventId) ||
+      !validAppId(request.teamId) ||
+      !["steer", "cowboys"].includes(request.choice)
+    ) {
+      throw new Error("Invalid spectator prediction.");
+    }
+    const name = String(request.name || "").trim().replace(/\s+/g, " ");
+    const phone = String(request.phone || "").replace(/\D/g, "");
+    if (name.length < 2 || name.length > 80) {
+      throw new Error("Enter your full name.");
+    }
+    if (phone.length < 10 || phone.length > 15) {
+      throw new Error("Enter a valid phone number.");
+    }
+    const workspace = await readWorkspace();
+    const event = workspace.events.find((item) => item.id === request.eventId);
+    const team = workspace.teams.find(
+      (item) => item.id === request.teamId && item.eventId === request.eventId,
+    );
+    if (!event || event.status !== "Live" || !team || team.scratched) {
+      throw new Error("That live run is not available.");
+    }
+    if (
+      team.status !== "ready" ||
+      !team.predictionClosesAt ||
+      Date.parse(team.predictionClosesAt) <= Date.now()
+    ) {
+      throw new Error("Predictions are closed for this run.");
+    }
+    const spectatorId = `spectator-${createHash("sha256")
+      .update(phone)
+      .digest("hex")
+      .slice(0, 24)}`;
+    const spectator = workspace.spectators.find(
+      (item) => item.id === spectatorId,
+    );
+    if (
+      spectator &&
+      spectator.name.trim().toLowerCase() !== name.toLowerCase()
+    ) {
+      throw new Error("That phone number is registered to a different name.");
+    }
+    let nextSpectator = spectator || {
+      id: spectatorId,
+      name,
+      phone,
+      createdAt: new Date().toISOString(),
+    };
+    const predictionId = `prediction-${spectatorId}-${team.id}`;
+    const existing = workspace.spectatorPredictions.find(
+      (prediction) => prediction.id === predictionId,
+    );
+    let predictionInserted = false;
+    if (!existing) {
+      if (!spectator) {
+        const spectatorInserted = await insertUniqueArenaRecord(
+          COLLECTIONS.spectators,
+          nextSpectator,
+        );
+        if (!spectatorInserted) {
+          const latestSpectators = await readCollection(COLLECTIONS.spectators);
+          const persistedSpectator = latestSpectators.find(
+            (item) => item.id === spectatorId,
+          );
+          if (
+            !persistedSpectator ||
+            persistedSpectator.name.trim().toLowerCase() !== name.toLowerCase()
+          ) {
+            throw new Error("That phone number is registered to a different name.");
+          }
+          nextSpectator = persistedSpectator;
+        }
+      }
+      predictionInserted = await insertUniqueArenaRecord(
+        COLLECTIONS.spectatorPredictions,
+        {
+          id: predictionId,
+          spectatorId,
+          eventId: event.id,
+          teamId: team.id,
+          round: Number(team.round || 1),
+          choice: request.choice,
+          submittedAt: new Date().toISOString(),
+        },
+      );
+      if (predictionInserted) {
+        await wixData.save(
+          SETTINGS_COLLECTION,
+          {
+            _id: ONLINE_REVISION_ID,
+            value: workspace.onlineRevision + 1,
+            updatedAt: new Date(),
+          },
+          OPTIONS,
+        );
+      }
+    }
+    const latest = await readWorkspace();
+    return {
+      spectatorName: nextSpectator.name,
+      existing: Boolean(existing) || !predictionInserted,
+      publicData: publicProjection(latest),
     };
   },
 );

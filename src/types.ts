@@ -87,6 +87,24 @@ export interface Team {
   source?: "online" | "staff";
   submissionId?: string;
   submittedAt?: string;
+  predictionClosesAt?: string;
+}
+
+export interface Spectator {
+  id: string;
+  name: string;
+  phone: string;
+  createdAt: string;
+}
+
+export interface SpectatorPrediction {
+  id: string;
+  spectatorId: string;
+  eventId: string;
+  teamId: string;
+  round: number;
+  choice: "steer" | "cowboys";
+  submittedAt: string;
 }
 
 export interface DrawSnapshot {
@@ -118,6 +136,8 @@ export interface ArenaData {
   contestants: Contestant[];
   teams: Team[];
   registrations: EventRegistration[];
+  spectators: Spectator[];
+  spectatorPredictions: SpectatorPrediction[];
   activeEventId: string;
   revision?: number;
   staffRevision?: number;

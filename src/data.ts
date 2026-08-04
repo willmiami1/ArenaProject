@@ -37,5 +37,7 @@ export const seedData: ArenaData = {
   contestants: [],
   teams: [],
   registrations: [],
+  spectators: [],
+  spectatorPredictions: [],
   activeEventId: "event-1785786853437-hui1w",
 };

@@ -53,6 +53,7 @@ import {
 import {
   authenticateContestant,
   isWixEmbed,
+  loadPublicArenaData,
   setContestantPin,
   type ContestantPortalData,
 } from "./wixBridge";
@@ -69,6 +70,7 @@ import {
   teamEligibleForCompetition,
   teamHandicapTotal,
 } from "./competition";
+import { spectatorLeaderboard } from "./spectatorPredictions";
 import type {
   ArenaData,
   ArenaEvent,
@@ -623,6 +625,14 @@ function StaffApp() {
                   ),
                 }))
               }
+              onSetPredictionCutoff={(teamId, predictionClosesAt) =>
+                setData((current) => ({
+                  ...current,
+                  teams: current.teams.map((team) =>
+                    team.id === teamId ? { ...team, predictionClosesAt } : team,
+                  ),
+                }))
+              }
             />
           )}
           {view === "reports" && <ReportsModule data={data} />}
@@ -747,6 +757,59 @@ function ContestantPortal() {
   );
 }
 
+function LedSpectatorTop({
+  eventId,
+  round,
+  fallbackNames,
+}: {
+  eventId: string;
+  round: number;
+  fallbackNames: string[];
+}) {
+  const [names, setNames] = useState(fallbackNames);
+  useEffect(() => {
+    if (!isWixEmbed()) {
+      setNames(fallbackNames);
+      return;
+    }
+    let cancelled = false;
+    const refresh = () => {
+      void loadPublicArenaData()
+        .then((publicData) => {
+          if (cancelled || !publicData) return;
+          const competition = publicData.meets
+            .flatMap((meet) => meet.competitions)
+            .find((item) => item.id === eventId);
+          setNames(
+            (competition?.spectatorLeaderboards ?? [])
+              .filter((row) => row.round === round)
+              .slice(0, 3)
+              .map((row) => row.name),
+          );
+        })
+        .catch((error) => {
+          console.error("Could not refresh spectator leaderboard.", error);
+        });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [eventId, round, fallbackNames.join("|")]);
+  return (
+    <section className="led-spectator-top">
+      <span>Spectator leaders · Round {round}</span>
+      {names.length
+        ? names.map((name, index) => (
+            <strong key={`${index}-${name}`}>{index + 1}. {name}</strong>
+          ))
+        : <strong>Waiting for spectator picks</strong>}
+    </section>
+  );
+}
+
 function LedLeaderboard({
   data,
   eventId,
@@ -794,6 +857,7 @@ function LedLeaderboard({
         a.drawPosition - b.drawPosition,
     )
     .slice(0, 10);
+  const spectatorTopThree = spectatorLeaderboard(data, event.id, round).slice(0, 3);
   const defaultCurrentTeam = roundTeams.find(
     (team) => team.status === "ready" && !team.rolled,
   ) ?? roundTeams.find((team) => team.status === "ready");
@@ -895,6 +959,11 @@ function LedLeaderboard({
           </>
         )}
       </section>
+      <LedSpectatorTop
+        eventId={event.id}
+        round={round}
+        fallbackNames={spectatorTopThree.map((row) => row.name)}
+      />
 
       <main className="led-board">
         <div className="led-table-header"><span>Place</span><span>Team</span><span>Rounds</span><span>Total time</span></div>
@@ -2393,6 +2462,7 @@ function RunDesk({
   onSave,
   onAddRideIn,
   onRollTeam,
+  onSetPredictionCutoff,
 }: {
   event?: ArenaEvent;
   teams: Team[];
@@ -2402,6 +2472,7 @@ function RunDesk({
   onSave: (teamId: string, update: Partial<Team>) => void;
   onAddRideIn: (team: Team) => void;
   onRollTeam: (teamId: string, rolled: boolean) => void;
+  onSetPredictionCutoff: (teamId: string, predictionClosesAt?: string) => void;
 }) {
   const [selectedRound, setSelectedRound] = useState(1);
   const [showRideInForm, setShowRideInForm] = useState(false);
@@ -2768,6 +2839,31 @@ function RunDesk({
                 <div><span>Heeler</span><strong>{rider(selected.heelerId)}</strong></div>
               </div>
               <div className="run-handicap"><span>Team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
+              {selected.status === "ready" && (
+                <div className="prediction-cutoff-control">
+                  <div><span>Spectator pick cutoff</span><small>Free Steer or Cowboys predictions close at this time.</small></div>
+                  <input
+                    type="datetime-local"
+                    value={localDateTimeValue(selected.predictionClosesAt)}
+                    onChange={(event) =>
+                      onSetPredictionCutoff(
+                        selected.id,
+                        event.target.value
+                          ? new Date(event.target.value).toISOString()
+                          : undefined,
+                      )
+                    }
+                  />
+                  <button
+                    className="secondary"
+                    onClick={() =>
+                      onSetPredictionCutoff(selected.id, new Date().toISOString())
+                    }
+                  >
+                    Close now
+                  </button>
+                </div>
+              )}
               {event && activeRound === roundCount && roundCount > 1 && selected.status === "ready" && (
                 <div className="announcer-times">
                   <div><span>Prior aggregate</span><strong>{selectedPriorTotal.toFixed(2)}s</strong></div>
@@ -2919,6 +3015,13 @@ function initials(name: string) {
   return name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
 
+function localDateTimeValue(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function exportDrawCsv(event: ArenaEvent, teams: Team[], contestants: Contestant[]) {
   const name = (id: string) => contestants.find((contestant) => contestant.id === id)?.name ?? "Unknown";
   const rows = [
@@ -3044,7 +3147,8 @@ function App() {
     route.kind === "events" ||
     route.kind === "event" ||
     route.kind === "competition" ||
-    route.kind === "signup"
+    route.kind === "signup" ||
+    route.kind === "spectator"
   ) {
     return <PublicSite route={route} />;
   }

@@ -4,13 +4,16 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
-  LogIn,
+  Facebook,
+  Instagram,
   MapPin,
   Menu,
   ShieldCheck,
+  Smile,
   Trophy,
   UsersRound,
   X,
+  Youtube,
 } from "lucide-react";
 import { seedData } from "./data";
 import {
@@ -22,15 +25,27 @@ import {
   type PublicRoute,
 } from "./publicData";
 import {
+  createContestantAccount,
   isWixEmbed,
   loadPublicArenaData,
   loadSignupOptions,
   submitOnlineSignup,
+  submitSpectatorPrediction,
   type SignupOptions,
 } from "./wixBridge";
+import {
+  createSpectatorPrediction,
+  type SpectatorChoice,
+} from "./spectatorPredictions";
+import {
+  createLocalContestantAccount,
+  type ContestantAccountRequest,
+} from "./contestantAccount";
+import type { ArenaData } from "./types";
 
 const href = (page: string, id?: string) =>
   `?page=${encodeURIComponent(page)}${id ? `&id=${encodeURIComponent(id)}` : ""}`;
+const eventsHref = `${href("home")}#events`;
 
 const formatDate = (date: string) =>
   new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
@@ -52,13 +67,38 @@ function Status({ value }: { value: string }) {
   return <span className={`public-status ${value.toLowerCase()}`}>{value}</span>;
 }
 
+const socialLinks = [
+  { label: "Facebook", url: "https://www.facebook.com/", Icon: Facebook },
+  { label: "Instagram", url: "https://www.instagram.com/", Icon: Instagram },
+  { label: "YouTube", url: "https://www.youtube.com/", Icon: Youtube },
+];
+
+function SocialLinks() {
+  return (
+    <span className="public-social-links">
+      {socialLinks.map(({ label, url, Icon }) => (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`Destiny Ranch Arena on ${label}`}
+          title={label}
+          key={label}
+        >
+          <Icon size={18} />
+        </a>
+      ))}
+    </span>
+  );
+}
+
 function PublicHeader() {
   const [open, setOpen] = useState(false);
   return (
     <header className="public-header">
       <a className="public-brand" href={href("home")} aria-label="Destiny Ranch Arena home">
         <img src="./destiny-ranch-arena-logo.png" alt="" />
-        <span><strong>Destiny Ranch</strong><small>Arena</small></span>
+        <strong>Destiny Ranch Arena</strong>
       </a>
       <button
         className="public-menu"
@@ -70,9 +110,9 @@ function PublicHeader() {
       </button>
       <nav className={open ? "open" : ""} aria-label="Public navigation">
         <a href={href("home")}>Home</a>
-        <a href={href("events")}>Events</a>
-        <a href="?portal=contestant"><LogIn size={16} /> Contestant login</a>
+        <a href={eventsHref}>Events</a>
         <a href="?app=command"><ShieldCheck size={16} /> Admin login</a>
+        <SocialLinks />
       </nav>
     </header>
   );
@@ -86,11 +126,14 @@ function PublicFooter() {
         <p><strong>Destiny Ranch Arena</strong><br />Where partners, horses, and competition meet.</p>
       </div>
       <nav aria-label="Footer navigation">
-        <a href={href("events")}>Event calendar</a>
-        <a href="?portal=contestant">Contestant portal</a>
+        <a href={href("home")}>Home</a>
+        <a href={eventsHref}>Events</a>
         <a href="?app=command">Admin login</a>
       </nav>
-      <small>Official schedules and results are published by arena staff.</small>
+      <div className="public-footer-connect">
+        <SocialLinks />
+        <small>Official schedules and results are published by arena staff.</small>
+      </div>
     </footer>
   );
 }
@@ -98,6 +141,9 @@ function PublicFooter() {
 function EventCard({ meet }: { meet: PublicMeet }) {
   const open = meet.competitions.filter((event) => event.registrationOpen).length;
   const published = meet.competitions.filter((event) => event.resultsPublished).length;
+  const liveCompetition = meet.competitions.find(
+    (competition) => competition.status === "Live",
+  );
   return (
     <article className="public-event-card">
       <div className="public-date-block">
@@ -117,73 +163,220 @@ function EventCard({ meet }: { meet: PublicMeet }) {
           {published > 0 && <span>{published} result{published === 1 ? "" : "s"} posted</span>}
         </div>
         <a className="public-text-link" href={href("event", meet.id)}>Event details <ArrowRight size={16} /></a>
+        {liveCompetition && (
+          <a className="public-button compact" href={href("spectator", liveCompetition.id)}>
+            Spectator picks
+          </a>
+        )}
       </div>
     </article>
   );
 }
 
-function EventGroups({ data, limit }: { data: PublicArenaData; limit?: number }) {
-  const groups = [
-    { key: "live", title: "Happening now", empty: "No competitions are live right now." },
-    { key: "future", title: "Coming to the arena", empty: "The next event will be posted soon." },
-    { key: "past", title: "From the results book", empty: "Completed events will appear here." },
-  ] as const;
-  return (
-    <div className="public-event-groups">
-      {groups.map((group) => {
-        const meets = data.meets.filter((meet) => meet.group === group.key).slice(0, limit);
-        return (
-          <section className="public-event-section" key={group.key}>
-            <div className="public-section-heading">
-              <h2>{group.title}</h2>
-              {limit && <a href={href("events")}>See all events</a>}
-            </div>
-            {meets.length ? (
-              <div className="public-event-grid">{meets.map((meet) => <EventCard meet={meet} key={meet.id} />)}</div>
-            ) : (
-              <p className="public-empty">{group.empty}</p>
-            )}
-          </section>
+function SpectatorPage({
+  competition,
+  onLocalUpdate,
+}: {
+  competition?: PublicCompetition;
+  onLocalUpdate: (data: PublicArenaData) => void;
+}) {
+  const [name, setName] = useState(
+    () => window.sessionStorage.getItem("arena-spectator-name") ?? "",
+  );
+  const [phone, setPhone] = useState(
+    () => window.sessionStorage.getItem("arena-spectator-phone") ?? "",
+  );
+  const [teamId, setTeamId] = useState(competition?.predictionRuns[0]?.id ?? "");
+  const [choice, setChoice] = useState<SpectatorChoice>("cowboys");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!competition || competition.status !== "Live") {
+    return <NotFound />;
+  }
+  const selectedRun = competition.predictionRuns.find((run) => run.id === teamId);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      let result;
+      if (isWixEmbed()) {
+        result = await submitSpectatorPrediction({
+          name,
+          phone,
+          eventId: competition.id,
+          teamId,
+          choice,
+        });
+        if (!result) throw new Error("Prediction could not be saved.");
+        onLocalUpdate(result.publicData);
+      } else {
+        const saved = window.localStorage.getItem("arena-command-data-v1");
+        const workspace = saved
+          ? (JSON.parse(saved) as ArenaData)
+          : structuredClone(seedData);
+        workspace.spectators ??= [];
+        workspace.spectatorPredictions ??= [];
+        const created = createSpectatorPrediction(workspace, {
+          name,
+          phone,
+          eventId: competition.id,
+          teamId,
+          choice,
+        });
+        workspace.spectators = created.spectators;
+        workspace.spectatorPredictions = created.spectatorPredictions;
+        window.localStorage.setItem(
+          "arena-command-data-v1",
+          JSON.stringify(workspace),
         );
-      })}
-    </div>
+        onLocalUpdate(projectPublicArenaData(workspace));
+        result = {
+          spectatorName: created.spectator.name,
+          existing: created.existing,
+        };
+      }
+      window.sessionStorage.setItem("arena-spectator-name", name.trim());
+      window.sessionStorage.setItem("arena-spectator-phone", phone);
+      setMessage(
+        result.existing
+          ? "Your pick for this run was already recorded."
+          : `Pick saved for ${result.spectatorName}.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Prediction could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const rounds = Array.from(
+    new Set(competition.spectatorLeaderboards.map((row) => row.round)),
+  );
+  return (
+    <section className="public-spectator">
+      <a href={eventsHref}>← Back to current events</a>
+      <div className="public-page-head">
+        <Status value="Live" />
+        <h1>Pick the run.</h1>
+        <p>Free spectator predictions for {competition.name}. One point is awarded when your Steer or Cowboys pick matches the official run result.</p>
+      </div>
+      <div className="public-spectator-grid">
+        <form onSubmit={submit}>
+          <h2>Spectator sign-in</h2>
+          <label>Name<input required maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
+          <label>Phone number<input required type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
+          <label>Open run<select required value={teamId} onChange={(event) => setTeamId(event.target.value)}>
+            <option value="">Choose an open run</option>
+            {competition.predictionRuns.filter((run) => run.open).map((run) => (
+              <option value={run.id} key={run.id}>Round {run.round} · Draw #{run.drawPosition} · {run.headerName} & {run.heelerName}</option>
+            ))}
+          </select></label>
+          {selectedRun && <p className="public-pick-cutoff">Picks close {new Date(selectedRun.closesAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}
+          <fieldset><legend>Your pick</legend>
+            {(["cowboys", "steer"] as const).map((value) => (
+              <label className="public-radio" key={value}><input type="radio" checked={choice === value} onChange={() => setChoice(value)} />{value === "cowboys" ? "Cowboys catch" : "Steer gets away"}</label>
+            ))}
+          </fieldset>
+          <button className="public-button" disabled={busy || !teamId}>{busy ? "Saving…" : "Lock in free pick"}</button>
+          {message && <p className="public-form-message" role="status">{message}</p>}
+        </form>
+        <div className="public-spectator-leaders">
+          <h2>Round leaderboards</h2>
+          {(rounds.length ? rounds : [1]).map((round) => {
+            const rows = competition.spectatorLeaderboards.filter((row) => row.round === round);
+            return <section key={round}><h3>Round {round}</h3>{rows.length ? rows.map((row, index) => <div className="public-spectator-row" key={`${round}-${index}-${row.name}`}><strong>{index + 1}</strong><span>{row.name}</span><b>{row.correct} pts</b></div>) : <p>No scored picks yet.</p>}</section>;
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EventExplorer({ data }: { data: PublicArenaData }) {
+  const groups = [
+    { key: "live", title: "Current Events", empty: "No competitions are live right now." },
+    { key: "future", title: "Future Events", empty: "The next event will be posted soon." },
+    { key: "past", title: "Past Events", empty: "Completed events will appear here." },
+  ] as const;
+  const [selectedGroup, setSelectedGroup] = useState<(typeof groups)[number]["key"]>(
+    data.meets.some((meet) => meet.group === "live") ? "live" : "future",
+  );
+  const selected = groups.find((group) => group.key === selectedGroup)!;
+  const meets = data.meets.filter((meet) => meet.group === selectedGroup);
+  return (
+    <section className="public-event-explorer" id="events">
+      <div className="public-section-heading">
+        <div><span>Destiny Ranch Arena</span><h2>Events</h2></div>
+        <span>Choose an event book</span>
+      </div>
+      <div className="public-event-tabs" role="tablist" aria-label="Event date groups">
+        {groups.map((group) => {
+          const count = data.meets.filter((meet) => meet.group === group.key).length;
+          return (
+            <button
+              className={selectedGroup === group.key ? "active" : ""}
+              role="tab"
+              aria-selected={selectedGroup === group.key}
+              onClick={() => setSelectedGroup(group.key)}
+              key={group.key}
+            >
+              <span>{group.title}</span><small>{count}</small>
+            </button>
+          );
+        })}
+      </div>
+      <div className="public-event-tab-panel" role="tabpanel">
+        <h3>{selected.title}</h3>
+        {meets.length ? (
+          <div className="public-event-grid">{meets.map((meet) => <EventCard meet={meet} key={meet.id} />)}</div>
+        ) : (
+          <p className="public-empty">{selected.empty}</p>
+        )}
+      </div>
+    </section>
   );
 }
 
 function HomePage({ data }: { data: PublicArenaData }) {
-  const featured = data.meets.find((meet) => meet.group === "live") ??
-    data.meets.find((meet) => meet.group === "future");
+  const flyers = [
+    { src: "./future-event-flyer-1.png", alt: "Destiny Ranch Arena future event flyer" },
+    { src: "./future-event-flyer-2.png", alt: "Destiny Ranch Arena upcoming roping flyer" },
+    { src: "./future-event-flyer-3.png", alt: "Destiny Ranch Arena August 7 event flyer" },
+  ];
   return (
     <>
       <section className="public-hero">
         <div className="public-hero-copy">
           <h1>The gate opens.<br />The clock starts.<br /><em>Ride your run.</em></h1>
           <p>Team roping events, online entries, and official results from Destiny Ranch Arena.</p>
-          <div className="public-actions">
-            <a className="public-button primary" href={href("events")}>View the event calendar <ArrowRight size={18} /></a>
-            <a className="public-button quiet" href="?portal=contestant">Contestant login</a>
-            <a className="public-button quiet" href="?app=command"><ShieldCheck size={18} /> Admin login</a>
-          </div>
         </div>
-        <div className="public-hero-mark" aria-hidden="true">
-          <span>DR</span><small>Destiny Ranch Arena</small>
-        </div>
-      </section>
-      {featured && (
-        <section className="public-featured">
-          <div className="public-featured-date">
-            <CalendarDays />
-            <span>{formatDate(featured.date)} · {formatTime(featured.startTime)}</span>
-          </div>
-          <div><Status value={featured.group === "live" ? "Live" : "Next event"} /><h2>{featured.name}</h2><p>{featured.location}</p></div>
-          <a href={href("event", featured.id)}>Open event <ArrowRight size={18} /></a>
+        <figure className="public-hero-media">
+          <img
+            src="./team-roping-hero.png"
+            alt="Header and heeler chasing a steer under the arena lights"
+          />
+        </figure>
+        <section className="public-trust-strip">
+          <div><ShieldCheck /><strong>Official arena data</strong><span>Schedules and results published by event staff.</span></div>
+          <div><UsersRound /><strong>Built for contestants</strong><span>Use your existing account to enter eligible competitions.</span></div>
+          <div><Smile /><strong>Built for spectators</strong><span>Come and be part of the event with family and friends.</span></div>
+          <div><Trophy /><strong>Results worth keeping</strong><span>Published averages show every qualified round.</span></div>
         </section>
-      )}
-      <EventGroups data={data} limit={2} />
-      <section className="public-trust-strip">
-        <div><ShieldCheck /><strong>Official arena data</strong><span>Schedules and results published by event staff.</span></div>
-        <div><UsersRound /><strong>Built for contestants</strong><span>Use your existing account to enter eligible competitions.</span></div>
-        <div><Trophy /><strong>Results worth keeping</strong><span>Published averages show every qualified round.</span></div>
+      </section>
+      <EventExplorer data={data} />
+      <section className="public-flyers" aria-labelledby="future-flyers-title">
+        <div className="public-flyers-heading">
+          <span>Save the date</span>
+          <h2 id="future-flyers-title">Upcoming event flyers</h2>
+          <p>Open a flyer to view the full event details.</p>
+        </div>
+        <div className="public-flyer-grid">
+          {flyers.map((flyer) => (
+            <a href={flyer.src} target="_blank" rel="noreferrer" key={flyer.src}>
+              <img src={flyer.src} alt={flyer.alt} loading="lazy" />
+            </a>
+          ))}
+        </div>
       </section>
     </>
   );
@@ -296,8 +489,22 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
 }
 
 function SignupPage({ competition }: { competition?: PublicCompetition }) {
+  const [authMode, setAuthMode] = useState<"login" | "create">("login");
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
+  const [account, setAccount] = useState<
+    ContestantAccountRequest & { confirmPin: string }
+  >({
+    name: "",
+    email: "",
+    phone: "",
+    hometown: "",
+    role: "Both",
+    headerHandicap: 0,
+    heelerHandicap: 0,
+    pin: "",
+    confirmPin: "",
+  });
   const [options, setOptions] = useState<SignupOptions | null>(null);
   const [role, setRole] = useState<"Header" | "Heeler">("Header");
   const [entries, setEntries] = useState(1);
@@ -367,6 +574,76 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     }
   };
 
+  const createAccount = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      if (account.pin !== account.confirmPin) {
+        throw new Error("PIN confirmation does not match.");
+      }
+      let result: SignupOptions | null;
+      if (isWixEmbed()) {
+        result = await createContestantAccount(competition.id, account);
+      } else {
+        const saved = window.localStorage.getItem("arena-command-data-v1");
+        const workspace = saved
+          ? (JSON.parse(saved) as ArenaData)
+          : structuredClone(seedData);
+        workspace.spectators ??= [];
+        workspace.spectatorPredictions ??= [];
+        const created = createLocalContestantAccount(
+          workspace,
+          account,
+          `contestant-${window.crypto.randomUUID?.() ?? Date.now()}`,
+        );
+        workspace.contestants = created.contestants;
+        window.localStorage.setItem(
+          "arena-command-data-v1",
+          JSON.stringify(workspace),
+        );
+        result = {
+          contestant: {
+            id: created.contestant.id,
+            name: created.contestant.name,
+            role: created.contestant.role,
+            headerHandicap: created.contestant.headerHandicap,
+            heelerHandicap: created.contestant.heelerHandicap,
+          },
+          partners: workspace.contestants
+            .filter((contestant) => contestant.id !== created.contestant.id)
+            .map(({ id, name, role, headerHandicap, heelerHandicap }) => ({
+              id,
+              name,
+              role,
+              headerHandicap,
+              heelerHandicap,
+            })),
+        };
+      }
+      if (!result) throw new Error("Contestant account could not be created.");
+      setEmail(account.email);
+      setPin(account.pin);
+      setOptions(result);
+      setSubmissionId(
+        window.crypto.randomUUID?.() ??
+          `${Date.now()}-${result.contestant.id}-${competition.id}`,
+      );
+      setRole(
+        contestantCanEnter(result.contestant, "Header") ? "Header" : "Heeler",
+      );
+      setMessage(
+        `Account created for ${result.contestant.name}. Complete your entry below.`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Account could not be created.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -398,13 +675,36 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     <section className="public-signup">
       <a href={href("competition", competition.id)}>← {competition.name}</a>
       <h1>Enter the arena</h1>
-      <p>Sign in with the email and four-digit PIN already connected to your contestant account.</p>
+      <p>{authMode === "login" ? "Sign in with the email and four-digit PIN already connected to your contestant account." : "Create your contestant account, then continue directly to this competition’s entry form."}</p>
       {!options ? (
-        <form onSubmit={authenticate}>
-          <label>Email address<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-          <label>Four-digit PIN<input type="password" inputMode="numeric" autoComplete="current-password" pattern="\d{4}" maxLength={4} required value={pin} onChange={(event) => setPin(event.target.value)} /></label>
-          <button className="public-button primary" disabled={busy}>{busy ? "Checking account…" : "Continue securely"}</button>
-        </form>
+        <>
+          {competition.status === "Upcoming" && (
+            <div className="public-account-choice" role="tablist" aria-label="Contestant account access">
+              <button className={authMode === "login" ? "active" : ""} onClick={() => setAuthMode("login")}>I have an account</button>
+              <button className={authMode === "create" ? "active" : ""} onClick={() => setAuthMode("create")}>Create account</button>
+            </div>
+          )}
+          {authMode === "login" ? (
+            <form onSubmit={authenticate}>
+              <label>Email address<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+              <label>Four-digit PIN<input type="password" inputMode="numeric" autoComplete="current-password" pattern="\d{4}" maxLength={4} required value={pin} onChange={(event) => setPin(event.target.value)} /></label>
+              <button className="public-button primary" disabled={busy}>{busy ? "Checking account…" : "Continue securely"}</button>
+            </form>
+          ) : (
+            <form className="public-account-form" onSubmit={createAccount}>
+              <label>Full name<input required maxLength={100} autoComplete="name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} /></label>
+              <label>Email address<input required type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} /></label>
+              <label>Phone number<input required type="tel" autoComplete="tel" value={account.phone} onChange={(event) => setAccount({ ...account, phone: event.target.value })} /></label>
+              <label>Hometown<input autoComplete="address-level2" value={account.hometown} onChange={(event) => setAccount({ ...account, hometown: event.target.value })} /></label>
+              <label>Roping position<select value={account.role} onChange={(event) => setAccount({ ...account, role: event.target.value as ContestantAccountRequest["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
+              {account.role !== "Heeler" && <label>Header handicap<input required type="number" min="0" max="20" step="0.5" value={account.headerHandicap} onChange={(event) => setAccount({ ...account, headerHandicap: Number(event.target.value) })} /></label>}
+              {account.role !== "Header" && <label>Heeler handicap<input required type="number" min="0" max="20" step="0.5" value={account.heelerHandicap} onChange={(event) => setAccount({ ...account, heelerHandicap: Number(event.target.value) })} /></label>}
+              <label>Choose four-digit PIN<input required type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={account.pin} onChange={(event) => setAccount({ ...account, pin: event.target.value })} /></label>
+              <label>Confirm PIN<input required type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={account.confirmPin} onChange={(event) => setAccount({ ...account, confirmPin: event.target.value })} /></label>
+              <button className="public-button primary" disabled={busy}>{busy ? "Creating account…" : "Create account and continue"}</button>
+            </form>
+          )}
+        </>
       ) : (
         <form onSubmit={submit}>
           <div className="public-authenticated"><CheckCircle2 /><span>Entering as <strong>{options.contestant.name}</strong></span></div>
@@ -457,7 +757,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
   }, [data, route]);
 
   useEffect(() => {
-    const title = route.kind === "events" ? "Events" : route.kind === "event" ? selected.meet?.name : route.kind === "competition" || route.kind === "signup" ? selected.competition?.name : "Home";
+    const title = route.kind === "events" ? "Events" : route.kind === "event" ? selected.meet?.name : route.kind === "competition" || route.kind === "signup" || route.kind === "spectator" ? selected.competition?.name : "Home";
     document.title = `${title ?? "Event"} | Destiny Ranch Arena`;
   }, [route.kind, selected.competition?.name, selected.meet?.name]);
 
@@ -468,10 +768,11 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       <main className="public-main">
         {error ? <section className="public-not-found"><h1>We couldn’t open the event book.</h1><p>{error}</p></section> : !data ? <div className="public-loading" role="status">Loading the event book…</div> :
           route.kind === "home" ? <HomePage data={data} /> :
-          route.kind === "events" ? <><section className="public-index-head"><h1>Every run starts here.</h1><p>Upcoming entries, live ropings, and the official results book.</p></section><EventGroups data={data} /></> :
+          route.kind === "events" ? <><section className="public-index-head"><h1>Every run starts here.</h1><p>Upcoming entries, live ropings, and the official results book.</p></section><EventExplorer data={data} /></> :
           route.kind === "event" ? <EventPage meet={selected.meet} /> :
           route.kind === "competition" ? <CompetitionPage competition={selected.competition} meet={selected.meet} /> :
-          route.kind === "signup" ? <SignupPage competition={selected.competition} /> : null}
+          route.kind === "signup" ? <SignupPage competition={selected.competition} /> :
+          route.kind === "spectator" ? <SpectatorPage competition={selected.competition} onLocalUpdate={setData} /> : null}
       </main>
       <PublicFooter />
     </div>

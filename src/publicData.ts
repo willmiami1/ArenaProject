@@ -1,5 +1,9 @@
 import { competitionName } from "./competition";
 import { publicStandingRows } from "./standings";
+import {
+  predictionIsOpen,
+  spectatorLeaderboard,
+} from "./spectatorPredictions";
 import type {
   ArenaData,
   ArenaEvent,
@@ -15,6 +19,7 @@ export type PublicRoute =
   | { kind: "event"; id: string }
   | { kind: "competition"; id: string }
   | { kind: "signup"; id: string }
+  | { kind: "spectator"; id: string }
   | { kind: "contestant" }
   | { kind: "staff" }
   | { kind: "leaderboard" };
@@ -52,6 +57,26 @@ export interface PublicCompetition {
   shortGoTeams: number;
   entryCount: number;
   results: PublicStandingRow[];
+  predictionRuns: PublicPredictionRun[];
+  spectatorLeaderboards: PublicSpectatorLeaderboardRow[];
+}
+
+export interface PublicSpectatorLeaderboardRow {
+  name: string;
+  round: number;
+  picks: number;
+  correct: number;
+}
+
+export interface PublicPredictionRun {
+  id: string;
+  round: number;
+  drawPosition: number;
+  headerName: string;
+  heelerName: string;
+  steerNumber: string;
+  closesAt: string;
+  open: boolean;
 }
 
 export interface PublicMeet {
@@ -81,6 +106,7 @@ export function parsePublicRoute(search: string): PublicRoute {
   if (page === "event") return { kind: "event", id };
   if (page === "competition") return { kind: "competition", id };
   if (page === "signup") return { kind: "signup", id };
+  if (page === "spectator") return { kind: "spectator", id };
   return { kind: "home" };
 }
 
@@ -116,6 +142,9 @@ export function projectPublicArenaData(
   today = new Date(),
 ): PublicArenaData {
   const competitions = data.events.map((event): PublicCompetition => {
+    const contestantNames = new Map(
+      data.contestants.map((contestant) => [contestant.id, contestant.name]),
+    );
     const fixedEntries = data.teams.filter(
       (team) =>
         team.eventId === event.id &&
@@ -154,6 +183,41 @@ export function projectPublicArenaData(
       shortGoTeams: event.shortGoTeams,
       entryCount: fixedEntries + individualEntries,
       results: publicStandingRows(event, data.teams, data.contestants),
+      predictionRuns: data.teams
+        .filter(
+          (team) =>
+            team.eventId === event.id &&
+            !team.scratched &&
+            team.status === "ready" &&
+            Boolean(team.predictionClosesAt),
+        )
+        .sort(
+          (left, right) =>
+            left.round - right.round ||
+            left.drawPosition - right.drawPosition,
+        )
+        .map((team) => ({
+          id: team.id,
+          round: team.round,
+          drawPosition: team.drawPosition,
+          headerName: contestantNames.get(team.headerId) ?? "Unknown",
+          heelerName: contestantNames.get(team.heelerId) ?? "Unknown",
+          steerNumber: team.steerNumber ?? "",
+          closesAt: team.predictionClosesAt!,
+          open: predictionIsOpen(team, today),
+        })),
+      spectatorLeaderboards: Array.from(
+        { length: Math.max(event.rounds, 1) },
+        (_, index) =>
+          spectatorLeaderboard(data, event.id, index + 1).map(
+            ({ name, round, picks, correct }) => ({
+              name,
+              round,
+              picks,
+              correct,
+            }),
+          ),
+      ).flat(),
     };
   });
 

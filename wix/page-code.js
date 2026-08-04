@@ -6,6 +6,8 @@ import {
   saveArenaData,
   setContestantPin,
   submitOnlineSignup,
+  submitSpectatorPrediction,
+  createContestantAccount,
   getAdminAccess as getAdminAccessFromBackend,
 } from "backend/arena-data.web";
 import { authentication } from "wix-members-frontend";
@@ -32,6 +34,10 @@ $w.onReady(() => {
         data = await loadSignupOptions(message.data);
       } else if (message.action === "submitOnlineSignup") {
         data = await submitOnlineSignup(message.data);
+      } else if (message.action === "submitSpectatorPrediction") {
+        data = await submitSpectatorPrediction(message.data);
+      } else if (message.action === "createContestantAccount") {
+        data = await createContestantAccount(message.data);
       } else if (message.action === "getAdminAccess") {
         data = await getAdminAccessFromBackend();
       } else if (message.action === "promptAdminLogin") {

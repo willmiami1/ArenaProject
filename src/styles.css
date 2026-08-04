@@ -286,6 +286,11 @@ main { grid-column: 2; min-width: 0; }
 .active-team i { color: #a5ada8; font-family: Georgia, serif; }
 .run-handicap { display: flex; align-items: center; justify-content: space-between; margin: -12px 0 18px; padding: 8px 11px; color: var(--muted); background: #f7f9f7; border-radius: 6px; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
 .run-handicap strong { color: var(--green); font-family: "Manrope", sans-serif; font-size: 12px; }
+.prediction-cutoff-control { display: grid; grid-template-columns: minmax(0,1fr) 205px auto; align-items: end; gap: 9px; margin: -8px 0 18px; padding: 11px; background: #f7f2e8; border: 1px solid #ead8b7; border-radius: 7px; }
+.prediction-cutoff-control span,.prediction-cutoff-control small { display: block; }
+.prediction-cutoff-control span { color: #654718; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.prediction-cutoff-control small { margin-top: 3px; color: #8c7449; font-size: 9px; }
+.prediction-cutoff-control input { min-height: 39px; padding: 7px 9px; color: var(--ink); background: #fff; border: 1px solid #dcc9a9; border-radius: 6px; font-size: 11px; }
 .announcer-times { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: -7px 0 18px; }
 .announcer-times div { padding: 10px; background: #f7f2e8; border: 1px solid #ead8b7; border-radius: 7px; }
 .announcer-times span, .announcer-times strong { display: block; }
@@ -445,7 +450,7 @@ main { grid-column: 2; min-width: 0; }
 .report-history-table .table-row { min-width: 920px; grid-template-columns: 1.1fr 1.4fr .8fr 1fr .55fr .35fr 36px; }
 .report-history-table small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
 
-.led-leaderboard { width: 100vw; min-height: 100vh; display: grid; grid-template-rows: auto auto 1fr auto; color: #f7fbf8; background: radial-gradient(circle at 50% -25%, #284d3c 0, #101b16 45%, #080d0b 100%); overflow: hidden; }
+.led-leaderboard { width: 100vw; min-height: 100vh; display: grid; grid-template-rows: auto auto auto 1fr auto; color: #f7fbf8; background: radial-gradient(circle at 50% -25%, #284d3c 0, #101b16 45%, #080d0b 100%); overflow: hidden; }
 .led-empty { place-items: center; font-family: "Manrope", sans-serif; font-size: clamp(28px, 5vw, 72px); font-weight: 800; }
 .led-header { min-height: 13vh; display: grid; grid-template-columns: minmax(0, 1.8fr) auto auto auto; align-items: center; gap: 2.5vw; padding: 1.5vh 2.2vw; background: rgba(4,9,7,.72); border-bottom: 2px solid #b8893c; }
 .led-brand { min-width: 0; display: flex; align-items: center; gap: 1.2vw; }
@@ -473,6 +478,9 @@ main { grid-column: 2; min-width: 0; }
 .led-current-targets small, .led-current-targets strong { display: block; font-family: "Manrope", sans-serif; text-transform: uppercase; }
 .led-current-targets small { font-size: clamp(8px, .7vw, 12px); font-weight: 800; letter-spacing: .06em; }
 .led-current-targets strong { margin-top: .1vh; font-size: clamp(14px, 1.4vw, 26px); line-height: 1; white-space: nowrap; }
+.led-spectator-top { min-height: 5vh; display: flex; align-items: center; justify-content: center; gap: 2.2vw; padding: .7vh 2.2vw; color: #ffe0a5; background: rgba(4,9,7,.82); border-bottom: 1px solid rgba(228,184,96,.45); text-transform: uppercase; }
+.led-spectator-top span { font-size: clamp(9px,.8vw,14px); font-weight: 800; letter-spacing: .1em; }
+.led-spectator-top strong { color: #fff; font-family: "Manrope",sans-serif; font-size: clamp(13px,1.3vw,24px); white-space: nowrap; }
 .led-board { grid-column: 1; min-height: 0; padding: 2vh 2.2vw; overflow: hidden; }
 .led-table-header, .led-row { display: grid; grid-template-columns: 8vw minmax(0, 1fr) 11vw 16vw; align-items: center; gap: 1.2vw; }
 .led-table-header { padding: 0 1.3vw 1vh; color: #b8c7bf; font-size: clamp(10px, 1vw, 18px); font-weight: 800; text-transform: uppercase; letter-spacing: .12em; }

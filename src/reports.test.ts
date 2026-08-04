@@ -65,6 +65,8 @@ const data = (
   contestants,
   teams,
   registrations,
+  spectators: [],
+  spectatorPredictions: [],
   activeEventId: event.id,
 });
 

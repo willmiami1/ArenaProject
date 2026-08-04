@@ -95,6 +95,8 @@ export function normalizeData(parsed: ArenaData): ArenaData {
       teams,
       events,
     ),
+    spectators: parsed.spectators ?? [],
+    spectatorPredictions: parsed.spectatorPredictions ?? [],
   };
 }
 

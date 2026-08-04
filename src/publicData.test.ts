@@ -10,6 +10,10 @@ import { createOnlineSignup, mergeStaleOnlineEntries } from "./onlineSignup";
 import type { ArenaData, ArenaEvent, Contestant, Team } from "./types";
 import { canMountArenaCommand, localAdminAccess } from "./adminAccess";
 import { normalizeData } from "./useArenaData";
+import {
+  createSpectatorPrediction,
+  spectatorLeaderboard,
+} from "./spectatorPredictions";
 
 const event = (overrides: Partial<ArenaEvent> = {}): ArenaEvent => ({
   ...defaultCompetitionSettings,
@@ -53,6 +57,8 @@ const workspace = (competition = event(), teams: Team[] = []): ArenaData => ({
   contestants,
   teams,
   registrations: [],
+  spectators: [],
+  spectatorPredictions: [],
   activeEventId: competition.id,
 });
 
@@ -315,6 +321,91 @@ describe("workspace compatibility", () => {
     delete (legacy.events[0] as Partial<ArenaEvent>).maxContestantHandicap;
 
     expect(normalizeData(legacy).events[0].maxContestantHandicap).toBe(99);
+  });
+
+  describe("spectator predictions", () => {
+    const now = new Date("2026-08-04T18:00:00Z");
+
+    it("accepts one free pick before cutoff and keeps phone private", () => {
+      const competition = event({ status: "Live" });
+      const activeRun = run({
+        status: "ready",
+        rawTime: null,
+        predictionClosesAt: "2026-08-04T18:05:00Z",
+      });
+      const data = workspace(competition, [activeRun]);
+      const created = createSpectatorPrediction(
+        data,
+        {
+          name: "Taylor Fan",
+          phone: "(555) 867-5309",
+          eventId: competition.id,
+          teamId: activeRun.id,
+          choice: "cowboys",
+        },
+        now,
+      );
+      const updated = {
+        ...data,
+        spectators: created.spectators,
+        spectatorPredictions: created.spectatorPredictions,
+      };
+      const publicData = projectPublicArenaData(updated, now);
+
+      expect(created.existing).toBe(false);
+      expect(publicData.meets[0].competitions[0].predictionRuns[0]).toMatchObject({
+        id: activeRun.id,
+        open: true,
+      });
+      expect(JSON.stringify(publicData)).not.toContain("5558675309");
+      expect(JSON.stringify(publicData)).not.toContain(created.spectator.id);
+    });
+
+    it("rejects picks at or after the administrator cutoff", () => {
+      const competition = event({ status: "Live" });
+      const data = workspace(competition, [
+        run({
+          status: "ready",
+          rawTime: null,
+          predictionClosesAt: now.toISOString(),
+        }),
+      ]);
+
+      expect(() =>
+        createSpectatorPrediction(
+          data,
+          {
+            name: "Taylor Fan",
+            phone: "5558675309",
+            eventId: competition.id,
+            teamId: "team-1",
+            choice: "steer",
+          },
+          now,
+        ),
+      ).toThrow("closed");
+    });
+
+    it("scores Cowboys on a qualified run and Steer on a no-time", () => {
+      const competition = event({ status: "Live" });
+      const data = workspace(competition, [
+        run({ id: "caught", status: "complete", rawTime: 8 }),
+        run({ id: "escaped", status: "no-time", rawTime: null, drawPosition: 2 }),
+      ]);
+      data.spectators = [
+        { id: "fan-1", name: "Taylor Fan", phone: "5558675309", createdAt: now.toISOString() },
+      ];
+      data.spectatorPredictions = [
+        { id: "pick-1", spectatorId: "fan-1", eventId: competition.id, teamId: "caught", round: 1, choice: "cowboys", submittedAt: now.toISOString() },
+        { id: "pick-2", spectatorId: "fan-1", eventId: competition.id, teamId: "escaped", round: 1, choice: "steer", submittedAt: now.toISOString() },
+      ];
+
+      expect(spectatorLeaderboard(data, competition.id, 1)[0]).toMatchObject({
+        name: "Taylor Fan",
+        picks: 2,
+        correct: 2,
+      });
+    });
   });
 });
 

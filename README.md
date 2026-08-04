@@ -9,6 +9,7 @@ designed to run as an embedded web app inside a Wix site.
 - Event and active-roping switching
 - Competition setup for Draw Pot, Pick Only, Pick and Draw, and Round Robin
 - Per-roping team handicap totals and highest individual contestant handicap eligibility
+- Free spectator Steer-or-Cowboys predictions with admin cutoffs, round leaderboards, and LED top-three names
 - Automatic draw-pot entries from every Pick and Draw picked team
 - Format-aware individual or team registration
 - One Round 1 run per partner pairing by default, with optional repeat partner runs
@@ -27,6 +28,7 @@ designed to run as an embedded web app inside a Wix site.
 - Full workspace backup and restore for events, teams, registrations, results, and contestants
 - Wix-backed contestant portal with email and four-digit PIN login for personal entries, draws, teams, and results
 - Public event calendar, competition pages, publication-gated official results, and authenticated online entry
+- Future-event contestant account creation with server-side validation and hashed four-digit PIN credentials
 - Configurable Short Go limits that advance only the fastest qualified teams
 - Final-round running orders listed from slowest qualifier to fastest qualifier
 - Live standings, round-robin points, and event overview
@@ -63,9 +65,9 @@ The default URL opens the public home page. Public routes use `?page=events`,
 
 1. Enable Velo developer mode in Wix.
 2. Create these Wix Data collections: `ArenaMeets`, `ArenaCompetitions`,
-   `ArenaContestants`, `ArenaTeams`, `ArenaRegistrations`, `ArenaSettings`, and
-   `ArenaContestantCredentials`.
-3. Add `appId` and `payload` text fields to the first five collections. Online
+   `ArenaContestants`, `ArenaTeams`, `ArenaRegistrations`, `ArenaSpectators`,
+   `ArenaSpectatorPredictions`, `ArenaSettings`, and `ArenaContestantCredentials`.
+3. Add `appId` and `payload` text fields to the first seven collections. Online
    team and registration payloads may also contain optional `source`,
    `submissionId`, and `submittedAt` properties. Add
    `activeEventId` (text), `participantDatabaseVersion` (number), and `updatedAt`
@@ -76,8 +78,9 @@ The default URL opens the public home page. Public routes use `?page=events`,
    visitors never query collections directly.
 5. Copy `wix/backend/arena-data.web.js` into the Wix backend and copy
    `wix/page-code.js` into the page containing the app. The backend exposes
-   `loadPublicArenaData`, `loadSignupOptions`, and `submitOnlineSignup`; keep
-   their checked-in permissions unchanged.
+   `loadPublicArenaData`, `createContestantAccount`, `loadSignupOptions`,
+   `submitOnlineSignup`, and `submitSpectatorPrediction`; keep their checked-in
+   permissions unchanged.
 6. Give the Wix HTML embed element the ID `arenaCommandEmbed` and set its URL
    to the hosted Arena Command app.
 7. Add `contestantId`, `emailNormalized`, `pinSalt`, `pinHash`,

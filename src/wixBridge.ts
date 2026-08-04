@@ -8,7 +8,9 @@ import type {
 } from "./types";
 import type { PublicArenaData } from "./publicData";
 import type { SignupRequest } from "./onlineSignup";
+import type { SpectatorChoice } from "./spectatorPredictions";
 import type { AdminAccessResult } from "./adminAccess";
+import type { ContestantAccountRequest } from "./contestantAccount";
 
 type WixAction =
   | "load"
@@ -18,6 +20,8 @@ type WixAction =
   | "loadPublicArenaData"
   | "loadSignupOptions"
   | "submitOnlineSignup"
+  | "submitSpectatorPrediction"
+  | "createContestantAccount"
   | "getAdminAccess"
   | "promptAdminLogin";
 
@@ -64,6 +68,8 @@ function requestWix<T>(
       action === "setContestantPin" ||
       action === "loadSignupOptions" ||
       action === "submitOnlineSignup" ||
+      action === "submitSpectatorPrediction" ||
+      action === "createContestantAccount" ||
       action === "getAdminAccess" ||
       action === "promptAdminLogin";
     let targetOrigin = "*";
@@ -155,6 +161,30 @@ export function submitOnlineSignup(
   return requestWix<SignupConfirmation>("submitOnlineSignup", {
     ...credentials,
     ...signup,
+  });
+}
+
+export function submitSpectatorPrediction(request: {
+  name: string;
+  phone: string;
+  eventId: string;
+  teamId: string;
+  choice: SpectatorChoice;
+}) {
+  return requestWix<{
+    spectatorName: string;
+    existing: boolean;
+    publicData: PublicArenaData;
+  }>("submitSpectatorPrediction", request);
+}
+
+export function createContestantAccount(
+  competitionId: string,
+  account: ContestantAccountRequest,
+) {
+  return requestWix<SignupOptions>("createContestantAccount", {
+    competitionId,
+    ...account,
   });
 }
 
