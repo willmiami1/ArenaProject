@@ -493,19 +493,21 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
           <a className="public-button primary" href={href("signup", competition.id)}>Enter this competition <ArrowRight size={18} /></a>
         )}
       </section>
-      <section className="public-rules">
-        <h2>Competition details</h2>
-        <dl>
-          <div><dt>Format</dt><dd>{competition.competitionLabel}</dd></div>
-          <div><dt>Entry fee</dt><dd>${competition.entryFee}</dd></div>
-          <div><dt>Rounds</dt><dd>{competition.rounds}</dd></div>
-          <div><dt>Time limit</dt><dd>{competition.timeLimit} seconds</dd></div>
-          <div><dt>Handicap cap</dt><dd>#{competition.handicapTotal}</dd></div>
-          <div><dt>Highest contestant handicap</dt><dd>#{competition.maxContestantHandicap}</dd></div>
-          <div><dt>Entry limit</dt><dd>{competition.entriesAllowed} per contestant</dd></div>
-        </dl>
-        <p>{competition.allowRepeatPartners ? "Repeat partnerships are allowed." : "Each partnership may enter once."}</p>
-      </section>
+      {competition.status !== "Complete" && (
+        <section className="public-rules">
+          <h2>Competition details</h2>
+          <dl>
+            <div><dt>Format</dt><dd>{competition.competitionLabel}</dd></div>
+            <div><dt>Entry fee</dt><dd>${competition.entryFee}</dd></div>
+            <div><dt>Rounds</dt><dd>{competition.rounds}</dd></div>
+            <div><dt>Time limit</dt><dd>{competition.timeLimit} seconds</dd></div>
+            <div><dt>Handicap cap</dt><dd>#{competition.handicapTotal}</dd></div>
+            <div><dt>Highest contestant handicap</dt><dd>#{competition.maxContestantHandicap}</dd></div>
+            <div><dt>Entry limit</dt><dd>{competition.entriesAllowed} per contestant</dd></div>
+          </dl>
+          <p>{competition.allowRepeatPartners ? "Repeat partnerships are allowed." : "Each partnership may enter once."}</p>
+        </section>
+      )}
       <section className="public-detail-section">
         <div className="public-section-heading"><h2>{competition.status === "Live" ? "Live standings" : "Official results"}</h2>{competition.resultsPublished && <span>Published by arena staff</span>}</div>
         <ResultsTable competition={competition} />
