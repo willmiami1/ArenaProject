@@ -898,7 +898,7 @@ function LedLeaderboard({
             </div>
             {isFinalRound && (
               <div className="led-current-targets">
-                <span><small>Stay in average</small><strong>{event.timeLimit.toFixed(2)}s</strong></span>
+                <span><small>Stay in average</small><strong>Just catch</strong></span>
                 <span><small>Take 1st</small><strong>{currentTeamTimeToFirst === undefined ? "Set pace" : currentTeamTimeToFirst <= 0 ? "Out of reach" : `${currentTeamTimeToFirst.toFixed(2)}s`}</strong></span>
               </div>
             )}
@@ -2642,7 +2642,7 @@ function RunDesk({
               {event && activeRound === roundCount && roundCount > 1 && selected.status === "ready" && (
                 <div className="announcer-times">
                   <div><span>Prior aggregate</span><strong>{selectedPriorTotal.toFixed(2)}s</strong></div>
-                  <div><span>To stay in the average</span><strong>{event.timeLimit.toFixed(2)}s or faster</strong></div>
+                  <div><span>To stay in the average</span><strong>Just catch</strong></div>
                   <div><span>To move into 1st</span><strong>{timeToFirst === undefined ? "Set the pace" : timeToFirst <= 0 ? "Current lead out of reach" : `${timeToFirst.toFixed(2)}s or faster`}</strong></div>
                 </div>
               )}
