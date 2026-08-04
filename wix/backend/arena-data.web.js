@@ -357,7 +357,7 @@ function publicProjection(workspace) {
           `${right.date}T${right.startTime}`,
         );
       });
-    return { generatedAt: new Date().toISOString(), meets };
+    return { generatedAt: new Date().toISOString(), competitions, meets };
 }
 
 const mergeOnline = (incoming, latest) => {

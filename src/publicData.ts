@@ -92,6 +92,7 @@ export interface PublicMeet {
 
 export interface PublicArenaData {
   generatedAt: string;
+  competitions: PublicCompetition[];
   meets: PublicMeet[];
 }
 
@@ -210,6 +211,7 @@ export function projectPublicArenaData(
 
   return {
     generatedAt: new Date().toISOString(),
+    competitions,
     meets: sortPublicMeets(
       data.meets.map((meet) => {
         const children = competitions.filter(

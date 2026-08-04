@@ -779,9 +779,10 @@ function LedSpectatorTop({
       void loadPublicArenaData()
         .then((publicData) => {
           if (cancelled || !publicData) return;
-          const competition = publicData.meets
-            .flatMap((meet) => meet.competitions)
-            .find((item) => item.id === eventId);
+          const competition = (
+            publicData.competitions ??
+            publicData.meets.flatMap((meet) => meet.competitions)
+          ).find((item) => item.id === eventId);
           setNames(
             (competition?.spectatorLeaderboards ?? [])
               .filter((row) => row.round === round)

@@ -314,7 +314,8 @@ function EventExplorer({ data }: { data: PublicArenaData }) {
     { key: "future", title: "Future Events", empty: "The next event will be posted soon." },
     { key: "past", title: "Past Events", empty: "Completed events will appear here." },
   ] as const;
-  const ropings = data.meets.flatMap((meet) => meet.competitions);
+  const ropings =
+    data.competitions ?? data.meets.flatMap((meet) => meet.competitions);
   return (
     <section className="public-event-explorer" id="events">
       <div className="public-section-heading">
@@ -782,7 +783,9 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
   }, []);
 
   const selected = useMemo(() => {
-    const competition = data?.meets.flatMap((meet) => meet.competitions).find((item) => "id" in route && item.id === route.id);
+    const competition = (
+      data?.competitions ?? data?.meets.flatMap((meet) => meet.competitions)
+    )?.find((item) => "id" in route && item.id === route.id);
     return {
       meet: data?.meets.find((meet) => ("id" in route && meet.id === route.id) || meet.id === competition?.parentEventId),
       competition,

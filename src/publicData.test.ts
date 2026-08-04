@@ -97,6 +97,17 @@ describe("public grouping and privacy", () => {
     expect(competitionGroup("Complete")).toBe("past");
   });
 
+  it("keeps every roping in the flat public list even with a legacy parent ID", () => {
+    const data = workspace(event({ parentEventId: "legacy-parent", status: "Live" }));
+    const projected = projectPublicArenaData(data, today);
+    expect(projected.competitions).toHaveLength(1);
+    expect(projected.competitions[0]).toMatchObject({
+      name: "Roping",
+      status: "Live",
+    });
+    expect(projected.meets[0].competitions).toHaveLength(0);
+  });
+
   it("projects only public fields and gates unpublished results", () => {
     const data = workspace(
       event({ description: "Open to all eligible teams.", resultsPublished: false, maxContestantHandicap: 5 }),
