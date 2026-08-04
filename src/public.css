@@ -87,6 +87,7 @@
 .public-index-head p,.public-page-head>p { max-width: 65ch; margin: 22px 0; color: var(--public-muted); font-size: 16px; line-height: 1.6; }
 .public-page-head>a { display: inline-block; margin-bottom: 34px; font-size: 11px; font-weight: 800; }
 .public-page-head .public-status { margin-bottom: 18px; }
+.public-page-head .public-competition-description { max-width: 72ch; white-space: pre-line; color: var(--public-cream); }
 .public-page-meta { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 24px 0; }
 .public-page-meta span { display: inline-flex; align-items: center; gap: 8px; color: var(--public-muted); font-size: 12px; font-weight: 600; }
 .public-page-meta svg { width: 17px; color: var(--public-brown); }

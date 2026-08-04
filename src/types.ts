@@ -18,6 +18,7 @@ export interface ArenaEvent {
   id: string;
   parentEventId: string;
   name: string;
+  description?: string;
   date: string;
   startTime: string;
   location: string;

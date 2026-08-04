@@ -39,6 +39,7 @@ export function normalizeData(parsed: ArenaData): ArenaData {
   const events = parsed.events.map((event) => ({
     ...defaultCompetitionSettings,
     ...event,
+    description: event.description ?? "",
     parentEventId: event.parentEventId ?? `meet-${event.id}`,
     allowRepeatPartners: event.allowRepeatPartners ?? false,
     producerFeePercent:

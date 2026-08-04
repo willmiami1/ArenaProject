@@ -130,8 +130,10 @@ main { grid-column: 2; min-width: 0; }
 .form-grid.two { grid-template-columns: repeat(2, 1fr); }
 .field { display: flex; flex-direction: column; gap: 7px; }
 .field > span, .time-entry label, .penalty-buttons > span { color: #5d6761; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
-.field input, .field select { width: 100%; min-height: 41px; padding: 9px 11px; color: var(--ink); background: #fafbf9; border: 1px solid #dfe3df; border-radius: 7px; outline: none; }
-.field input:focus, .field select:focus { border-color: #76a289; box-shadow: 0 0 0 3px rgba(40,95,70,.08); }
+.field input, .field select, .field textarea { width: 100%; min-height: 41px; padding: 9px 11px; color: var(--ink); background: #fafbf9; border: 1px solid #dfe3df; border-radius: 7px; outline: none; }
+.field textarea { min-height: 118px; resize: vertical; line-height: 1.5; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: #76a289; box-shadow: 0 0 0 3px rgba(40,95,70,.08); }
+.roping-description { grid-column: 1 / -1; }
 .form-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; padding-top: 18px; border-top: 1px solid #eee; }
 .handicap-preview { display: flex; align-items: baseline; gap: 8px; width: max-content; margin-top: 14px; padding: 8px 11px; color: var(--green); background: #edf4ef; border: 1px solid #d4e4d9; border-radius: 7px; }
 .handicap-preview span { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }

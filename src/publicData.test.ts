@@ -99,7 +99,7 @@ describe("public grouping and privacy", () => {
 
   it("projects only public fields and gates unpublished results", () => {
     const data = workspace(
-      event({ resultsPublished: false, maxContestantHandicap: 5 }),
+      event({ description: "Open to all eligible teams.", resultsPublished: false, maxContestantHandicap: 5 }),
       [run()],
     );
     const serialized = JSON.stringify(projectPublicArenaData(data, today));
@@ -108,6 +108,7 @@ describe("public grouping and privacy", () => {
     expect(serialized).not.toContain("private");
     expect(serialized).not.toContain("checkedIn");
     expect(serialized).not.toContain("\"paid\"");
+    expect(serialized).toContain("Open to all eligible teams.");
     expect(
       projectPublicArenaData(data, today).meets[0].competitions[0]
         .maxContestantHandicap,

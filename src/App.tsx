@@ -1437,6 +1437,7 @@ function EventForm({
 }) {
   const [form, setForm] = useState({
     name: event?.name ?? "",
+    description: event?.description ?? "",
     status: event?.status ?? "Upcoming" as EventStatus,
     entryFee: event?.entryFee.toString() ?? "60",
     competitionType: competitionType ?? event?.competitionType ?? defaultCompetitionSettings.competitionType,
@@ -1496,11 +1497,12 @@ function EventForm({
       <h4 className="form-section-title">Roping details</h4>
       <div className="form-grid">
         <Field label="Roping name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="#10.5 Draw Pot" /></Field>
-        <Field label="Entry fee"><input required min="0" type="number" value={form.entryFee} onChange={(e) => setForm({ ...form, entryFee: e.target.value })} /></Field>
         <Field label="Front page status"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EventStatus })}><option value="Upcoming">Future</option><option value="Live">Live</option><option value="Complete">Past</option></select></Field>
+        <label className="field roping-description"><span>Roping information</span><textarea maxLength={2000} rows={5} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Add public details, schedule notes, eligibility information, or anything contestants and spectators should know." /></label>
       </div>
       <h4 className="form-section-title">Competition rules</h4>
       <div className="form-grid">
+        <Field label="Entry fee"><input required min="0" type="number" value={form.entryFee} onChange={(e) => setForm({ ...form, entryFee: e.target.value })} /></Field>
         <Field label="Competition type"><select value={form.competitionType} onChange={(e) => setForm({ ...form, competitionType: e.target.value as CompetitionType })}>{competitionTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}</select></Field>
         {form.competitionType === "pick-and-draw" && (
           <Field label="Draw assignment"><select value={form.pickDrawRole} onChange={(e) => setForm({ ...form, pickDrawRole: e.target.value as PickDrawRole })}><option value="header">Draw Header</option><option value="heeler">Draw Heeler</option><option value="both">Draw Both</option></select></Field>

@@ -482,6 +482,7 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
         <Status value={competition.status} />
         <h1>{competition.name}</h1>
         <p>{competition.competitionLabel} at {competition.location}</p>
+        {competition.description && <p className="public-competition-description">{competition.description}</p>}
         <div className="public-page-meta">
           <span><CalendarDays /> {formatDate(competition.date)}</span>
           <span><Clock3 /> {formatTime(competition.startTime)}</span>

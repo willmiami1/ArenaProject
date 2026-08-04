@@ -253,6 +253,7 @@ function publicProjection(workspace) {
       id: event.id,
       parentEventId: event.parentEventId,
       name: event.name,
+      description: String(event.description || "").slice(0, 2000),
       date: event.date,
       startTime: event.startTime,
       location: event.location,

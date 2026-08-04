@@ -37,6 +37,7 @@ export interface PublicCompetition {
   id: string;
   parentEventId: string;
   name: string;
+  description: string;
   date: string;
   startTime: string;
   location: string;
@@ -148,6 +149,7 @@ export function projectPublicArenaData(
       id: event.id,
       parentEventId: event.parentEventId,
       name: event.name,
+      description: event.description ?? "",
       date: event.date,
       startTime: event.startTime,
       location: event.location,
