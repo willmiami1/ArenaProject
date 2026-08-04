@@ -334,9 +334,7 @@ function SpectatorPage({
                   onChange={() => setChoice("steer")}
                 />
                 <span className="public-steer-picture"><Beef aria-hidden="true" /></span>
-                <span>Steer</span>
-                <strong>Steer gets away</strong>
-                <small>Pick the steer</small>
+                <span className="public-steer-label">Steer</span>
               </label>
             </fieldset>
           )}
