@@ -53,6 +53,8 @@ main { grid-column: 2; min-width: 0; }
 .persistence-status.saved { color: #2c694c; background: #e9f3ed; }
 .persistence-status.saving, .persistence-status.loading { color: #8a601f; background: #fbf1df; }
 .persistence-status.error { color: #9a4740; background: #f8eae8; }
+.topbar-front-screen { min-height: 39px; display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; color: #fff; background: var(--green); border: 1px solid var(--green); border-radius: 7px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.topbar-front-screen:hover { background: var(--green-dark); }
 .event-switcher { position: relative; margin-left: auto; display: flex; align-items: center; gap: 9px; padding: 9px 12px; color: var(--green); background: #f5f7f4; border: 1px solid #e2e7e3; border-radius: 8px; }
 .persistence-status + .event-switcher { margin-left: 0; }
 .event-switcher select { max-width: 220px; padding: 0 20px 0 0; color: var(--ink); font-size: 13px; font-weight: 600; background: transparent; border: 0; outline: none; appearance: none; }
@@ -577,6 +579,8 @@ main { grid-column: 2; min-width: 0; }
 .app-shell .persistence-status.saving,
 .app-shell .persistence-status.loading { color: #e6bd7c; background: #382714; }
 .app-shell .persistence-status.error { color: #efaaa2; background: #3a1d1a; }
+.app-shell .topbar-front-screen { color: #fff8eb; background: #8d5a3b; border-color: #a66c43; }
+.app-shell .topbar-front-screen:hover { background: #6f432d; }
 .app-shell .event-switcher { color: #cf966b; background: #211812; border-color: #4a3527; }
 .app-shell .event-switcher select { color: #eadcc6; }
 .app-shell .hero,
@@ -701,6 +705,8 @@ main { grid-column: 2; min-width: 0; }
   .event-switcher { padding: 8px 9px; }
   .persistence-status { margin-left: auto; }
   .persistence-status span { display: none; }
+  .topbar-front-screen span { display: none; }
+  .topbar-front-screen { min-width: 39px; justify-content: center; padding: 8px; }
   .event-switcher svg:first-child { display: none; }
   .event-switcher select { max-width: 135px; font-size: 11px; }
   .content { padding: 20px 15px 35px; }

@@ -306,6 +306,13 @@ function StaffApp() {
                       : "Local preview"}
             </span>
           </div>
+          <button
+            className="topbar-front-screen"
+            onClick={() => window.location.assign("?page=home")}
+          >
+            <Eye size={17} />
+            <span>Front Screen</span>
+          </button>
           <label className="event-switcher">
             <CalendarDays size={18} />
             <select
