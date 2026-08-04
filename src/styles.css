@@ -462,7 +462,10 @@ main { grid-column: 2; min-width: 0; }
 .led-row.led-place-3 { box-shadow: inset 5px 0 #a66d42; }
 .led-place { font-family: "Manrope", sans-serif; font-size: clamp(28px, 3.4vw, 68px); font-weight: 900; line-height: 1; }
 .led-team { min-width: 0; display: flex; align-items: center; gap: .8vw; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(17px, 2vw, 39px); text-transform: uppercase; white-space: nowrap; }
-.led-team strong { overflow: hidden; text-overflow: ellipsis; }
+.led-rider { min-width: 0; display: flex; align-items: center; gap: .55vw; overflow: hidden; }
+.led-rider strong { overflow: hidden; text-overflow: ellipsis; }
+.led-avatar { flex: 0 0 auto; width: clamp(32px, 4.8vh, 66px); height: clamp(32px, 4.8vh, 66px); display: grid; place-items: center; overflow: hidden; color: #fff3d7; background: #365545; border: 2px solid rgba(226,182,95,.72); border-radius: 50%; font-size: clamp(10px, 1vw, 18px); font-style: normal; font-weight: 900; letter-spacing: .04em; }
+.led-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .led-team i { flex: 0 0 auto; color: #cfaa66; font-family: Georgia, serif; font-weight: 400; }
 .led-rounds { color: #c8d6ce; font-size: clamp(16px, 1.8vw, 34px); font-weight: 800; text-align: right; }
 .led-total { color: #f4c972; font-family: "Manrope", sans-serif; font-size: clamp(30px, 3.4vw, 68px); font-weight: 900; line-height: 1; text-align: right; }
@@ -471,7 +474,8 @@ main { grid-column: 2; min-width: 0; }
 .led-next-label { display: flex; align-items: center; gap: .7vw; padding-right: 1.4vw; border-right: 1px solid rgba(255,255,255,.35); font-size: clamp(12px, 1.1vw, 21px); text-transform: uppercase; }
 .led-next-label .live-dot { width: 12px; height: 12px; background: #fff; box-shadow: 0 0 14px rgba(255,255,255,.9); }
 .led-next-draw { font-size: clamp(15px, 1.4vw, 27px); font-weight: 800; text-transform: uppercase; }
-.led-next-team { overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.3vw, 44px); font-weight: 900; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.led-next-team { min-width: 0; display: flex; align-items: center; gap: .65vw; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.3vw, 44px); font-weight: 900; text-transform: uppercase; white-space: nowrap; }
+.led-next-team .led-avatar { width: clamp(28px, 4.3vh, 58px); height: clamp(28px, 4.3vh, 58px); border-color: rgba(255,255,255,.72); }
 .led-next-team i { color: #f7dfb2; font-family: Georgia, serif; }
 .led-rolled { padding: .6vh .7vw; color: #5c3a0d; background: #ffe0a5; border-radius: 6px; font-size: clamp(10px, 1vw, 18px); font-weight: 900; text-transform: uppercase; }
 .led-location { margin-left: auto; font-size: clamp(10px, 1vw, 18px); font-weight: 800; text-transform: uppercase; white-space: nowrap; }

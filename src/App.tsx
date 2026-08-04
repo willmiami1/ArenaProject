@@ -790,8 +790,21 @@ function LedLeaderboard({
     (team) => team.status === "ready" && !team.rolled,
   ) ?? roundTeams.find((team) => team.status === "ready");
   const rider = (id: string) =>
-    data.contestants.find((contestant) => contestant.id === id)?.name ??
-    "Unknown";
+    data.contestants.find((contestant) => contestant.id === id);
+  const ledRider = (id: string) => {
+    const contestant = rider(id);
+    const name = contestant?.name ?? "Unknown";
+    return (
+      <span className="led-rider">
+        <span className="led-avatar">
+          {contestant?.photo
+            ? <img src={contestant.photo} alt={`${name} profile`} />
+            : <span aria-hidden="true">{initials(name)}</span>}
+        </span>
+        <strong>{name}</strong>
+      </span>
+    );
+  };
   const meet = data.meets.find((item) => item.id === event.parentEventId);
   const enterFullscreen = () => {
     if (document.fullscreenElement) return;
@@ -838,7 +851,7 @@ function LedLeaderboard({
             return (
               <div className={`led-row led-place-${index + 1}`} key={team.id}>
                 <span className="led-place">{index + 1}</span>
-                <span className="led-team"><strong>{rider(team.headerId)}</strong><i>&</i><strong>{rider(team.heelerId)}</strong></span>
+                <span className="led-team">{ledRider(team.headerId)}<i>&</i>{ledRider(team.heelerId)}</span>
                 <span className="led-rounds">{completedRounds} / {event.rounds}</span>
                 <span className="led-total">{teamQualifiedTotal(team, eventTeams).toFixed(2)}</span>
               </div>
@@ -853,7 +866,7 @@ function LedLeaderboard({
         {nextTeam ? (
           <>
             <span className="led-next-draw">Draw #{nextTeam.drawPosition}</span>
-            <span className="led-next-team">{rider(nextTeam.headerId)} <i>&</i> {rider(nextTeam.heelerId)}</span>
+            <span className="led-next-team">{ledRider(nextTeam.headerId)}<i>&</i>{ledRider(nextTeam.heelerId)}</span>
             {nextTeam.rolled && <span className="led-rolled">Rolled</span>}
           </>
         ) : <span className="led-next-team">Round complete</span>}
