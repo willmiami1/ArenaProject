@@ -1058,11 +1058,14 @@ function Contestants({
   const restoreBackup = async (file?: File) => {
     if (!file) return;
     try {
-      const parsed = JSON.parse(await file.text()) as unknown;
-      const restored = validateContestantBackup(parsed);
+      const text = await file.text();
+      const restored =
+        file.name.toLowerCase().endsWith(".txt")
+          ? parseContestantText(text)
+          : validateContestantBackup(JSON.parse(text) as unknown);
       onImport(restored);
       setBackupMessage(
-        `${restored.length} contestant${restored.length === 1 ? "" : "s"} restored.`,
+        `${restored.length} contestant${restored.length === 1 ? "" : "s"} imported.`,
       );
     } catch (error) {
       setBackupMessage(
@@ -1103,7 +1106,7 @@ function Contestants({
           <div className="roster-actions">
             <label className="search"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search riders" /></label>
             <button className="secondary" disabled={!contestants.length} onClick={downloadBackup}><Download size={16} /> Download database</button>
-            <label className="secondary import-database-button"><Upload size={16} /> Restore database<input type="file" accept="application/json,.json" onChange={(event) => { void restoreBackup(event.target.files?.[0]); event.target.value = ""; }} /></label>
+            <label className="secondary import-database-button"><Upload size={16} /> Import database<input type="file" accept="application/json,text/plain,.json,.txt" onChange={(event) => { void restoreBackup(event.target.files?.[0]); event.target.value = ""; }} /></label>
           </div>
         </div>
         <div className="data-table contestant-table">
@@ -1210,6 +1213,199 @@ function validateContestantBackup(value: unknown): Contestant[] {
           : "",
     };
   });
+}
+
+function parseContestantText(text: string): Contestant[] {
+  const trimmed = text.replace(/^\uFEFF/, "").trim();
+  if (!trimmed) {
+    throw new Error("The contestant text file is empty.");
+  }
+  if (trimmed.startsWith("{")) {
+    return validateContestantBackup(JSON.parse(trimmed) as unknown);
+  }
+
+  const lines = trimmed.split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length > 10001) {
+    throw new Error("This text file contains too many contestant records.");
+  }
+  const delimiter = lines[0].includes("\t")
+    ? "\t"
+    : lines[0].includes("|")
+      ? "|"
+      : lines[0].includes(",")
+        ? ","
+        : lines[0].includes(";")
+          ? ";"
+        : "";
+  if (!delimiter) {
+    return lines.map((name, index) => textContestant({ name }, index));
+  }
+
+  const rows = lines.map((line) => parseTextFields(line, delimiter));
+  const normalizedHeaders = rows[0].map(normalizeTextHeader);
+  const knownHeaders = new Set([
+    "id",
+    "name",
+    "fullname",
+    "contestant",
+    "firstname",
+    "lastname",
+    "role",
+    "position",
+    "headerhandicap",
+    "heelerhandicap",
+    "phone",
+    "hometown",
+    "membershipnumber",
+    "email",
+    "categorynumber",
+  ]);
+  const hasHeader = normalizedHeaders.some((header) => knownHeaders.has(header));
+  const headers = hasHeader
+    ? normalizedHeaders
+    : [
+        "name",
+        "role",
+        "headerhandicap",
+        "heelerhandicap",
+        "phone",
+        "hometown",
+        "membershipnumber",
+        "email",
+        "categorynumber",
+      ];
+  const dataRows = hasHeader ? rows.slice(1) : rows;
+
+  return dataRows.map((values, index) => {
+    const record = Object.fromEntries(
+      headers.map((header, column) => [header, values[column]?.trim() ?? ""]),
+    );
+    const firstName = record.firstname ?? "";
+    const lastName = record.lastname ?? "";
+    return textContestant(
+      {
+        id: record.id,
+        name:
+          record.name ||
+          record.fullname ||
+          record.contestant ||
+          `${firstName} ${lastName}`.trim(),
+        role: record.role || record.position,
+        headerHandicap: record.headerhandicap,
+        heelerHandicap: record.heelerhandicap,
+        phone: record.phone,
+        hometown: record.hometown,
+        membershipNumber: record.membershipnumber,
+        email: record.email,
+        categoryNumber: record.categorynumber,
+      },
+      index,
+    );
+  });
+}
+
+function parseTextFields(line: string, delimiter: string) {
+  const fields: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === delimiter && !quoted) {
+      fields.push(field);
+      field = "";
+    } else {
+      field += character;
+    }
+  }
+  fields.push(field);
+  return fields;
+}
+
+function normalizeTextHeader(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function textContestant(
+  record: {
+    id?: string;
+    name?: string;
+    role?: string;
+    headerHandicap?: string;
+    heelerHandicap?: string;
+    phone?: string;
+    hometown?: string;
+    membershipNumber?: string;
+    email?: string;
+    categoryNumber?: string;
+  },
+  index: number,
+): Contestant {
+  const name = record.name?.trim() ?? "";
+  if (!name) {
+    throw new Error(`Contestant ${index + 1} is missing a name.`);
+  }
+  const roleValue = record.role?.trim().toLowerCase() ?? "";
+  const role =
+    roleValue === "header" || roleValue === "h"
+      ? "Header"
+      : roleValue === "heeler" || roleValue === "heel" || roleValue === "hl"
+        ? "Heeler"
+        : roleValue === "both" || !roleValue
+          ? "Both"
+          : null;
+  if (!role) {
+    throw new Error(`Contestant ${index + 1} has an invalid position.`);
+  }
+  const headerHandicap = record.headerHandicap?.trim()
+    ? Number(record.headerHandicap)
+    : 0;
+  const heelerHandicap = record.heelerHandicap?.trim()
+    ? Number(record.heelerHandicap)
+    : 0;
+  if (!Number.isFinite(headerHandicap) || !Number.isFinite(heelerHandicap)) {
+    throw new Error(`Contestant ${index + 1} has an invalid handicap.`);
+  }
+  return {
+    id:
+      record.id?.trim() ||
+      stableTextContestantId(
+        record.membershipNumber?.trim() ||
+          [
+            name,
+            record.email?.trim(),
+            record.phone?.trim(),
+            role,
+            headerHandicap,
+            heelerHandicap,
+          ].join("|"),
+      ),
+    name,
+    role,
+    headerHandicap,
+    heelerHandicap,
+    photo: "",
+    phone: record.phone?.trim() ?? "",
+    hometown: record.hometown?.trim() ?? "",
+    membershipNumber: record.membershipNumber?.trim() ?? "",
+    email: record.email?.trim() ?? "",
+    categoryNumber: record.categoryNumber?.trim() ?? "",
+  };
+}
+
+function stableTextContestantId(value: string) {
+  let hash = 2166136261;
+  for (const character of value.trim().toLowerCase()) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `contestant-text-${(hash >>> 0).toString(36)}`;
 }
 
 function ContestantForm({

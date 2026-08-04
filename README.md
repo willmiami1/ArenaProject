@@ -13,7 +13,7 @@ inside a Wix site.
 - One Round 1 run per partner pairing by default, with optional repeat partner runs
 - Automatic partner draws, round-robin schedules, redraw history, and draw locks
 - Contestant roster with header/heeler positions
-- Downloadable and restorable contestant database backups
+- Downloadable contestant backups with validated JSON and delimited TXT database imports
 - Team entry and randomized draw order
 - Run desk for times, penalties, no-times, and notes
 - Round 1 ride-in team entry directly from the Run Desk
