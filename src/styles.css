@@ -487,6 +487,11 @@ main { grid-column: 2; min-width: 0; }
 .led-next-team .led-avatar { width: clamp(28px, 4.3vh, 58px); height: clamp(28px, 4.3vh, 58px); border-color: rgba(255,255,255,.72); }
 .led-next-team i { color: #f7dfb2; font-family: Georgia, serif; }
 .led-rolled { padding: .6vh .7vw; color: #5c3a0d; background: #ffe0a5; border-radius: 6px; font-size: clamp(10px, 1vw, 18px); font-weight: 900; text-transform: uppercase; }
+.led-next-targets { flex: 0 0 auto; display: flex; align-items: stretch; gap: .5vw; }
+.led-next-targets > span { min-width: 8.5vw; padding: .55vh .7vw; color: #5c3a0d; background: #ffe0a5; border-radius: 6px; }
+.led-next-targets small, .led-next-targets strong { display: block; font-family: "Manrope", sans-serif; text-transform: uppercase; }
+.led-next-targets small { font-size: clamp(8px, .7vw, 12px); font-weight: 800; letter-spacing: .06em; }
+.led-next-targets strong { margin-top: .1vh; font-size: clamp(14px, 1.4vw, 26px); line-height: 1; white-space: nowrap; }
 .led-location { margin-left: auto; font-size: clamp(10px, 1vw, 18px); font-weight: 800; text-transform: uppercase; white-space: nowrap; }
 
 .contestant-portal { min-height: 100vh; color: var(--ink); background: #f2f4f1; }

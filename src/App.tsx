@@ -806,6 +806,20 @@ function LedLeaderboard({
     roundTeams.find(
       (team) => team.status === "ready" && team.id !== currentTeam?.id,
     );
+  const isFinalRound = event.rounds > 1 && round === event.rounds;
+  const finalRoundLeaderTotal = isFinalRound
+    ? roundTeams
+        .filter((team) => team.status === "complete" && team.rawTime !== null)
+        .map((team) => teamQualifiedTotal(team, eventTeams))
+        .sort((a, b) => a - b)[0]
+    : undefined;
+  const nextTeamPriorTotal = nextTeam
+    ? teamQualifiedTotal(nextTeam, eventTeams, round)
+    : 0;
+  const nextTeamTimeToFirst =
+    finalRoundLeaderTotal === undefined
+      ? undefined
+      : finalRoundLeaderTotal - nextTeamPriorTotal - 0.01;
   const rider = (id: string) =>
     data.contestants.find((contestant) => contestant.id === id);
   const ledRider = (id: string) => {
@@ -900,6 +914,12 @@ function LedLeaderboard({
             <span className="led-next-draw">Draw #{nextTeam.drawPosition}</span>
             <span className="led-next-team">{ledRider(nextTeam.headerId)}<i>&</i>{ledRider(nextTeam.heelerId)}</span>
             {nextTeam.rolled && <span className="led-rolled">Rolled</span>}
+            {isFinalRound && (
+              <div className="led-next-targets">
+                <span><small>Stay in average</small><strong>{event.timeLimit.toFixed(2)}s</strong></span>
+                <span><small>Take 1st</small><strong>{nextTeamTimeToFirst === undefined ? "Set pace" : nextTeamTimeToFirst <= 0 ? "Out of reach" : `${nextTeamTimeToFirst.toFixed(2)}s`}</strong></span>
+              </div>
+            )}
           </>
         ) : <span className="led-next-team">Round complete</span>}
         <span className="led-location">{event.location}</span>
