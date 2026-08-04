@@ -324,7 +324,7 @@ function SpectatorPage({
                     <strong>{selectedRun.heelerName}</strong>
                   </span>
                 </span>
-                <span>Cowboy team</span>
+                <span className="public-cowboy-team-label">Cowboy Team</span>
               </label>
               <label className={`public-pick-card steer${choice === "steer" ? " selected" : ""}`}>
                 <input
