@@ -66,12 +66,13 @@
 .public-card-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0; }
 .public-card-badges span { padding: 5px 8px; color: #583a25; background: #ead7bd; font-size: 9px; font-weight: 700; }
 .public-text-link { display: inline-flex; align-items: center; gap: 7px; margin-top: auto; font-size: 11px; font-weight: 800; }
-.public-live-actions { display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 22px; background: #211a14; border-left: 1px solid rgba(234,220,198,.2); }
+.public-live-actions { display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 18px; background: #0e0b09; border-left: 1px solid rgba(234,220,198,.2); }
 .public-live-results { min-height: 125px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 16px 10px; color: #17130f; background: var(--public-tan); text-align: center; }
 .public-live-results:hover { background: var(--public-cream); }
 .public-live-results strong { font-family: "Manrope",sans-serif; font-size: 18px; text-transform: uppercase; letter-spacing: .05em; }
 .public-live-results span { font-size: 9px; font-weight: 700; }
-.public-live-actions .public-button { width: 100%; justify-content: center; text-align: center; }
+.public-live-actions .public-button { width: 100%; min-height: 70px; justify-content: center; color: var(--public-cream); background: #59371f; border: 1px solid #9d7555; text-align: center; }
+.public-live-actions .public-button:hover { color: #17130f; background: var(--public-cream); }
 .public-empty { margin: 0; padding: 35px; color: var(--public-muted); background: rgba(234,220,198,.05); border: 1px dashed #796653; line-height: 1.6; }
 .public-trust-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; margin-top: 100px; background: rgba(234,220,198,.24); border: 1px solid rgba(234,220,198,.18); }
 .public-hero>.public-trust-strip { grid-column: 1/-1; width: 100%; margin-top: 12px; }
