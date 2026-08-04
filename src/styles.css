@@ -540,6 +540,141 @@ main { grid-column: 2; min-width: 0; }
 .portal-result strong { color: var(--green); font-family: "Manrope", sans-serif; font-size: 17px; }
 .portal-registration-row { min-height: 54px; display: grid; grid-template-columns: 1.5fr .7fr .7fr auto; align-items: center; gap: 14px; padding: 9px 20px; border-bottom: 1px solid #ecefeb; font-size: 10px; }
 
+/* Arena Command uses the same ranch palette as the public website. */
+.app-shell {
+  --ink: #eadcc6;
+  --muted: #b7a48e;
+  --line: #443225;
+  --green: #a66c43;
+  --green-dark: #815034;
+  --cream: #0d0a08;
+  --amber: #c58a54;
+  --sidebar: #080605;
+  color: var(--ink);
+  background: #0d0a08;
+}
+.app-shell main { background: #0d0a08; }
+.app-shell .sidebar { color: #eadcc6; background: #080605; border-right: 1px solid #34251b; }
+.app-shell .brand-mark { background: #000; border-color: #6e4b33; }
+.app-shell .brand span,
+.app-shell .nav-label,
+.app-shell .sidebar-event small { color: #9e8973; }
+.app-shell nav button { color: #c8b59f; }
+.app-shell nav button:hover { color: #f7ebd9; background: #251a13; }
+.app-shell nav button.active { color: #fff8eb; background: #8d5a3b; box-shadow: inset 3px 0 #d4a06f; }
+.app-shell .sidebar-backup button,
+.app-shell .sidebar-backup label,
+.app-shell .sidebar-event { color: #c8b59f; background: #17100c; border-color: #3b2b21; }
+.app-shell .sidebar-backup button:hover,
+.app-shell .sidebar-backup label:hover { color: #fff8eb; border-color: #8d6548; }
+.app-shell .topbar { color: var(--ink); background: #15100d; border-color: var(--line); }
+.app-shell .eyebrow { color: #a88e76; }
+.app-shell .menu-button { color: #eadcc6; }
+.app-shell .persistence-status { color: #baa58f; background: #211812; border: 1px solid #403025; }
+.app-shell .persistence-status.saved { color: #d8bd91; background: #302318; }
+.app-shell .persistence-status.saving,
+.app-shell .persistence-status.loading { color: #e6bd7c; background: #382714; }
+.app-shell .persistence-status.error { color: #efaaa2; background: #3a1d1a; }
+.app-shell .event-switcher { color: #cf966b; background: #211812; border-color: #4a3527; }
+.app-shell .event-switcher select { color: #eadcc6; }
+.app-shell .hero,
+.app-shell .reports-hero { color: #fff8eb; background: linear-gradient(115deg, #090706 0%, #1b120d 54%, #70472f 100%); border: 1px solid #4b3426; box-shadow: 0 18px 40px rgba(0,0,0,.34); }
+.app-shell .hero p,
+.app-shell .reports-hero p,
+.app-shell .reports-hero-stat span { color: #cfbea9; }
+.app-shell .hero .primary { color: #160e09; background: #d2a06e; border-color: #d2a06e; }
+.app-shell .primary { color: #fff8eb; background: #9b6341; border-color: #9b6341; box-shadow: 0 5px 12px rgba(0,0,0,.25); }
+.app-shell .primary:hover { background: #7b4b31; }
+.app-shell .secondary,
+.app-shell .icon-action,
+.app-shell .round-tabs button { color: #dccbb7; background: #211812; border-color: #4a382c; }
+.app-shell .secondary:hover,
+.app-shell .icon-action:hover,
+.app-shell .round-tabs button:hover { color: #fff8eb; border-color: #9b6b4c; }
+.app-shell .selected-button { color: #edc49d; background: #39271c; border-color: #765038; }
+.app-shell .no-time-button { color: #efaaa2; background: #261614; border-color: #684039; }
+.app-shell :is(
+  .stat-card,
+  .panel,
+  .form-panel,
+  .competition-chooser,
+  .competition-card,
+  .event-card,
+  .meet-card,
+  .format-banner,
+  .reports-top-controls > label,
+  .report-dashboard-card,
+  .report-catalog-list > button,
+  .report-filters,
+  .report-columns,
+  .report-ready-card,
+  .report-preview
+) { color: var(--ink); background: #18120e; border-color: var(--line); box-shadow: none; }
+.app-shell :is(.panel-heading,.table-toolbar,.meet-header,.competition-row,.run-row,.leader-row,.draw-row,.registration-row,.history-row,.desk-title,.portal-team-row,.portal-registration-row) { border-color: #382a20; }
+.app-shell :is(.stat-icon,.competition-icon,.report-card-icon,.report-type-icon,.person i,.draw-number,.place) { color: #d09a70; background: #2c2018; }
+.app-shell .stat-card > small { color: #a8947f; border-color: #382a20; }
+.app-shell .table-header { color: #b39d87; background: #211812; }
+.app-shell .table-row,
+.app-shell .report-catalog-list > button { border-color: #382a20; }
+.app-shell .report-catalog-list > button:hover,
+.app-shell .competition-row.selected,
+.app-shell .queue-row:hover,
+.app-shell .queue-row.active { background: #291d16; }
+.app-shell .competition-card:hover,
+.app-shell .report-dashboard-card:hover,
+.app-shell .event-card.selected { border-color: #9a6a4b; box-shadow: 0 12px 24px rgba(0,0,0,.22); }
+.app-shell .event-date { color: #fff8eb; background: #68432e; }
+.app-shell .event-date span { color: #e2cdb7; }
+.app-shell .queue-row { color: var(--ink); background: #18120e; border-color: #382a20; }
+.app-shell .queue-row.rolled { background: #2b2114; }
+.app-shell .round-tabs button.active { color: #fff8eb; background: #8d5a3b; border-color: #a66c43; }
+.app-shell .round-tabs button.active small { color: #ead5c0; }
+.app-shell :is(.active-team div,.run-handicap,.photo-field,.toggle-row,.payout-places > div,.entry-totals span,.copy-summary span,.penalty-buttons button) { color: #d6c4af; background: #211812; border-color: #443225; }
+.app-shell .prediction-cutoff-control,
+.app-shell .announcer-times div { background: #2a1e13; border-color: #624528; }
+.app-shell .prediction-cutoff-control span,
+.app-shell .announcer-times strong { color: #e2b778; }
+.app-shell .prediction-cutoff-control small,
+.app-shell .announcer-times span { color: #b99a6f; }
+.app-shell .result-preview { background: #68432e; }
+.app-shell .search,
+.app-shell .report-search { color: #bca891; background: #120e0b; border-color: #49372b; }
+.app-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.app-shell select,
+.app-shell textarea,
+.app-shell .field input,
+.app-shell .field select,
+.app-shell .time-entry input,
+.app-shell .prediction-cutoff-control input,
+.app-shell .report-filter-grid input,
+.app-shell .report-filter-grid select {
+  color: #eadcc6;
+  background: #100c09;
+  border-color: #4e392c;
+}
+.app-shell input::placeholder,
+.app-shell textarea::placeholder { color: #806f5f; }
+.app-shell input:focus,
+.app-shell select:focus,
+.app-shell textarea:focus { border-color: #b47750; box-shadow: 0 0 0 3px rgba(166,108,67,.18); outline: none; }
+.app-shell select option { color: #eadcc6; background: #15100d; }
+.app-shell .row-actions button { color: #c5b29d; background: #241a14; border-color: #49372b; }
+.app-shell .notice { color: #e1bd84; background: #2b2013; border-color: #62492d; }
+.app-shell .form-error { color: #efb1aa; background: #351b18; border-color: #6f3c36; }
+.app-shell .tag.amber,
+.app-shell .tag.upcoming { color: #edc181; background: #3a2916; }
+.app-shell .tag.live,
+.app-shell .tag.complete,
+.app-shell .finalist-label { color: #bcd8bc; background: #1d3324; }
+.app-shell .tag.neutral,
+.app-shell .tag.ready { color: #cabaa8; background: #2b231d; }
+.app-shell .tag.no-time { color: #efaaa2; background: #3a1d1a; }
+.app-shell .report-action-bar { background: rgba(21,16,13,.96); border-color: var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.28); }
+.app-shell .report-catalog-list em { color: #c4b19c; background: #2b211a; }
+.app-shell ::-webkit-scrollbar { width: 10px; height: 10px; }
+.app-shell ::-webkit-scrollbar-track { background: #0d0a08; }
+.app-shell ::-webkit-scrollbar-thumb { background: #5d412f; border: 2px solid #0d0a08; border-radius: 10px; }
+
 @media (max-width: 1100px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .two-column, .run-desk-grid { grid-template-columns: 1fr; }
