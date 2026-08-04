@@ -418,6 +418,26 @@ describe("workspace compatibility", () => {
         correct: 2,
       });
     });
+
+    it("scores a Cowboys pick only when a run time is entered", () => {
+      const competition = event({ status: "Live" });
+      const data = workspace(competition, [
+        run({ id: "timed", status: "ready", rawTime: 8 }),
+        run({ id: "untimed", status: "complete", rawTime: null, drawPosition: 2 }),
+      ]);
+      data.spectators = [
+        { id: "fan-1", name: "Taylor Fan", phone: "5558675309", createdAt: now.toISOString() },
+      ];
+      data.spectatorPredictions = [
+        { id: "pick-1", spectatorId: "fan-1", eventId: competition.id, teamId: "timed", round: 1, choice: "cowboys", submittedAt: now.toISOString() },
+        { id: "pick-2", spectatorId: "fan-1", eventId: competition.id, teamId: "untimed", round: 1, choice: "cowboys", submittedAt: now.toISOString() },
+      ];
+
+      expect(spectatorLeaderboard(data, competition.id, 1)[0]).toMatchObject({
+        picks: 2,
+        correct: 1,
+      });
+    });
   });
 });
 

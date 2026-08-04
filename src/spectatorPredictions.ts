@@ -26,7 +26,7 @@ export function predictionIsOpen(team: Team, now = new Date()) {
 }
 
 export function predictionOutcome(team: Team): SpectatorChoice | null {
-  if (team.status === "complete" && team.rawTime !== null) return "cowboys";
+  if (team.rawTime !== null) return "cowboys";
   if (team.status === "no-time") return "steer";
   return null;
 }
