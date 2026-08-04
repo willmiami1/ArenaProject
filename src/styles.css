@@ -206,7 +206,7 @@ main { grid-column: 2; min-width: 0; }
 .search input { width: 100%; background: none; border: 0; outline: 0; font-size: 12px; }
 .data-table { width: 100%; }
 .table-row { min-height: 64px; display: grid; grid-template-columns: 1.5fr .7fr 1fr .8fr; align-items: center; gap: 18px; padding: 10px 20px; border-bottom: 1px solid #efefeb; font-size: 12px; }
-.contestant-table .table-row { min-width: 930px; grid-template-columns: 1.4fr .65fr .7fr .7fr 1fr .8fr .55fr; }
+.contestant-table .table-row { min-width: 780px; grid-template-columns: 1.5fr .75fr .75fr 1fr .9fr .55fr; }
 .table-row:last-child { border-bottom: 0; }
 .table-header { min-height: 38px; color: #939b97; background: #fafaf8; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .person { display: flex; align-items: center; gap: 10px; }

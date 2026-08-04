@@ -14,6 +14,7 @@ inside a Wix site.
 - Automatic partner draws, round-robin schedules, redraw history, and draw locks
 - Contestant roster with header/heeler positions
 - Downloadable contestant backups with validated JSON and delimited TXT database imports
+- Simplified contestant profiles without position, membership, or category fields in the roster UI
 - Team entry and randomized draw order
 - Run desk for times, penalties, no-times, and notes
 - Round 1 ride-in team entry directly from the Run Desk

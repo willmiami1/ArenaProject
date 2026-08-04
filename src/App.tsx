@@ -1268,7 +1268,7 @@ function Contestants({
   const [search, setSearch] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
   const filtered = contestants.filter((contestant) =>
-    `${contestant.name} ${contestant.hometown} ${contestant.role} ${contestant.headerHandicap} ${contestant.heelerHandicap}`.toLowerCase().includes(search.toLowerCase()),
+    `${contestant.name} ${contestant.hometown} ${contestant.headerHandicap} ${contestant.heelerHandicap}`.toLowerCase().includes(search.toLowerCase()),
   );
   const downloadBackup = () => {
     const backup = {
@@ -1346,7 +1346,7 @@ function Contestants({
           </div>
         </div>
         <div className="data-table contestant-table">
-          <div className="table-row table-header"><span>Contestant</span><span>Position</span><span>Header handicap</span><span>Heeler handicap</span><span>Hometown</span><span>Phone</span><span>Actions</span></div>
+          <div className="table-row table-header"><span>Contestant</span><span>Header handicap</span><span>Heeler handicap</span><span>Hometown</span><span>Phone</span><span>Actions</span></div>
           {filtered.map((contestant) => (
             <div className="table-row" key={contestant.id}>
               <span className="person">
@@ -1355,7 +1355,6 @@ function Contestants({
                   : <i>{initials(contestant.name)}</i>}
                 <strong>{contestant.name}</strong>
               </span>
-              <span><b className="tag neutral">{contestant.role}</b></span>
               <span>{contestant.headerHandicap}</span>
               <span>{contestant.heelerHandicap}</span>
               <span>{contestant.hometown || "—"}</span>
@@ -1657,15 +1656,12 @@ function ContestantForm({
   const [form, setForm] = useState({
     firstName: nameParts.slice(0, -1).join(" ") || nameParts[0] || "",
     lastName: nameParts.length > 1 ? nameParts[nameParts.length - 1] : "",
-    role: contestant?.role ?? "Both" as Contestant["role"],
     headerHandicap: contestant?.headerHandicap.toString() ?? "",
     heelerHandicap: contestant?.heelerHandicap.toString() ?? "",
     photo: contestant?.photo ?? "",
     phone: contestant?.phone ?? "",
     hometown: contestant?.hometown ?? "",
     email: contestant?.email ?? "",
-    membershipNumber: contestant?.membershipNumber ?? "",
-    categoryNumber: contestant?.categoryNumber ?? "",
   });
   const [photoError, setPhotoError] = useState("");
   const handlePhoto = async (file?: File) => {
@@ -1687,14 +1683,14 @@ function ContestantForm({
     onSubmit({
       id: contestant?.id ?? uid("rider"),
       name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
-      role: form.role,
+      role: contestant?.role ?? "Both",
       headerHandicap: Number(form.headerHandicap),
       heelerHandicap: Number(form.heelerHandicap),
       phone: form.phone,
       hometown: form.hometown,
       email: form.email,
-      membershipNumber: form.membershipNumber,
-      categoryNumber: form.categoryNumber,
+      membershipNumber: contestant?.membershipNumber ?? "",
+      categoryNumber: contestant?.categoryNumber ?? "",
       photo: form.photo,
     });
   };
@@ -1719,13 +1715,10 @@ function ContestantForm({
       <div className="form-grid">
         <Field label="First Name"><input required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} placeholder="First name" /></Field>
         <Field label="Last Name"><input required value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} placeholder="Last name" /></Field>
-        <Field label="Position"><select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Contestant["role"] })}><option>Header</option><option>Heeler</option><option>Both</option></select></Field>
         <Field label="Header Handicap"><input required type="number" min="0" step="0.5" value={form.headerHandicap} onChange={(e) => setForm({ ...form, headerHandicap: e.target.value })} placeholder="0" /></Field>
         <Field label="Heeler Handicap"><input required type="number" min="0" step="0.5" value={form.heelerHandicap} onChange={(e) => setForm({ ...form, heelerHandicap: e.target.value })} placeholder="0" /></Field>
         <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555-0123" /></Field>
         <Field label="Email"><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="rider@example.com" /></Field>
-        <Field label="Membership Number"><input value={form.membershipNumber} onChange={(e) => setForm({ ...form, membershipNumber: e.target.value })} placeholder="Membership #" /></Field>
-        <Field label="Category Number"><input value={form.categoryNumber} onChange={(e) => setForm({ ...form, categoryNumber: e.target.value })} placeholder="Category #" /></Field>
         <Field label="Hometown"><input value={form.hometown} onChange={(e) => setForm({ ...form, hometown: e.target.value })} placeholder="City, State" /></Field>
       </div>
       <FormActions onCancel={onCancel} submitLabel={contestant ? "Save changes" : "Add contestant"} />
