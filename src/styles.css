@@ -266,8 +266,8 @@ main { grid-column: 2; min-width: 0; }
 
 .run-desk-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(390px, 1fr); align-items: start; gap: 17px; margin-bottom: 17px; }
 .run-desk-round-controls { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.run-desk-round-actions { display: flex; flex: 0 0 auto; gap: 7px; margin-top: -7px; }
 .round-tabs { display: flex; gap: 7px; margin: -7px 0 17px; overflow-x: auto; padding-bottom: 2px; }
-.ride-in-button { flex: 0 0 auto; margin-top: -7px; }
 .round-tabs button { min-width: 112px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 13px; color: #65716a; background: #fff; border: 1px solid var(--line); border-radius: 8px; text-align: left; }
 .round-tabs button:hover { border-color: #a8bdae; }
 .round-tabs button.active { color: #fff; background: var(--green); border-color: var(--green); box-shadow: 0 5px 12px rgba(40,95,70,.16); }
@@ -313,6 +313,7 @@ main { grid-column: 2; min-width: 0; }
 .queue-row strong, .queue-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queue-row strong { font-size: 11px; }
 .queue-row small { margin-top: 3px; color: #929a95; font-size: 9px; text-transform: capitalize; }
+.edit-result-button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; color: var(--green); background: #eaf3ed; border: 1px solid #bbd4c4; border-radius: 6px; font-size: 9px; font-weight: 800; white-space: nowrap; }
 .queue-row small.cumulative-times { color: #4e6759; font-weight: 700; text-transform: none; }
 .queue-row.rolled small { color: #9a651a; font-weight: 800; }
 .roll-team-button { padding: 6px 9px; color: #8b641f; background: #fff9ed; border: 1px solid #e6cc9e; border-radius: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
@@ -575,8 +576,8 @@ main { grid-column: 2; min-width: 0; }
   .registration-list { min-width: 720px; }
   .run-desk-grid { grid-template-columns: minmax(0, 1fr); }
   .run-desk-round-controls { align-items: stretch; flex-direction: column; }
+  .run-desk-round-actions { align-self: flex-start; margin: -8px 0 17px; }
   .announcer-times { grid-template-columns: 1fr; }
-  .ride-in-button { align-self: flex-start; margin: -8px 0 17px; }
   .desk-entry { position: static; }
   .payout-panel { grid-template-columns: 1fr; }
   .reports-hero { align-items: flex-start; flex-direction: column; }

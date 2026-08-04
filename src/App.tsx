@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronLeft,
   CircleDollarSign,
   Clock3,
   Cloud,
@@ -2386,6 +2387,7 @@ function RunDesk({
   const [rawTime, setRawTime] = useState("");
   const [penalties, setPenalties] = useState("0");
   const [notes, setNotes] = useState("");
+  const isEditingResult = Boolean(selected && selected.status !== "ready");
   const rider = (id: string) => contestants.find((item) => item.id === id)?.name ?? "Unknown";
   const entryRuns = (team: Team) =>
     allEventTeams
@@ -2605,9 +2607,16 @@ function RunDesk({
               );
             })}
           </div>
-          {activeRound === 1 && (
-            <button className="secondary ride-in-button" onClick={() => setShowRideInForm((current) => !current)}><Plus size={16} /> Ride-in team</button>
-          )}
+          <div className="run-desk-round-actions">
+            {activeRound > 1 && (
+              <button className="secondary" onClick={() => changeRound(activeRound - 1)}>
+                <ChevronLeft size={16} /> Previous round
+              </button>
+            )}
+            {activeRound === 1 && (
+              <button className="secondary" onClick={() => setShowRideInForm((current) => !current)}><Plus size={16} /> Ride-in team</button>
+            )}
+          </div>
         </div>
       )}
       {rideInMessage && <div className="notice"><span>{rideInMessage}</span><button onClick={() => setRideInMessage("")}><X size={16} /></button></div>}
@@ -2630,7 +2639,7 @@ function RunDesk({
       )}
       <div className="run-desk-grid">
         <section className="panel desk-entry">
-          <div className="desk-title"><span className="stat-icon"><Gauge size={21} /></span><div><span>Round {activeRound} · Now roping</span><h3>{selected ? `Draw #${selected.drawPosition}` : "Round complete"}</h3></div></div>
+          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>Round {activeRound} · {isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Draw #${selected.drawPosition}` : "Round complete"}</h3></div></div>
           {selected ? (
             <>
               <div className="active-team">
@@ -2656,7 +2665,7 @@ function RunDesk({
               </div>
               <Field label="Run notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional note" /></Field>
               <div className={`result-preview ${rawTime && event && Number(rawTime) + Number(penalties) > event.timeLimit ? "over-limit" : ""}`}><span>Official time {event ? `· ${event.timeLimit}s limit` : ""}</span><strong>{rawTime ? (Number(rawTime) + Number(penalties)).toFixed(2) : "—"}</strong></div>
-              <div className="desk-actions"><button className="no-time-button" onClick={() => saveRun("no-time")}>Mark no time</button><button className="primary" disabled={!rawTime || Number(rawTime) <= 0} onClick={() => saveRun("complete")}><Check size={18} /> Save result</button></div>
+              <div className="desk-actions"><button className="no-time-button" onClick={() => saveRun("no-time")}>Mark no time</button><button className="primary" disabled={!rawTime || Number(rawTime) <= 0} onClick={() => saveRun("complete")}><Check size={18} /> {isEditingResult ? "Save corrected time" : "Save result"}</button></div>
             </>
           ) : <EmptyState text="Every team in this draw has a result." />}
         </section>
@@ -2673,6 +2682,11 @@ function RunDesk({
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>
                     {team.rolled ? "Unroll" : "Roll"}
+                  </button>
+                )}
+                {team.status !== "ready" && (
+                  <button className="edit-result-button" onClick={() => chooseTeam(team)}>
+                    <Pencil size={13} /> Edit time
                   </button>
                 )}
                 <span className={`status-dot ${team.status}`} />
