@@ -319,7 +319,9 @@ function SpectatorPage({
             </fieldset>
           )}
           {!selectedRun && <p className="public-empty">Waiting for the next cowboy team.</p>}
-          <button className="public-button" disabled={busy || !teamId}>{busy ? "Saving…" : "Lock in free pick"}</button>
+          <button className="public-button" disabled={busy || !teamId}>
+            {busy ? "Saving…" : choice === "cowboys" ? "Choose Cowboys" : "Choose Steer"}
+          </button>
           {message && <p className="public-form-message" role="status">{message}</p>}
         </form>
         <div className="public-spectator-leaders">
