@@ -325,8 +325,6 @@ function SpectatorPage({
                   </span>
                 </span>
                 <span>Cowboy team</span>
-                <strong>Cowboys catch</strong>
-                <small>Cowboys catch</small>
               </label>
               <label className={`public-pick-card steer${choice === "steer" ? " selected" : ""}`}>
                 <input
