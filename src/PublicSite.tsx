@@ -78,6 +78,9 @@ const formatTime = (time: string) => {
   });
 };
 
+const initials = (name: string) =>
+  name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
 function Status({ value }: { value: string }) {
   const label =
     value === "Upcoming" ? "Future" : value === "Complete" ? "Past" : value;
@@ -305,9 +308,28 @@ function SpectatorPage({
                   checked={choice === "cowboys"}
                   onChange={() => setChoice("cowboys")}
                 />
-                <img src="./team-roping-hero.png" alt="" />
+                <span className="public-cowboy-roster">
+                  <span className="public-cowboy-rider">
+                    <small>Header</small>
+                    <span className="public-cowboy-avatar">
+                      {selectedRun.headerPhoto
+                        ? <img src={selectedRun.headerPhoto} alt={`${selectedRun.headerName} profile`} />
+                        : <span aria-hidden="true">{initials(selectedRun.headerName)}</span>}
+                    </span>
+                    <strong>{selectedRun.headerName}</strong>
+                  </span>
+                  <span className="public-cowboy-rider">
+                    <small>Heeler</small>
+                    <span className="public-cowboy-avatar">
+                      {selectedRun.heelerPhoto
+                        ? <img src={selectedRun.heelerPhoto} alt={`${selectedRun.heelerName} profile`} />
+                        : <span aria-hidden="true">{initials(selectedRun.heelerName)}</span>}
+                    </span>
+                    <strong>{selectedRun.heelerName}</strong>
+                  </span>
+                </span>
                 <span>Cowboy team</span>
-                <strong>{selectedRun.headerName} &amp; {selectedRun.heelerName}</strong>
+                <strong>Cowboys catch</strong>
                 <small>Cowboys catch</small>
               </label>
               <label className={`public-pick-card steer${choice === "steer" ? " selected" : ""}`}>

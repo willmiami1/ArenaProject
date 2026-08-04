@@ -75,6 +75,8 @@ export interface PublicPredictionRun {
   drawPosition: number;
   headerName: string;
   heelerName: string;
+  headerPhoto: string;
+  heelerPhoto: string;
   steerNumber: string;
   closesAt?: string;
   open: boolean;
@@ -131,6 +133,9 @@ export function projectPublicArenaData(
   const competitions = data.events.map((event): PublicCompetition => {
     const contestantNames = new Map(
       data.contestants.map((contestant) => [contestant.id, contestant.name]),
+    );
+    const contestantPhotos = new Map(
+      data.contestants.map((contestant) => [contestant.id, contestant.photo ?? ""]),
     );
     const fixedEntries = data.teams.filter(
       (team) =>
@@ -189,6 +194,8 @@ export function projectPublicArenaData(
           drawPosition: team.drawPosition,
           headerName: contestantNames.get(team.headerId) ?? "Unknown",
           heelerName: contestantNames.get(team.heelerId) ?? "Unknown",
+          headerPhoto: contestantPhotos.get(team.headerId) ?? "",
+          heelerPhoto: contestantPhotos.get(team.heelerId) ?? "",
           steerNumber: team.steerNumber ?? "",
           closesAt: team.predictionClosesAt,
           open: predictionIsOpen(team, today),

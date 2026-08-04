@@ -420,6 +420,8 @@ describe("workspace compatibility", () => {
         .competitions[0].predictionRuns[0]).toMatchObject({
           id: currentRun.id,
           open: false,
+          headerPhoto: "data:image/png;base64,secret",
+          heelerPhoto: "",
         });
     });
 
