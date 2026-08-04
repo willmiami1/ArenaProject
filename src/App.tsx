@@ -40,6 +40,8 @@ import {
   X,
 } from "lucide-react";
 import { normalizeData, useArenaData } from "./useArenaData";
+import { PublicSite } from "./PublicSite";
+import { parsePublicRoute } from "./publicData";
 import { ReportsModule } from "./ReportsModule";
 import {
   authenticateContestant,
@@ -106,7 +108,7 @@ const teamQualifiedTotal = (
     )
     .reduce((total, run) => total + run.rawTime! + run.penalties, 0);
 
-function App() {
+function StaffApp() {
   const [data, setData, persistenceStatus] = useArenaData();
   const [view, setView] = useState<View>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -117,6 +119,7 @@ function App() {
   if (displayParams.get("portal") === "contestant") {
     return <ContestantPortal />;
   }
+
   if (displayParams.get("display") === "leaderboard") {
     return (
       <LedLeaderboard
@@ -524,12 +527,22 @@ function App() {
                 }))
               }
               onCommitDraw={(eventId, eventTeams) =>
-                setData((current) => ({
-                  ...current,
-                  teams: [
-                    ...current.teams.filter((team) => team.eventId !== eventId),
-                    ...eventTeams,
-                  ],
+                setData((current) => {
+                  const drawnIds = new Set(eventTeams.map((team) => team.id));
+                  const pendingOnlineTeams = current.teams.filter(
+                    (team) =>
+                      team.eventId === eventId &&
+                      team.source === "online" &&
+                      team.paid === false &&
+                      !drawnIds.has(team.id),
+                  );
+                  return {
+                    ...current,
+                    teams: [
+                      ...current.teams.filter((team) => team.eventId !== eventId),
+                      ...pendingOnlineTeams,
+                      ...eventTeams,
+                    ],
                   events: current.events.map((event) =>
                     event.id === eventId
                       ? {
@@ -544,8 +557,9 @@ function App() {
                           ],
                         }
                       : event,
-                  ),
-                }))
+                    ),
+                  };
+                })
               }
               onUpdateEvent={(updatedEvent) =>
                 setData((current) => ({
@@ -2823,6 +2837,20 @@ function resizeProfilePhoto(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
+}
+
+function App() {
+  const route = parsePublicRoute(window.location.search);
+  if (
+    route.kind === "home" ||
+    route.kind === "events" ||
+    route.kind === "event" ||
+    route.kind === "competition" ||
+    route.kind === "signup"
+  ) {
+    return <PublicSite route={route} />;
+  }
+  return <StaffApp />;
 }
 
 export default App;

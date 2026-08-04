@@ -1,4 +1,5 @@
 import { calculatePayouts, calculatePurse, competitionName } from "./competition";
+import { aggregateStandings } from "./standings";
 import type {
   ArenaData,
   ArenaEvent,
@@ -224,54 +225,6 @@ function eventFinancials(
     totalPayouts,
     remaining,
   };
-}
-
-interface Standing {
-  key: string;
-  headerId: string;
-  heelerId: string;
-  teams: Team[];
-  rounds: number;
-  total: number;
-  average: number;
-  qualified: boolean;
-  rank: number;
-}
-
-function aggregateStandings(event: ArenaEvent, allTeams: Team[]): Standing[] {
-  const grouped = new Map<string, Team[]>();
-  allTeams
-    .filter((team) => team.eventId === event.id && !team.scratched)
-    .forEach((team) => {
-      const key = `${team.headerId}|${team.heelerId}|${team.headerEntryNumber ?? 1}|${team.heelerEntryNumber ?? 1}`;
-      grouped.set(key, [...(grouped.get(key) ?? []), team]);
-    });
-
-  const standings = [...grouped.entries()].map(([key, teams]) => {
-    const completed = teams.filter(
-      (team) => team.status === "complete" && finalTime(team) !== null,
-    );
-    const total = completed.reduce((sum, team) => sum + (finalTime(team) ?? 0), 0);
-    return {
-      key,
-      headerId: teams[0].headerId,
-      heelerId: teams[0].heelerId,
-      teams,
-      rounds: completed.length,
-      total,
-      average: completed.length ? total / completed.length : 0,
-      qualified: completed.length > 0 && !teams.some((team) => team.status === "no-time"),
-      rank: 0,
-    };
-  });
-
-  return standings
-    .sort((a, b) => {
-      if (a.qualified !== b.qualified) return a.qualified ? -1 : 1;
-      if (a.rounds !== b.rounds) return b.rounds - a.rounds;
-      return a.total - b.total;
-    })
-    .map((standing, index) => ({ ...standing, rank: index + 1 }));
 }
 
 function scopedData(data: ArenaData, definition: ReportDefinition, filters: ReportFilters) {

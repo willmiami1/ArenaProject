@@ -83,6 +83,9 @@ export interface Team {
   arenaPosition?: string;
   barrierPenalty?: boolean;
   paid?: boolean;
+  source?: "online" | "staff";
+  submissionId?: string;
+  submittedAt?: string;
 }
 
 export interface DrawSnapshot {
@@ -102,6 +105,9 @@ export interface EventRegistration {
   status: EntryStatus;
   notes: string;
   paid?: boolean;
+  source?: "online" | "staff";
+  submissionId?: string;
+  submittedAt?: string;
 }
 
 export interface ArenaData {
@@ -112,4 +118,8 @@ export interface ArenaData {
   teams: Team[];
   registrations: EventRegistration[];
   activeEventId: string;
+  revision?: number;
+  staffRevision?: number;
+  onlineRevision?: number;
+  loadedAt?: string;
 }

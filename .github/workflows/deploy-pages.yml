@@ -3,7 +3,7 @@ name: Deploy preview to GitHub Pages
 on:
   push:
     branches:
-      - willmiami1-build-team-roping-arena
+      - willmiami1-public-arena-website
   workflow_dispatch:
 
 permissions:

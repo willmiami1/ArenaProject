@@ -332,7 +332,13 @@ function pickAndDrawTeams(
   contestants: Contestant[],
   registrations: EventRegistration[],
 ) {
-  const baseTeams = fixedTeams.filter((team) => team.eventId === event.id && !team.generated && !team.scratched);
+  const baseTeams = fixedTeams.filter(
+    (team) =>
+      team.eventId === event.id &&
+      !team.generated &&
+      !team.scratched &&
+      team.paid !== false,
+  );
   const activeDrawEntries = registrations.filter(
     (registration) =>
       registration.eventId === event.id &&
@@ -577,7 +583,11 @@ export function generateCompetitionDraw(
     return roundRobinTeams(event, contestants, registrations);
   }
   const baseTeams = teams.filter(
-    (team) => team.eventId === event.id && !team.generated && !team.scratched,
+    (team) =>
+      team.eventId === event.id &&
+      !team.generated &&
+      !team.scratched &&
+      team.paid !== false,
   );
   return shuffle(baseTeams).map((team, index) => ({
     ...team,

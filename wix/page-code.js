@@ -1,8 +1,11 @@
 import {
   authenticateContestant,
+  loadPublicArenaData,
+  loadSignupOptions,
   loadArenaData,
   saveArenaData,
   setContestantPin,
+  submitOnlineSignup,
 } from "backend/arena-data.web";
 
 const EMBED_ELEMENT_ID = "#arenaCommandEmbed";
@@ -21,6 +24,12 @@ $w.onReady(() => {
         data = await authenticateContestant(message.data);
       } else if (message.action === "setContestantPin") {
         data = await setContestantPin(message.data);
+      } else if (message.action === "loadPublicArenaData") {
+        data = await loadPublicArenaData();
+      } else if (message.action === "loadSignupOptions") {
+        data = await loadSignupOptions(message.data);
+      } else if (message.action === "submitOnlineSignup") {
+        data = await submitOnlineSignup(message.data);
       } else {
         throw new Error("Unsupported Arena Command action.");
       }

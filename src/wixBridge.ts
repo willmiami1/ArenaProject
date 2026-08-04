@@ -6,8 +6,17 @@ import type {
   EventRegistration,
   Team,
 } from "./types";
+import type { PublicArenaData } from "./publicData";
+import type { SignupRequest } from "./onlineSignup";
 
-type WixAction = "load" | "save" | "authenticateContestant" | "setContestantPin";
+type WixAction =
+  | "load"
+  | "save"
+  | "authenticateContestant"
+  | "setContestantPin"
+  | "loadPublicArenaData"
+  | "loadSignupOptions"
+  | "submitOnlineSignup";
 
 export interface ContestantPortalData {
   contestant: Contestant;
@@ -16,6 +25,18 @@ export interface ContestantPortalData {
   events: ArenaEvent[];
   registrations: EventRegistration[];
   teams: Team[];
+}
+
+export interface SignupOptions {
+  contestant: Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap">;
+  partners: Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap">[];
+}
+
+export interface SignupConfirmation {
+  submissionId: string;
+  competitionId: string;
+  summary: string;
+  existing: boolean;
 }
 
 interface WixResponse<T> {
@@ -36,7 +57,10 @@ function requestWix<T>(
 ): Promise<T | null> {
   return new Promise((resolve, reject) => {
     const sensitiveAction =
-      action === "authenticateContestant" || action === "setContestantPin";
+      action === "authenticateContestant" ||
+      action === "setContestantPin" ||
+      action === "loadSignupOptions" ||
+      action === "submitOnlineSignup";
     let targetOrigin = "*";
     if (sensitiveAction) {
       const configuredOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
@@ -60,6 +84,7 @@ function requestWix<T>(
     function handleMessage(event: MessageEvent<WixResponse<T>>) {
       if (
         event.source !== window.parent ||
+        (sensitiveAction && event.origin !== targetOrigin) ||
         event.data?.source !== "arena-wix-host" ||
         event.data.requestId !== requestId
       ) {
@@ -92,6 +117,32 @@ export function requestWixData(
   data?: ArenaData,
 ) {
   return requestWix<ArenaData>(action, data);
+}
+
+export function loadPublicArenaData() {
+  return requestWix<PublicArenaData>("loadPublicArenaData");
+}
+
+export function loadSignupOptions(
+  competitionId: string,
+  email: string,
+  pin: string,
+) {
+  return requestWix<SignupOptions>("loadSignupOptions", {
+    competitionId,
+    email,
+    pin,
+  });
+}
+
+export function submitOnlineSignup(
+  credentials: { email: string; pin: string },
+  signup: SignupRequest,
+) {
+  return requestWix<SignupConfirmation>("submitOnlineSignup", {
+    ...credentials,
+    ...signup,
+  });
 }
 
 export function authenticateContestant(email: string, pin: string) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { seedData } from "./data";
 import {
   defaultCompetitionSettings,
@@ -74,6 +74,7 @@ export function normalizeData(parsed: ArenaData): ArenaData {
 
   return {
     ...parsed,
+    revision: parsed.revision ?? 0,
     participantDatabaseVersion: PARTICIPANT_DATABASE_VERSION,
     meets,
     events,
@@ -126,6 +127,7 @@ export function useArenaData() {
   const [status, setStatus] = useState<PersistenceStatus>("loading");
   const [ready, setReady] = useState(false);
   const [wixConnected, setWixConnected] = useState(false);
+  const skipNextSave = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,7 +141,10 @@ export function useArenaData() {
       try {
         const saved = await requestWixData("load");
         if (cancelled) return;
-        if (saved) setData(normalizeData(saved));
+        if (saved) {
+          skipNextSave.current = true;
+          setData(normalizeData(saved));
+        }
         setWixConnected(true);
         setStatus(saved ? "saved" : "saving");
       } catch (error) {
@@ -161,6 +166,10 @@ export function useArenaData() {
     if (!ready) return;
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
     if (!wixConnected) {
       if (status !== "error") setStatus("local");
       return;
@@ -169,7 +178,17 @@ export function useArenaData() {
     setStatus("saving");
     const timeout = window.setTimeout(async () => {
       try {
-        await requestWixData("save", data);
+        const submitted = data;
+        const saved = await requestWixData("save", submitted);
+        if (saved && saved.revision !== submitted.revision) {
+          setData((current) => {
+            if (current !== submitted) {
+              return { ...current, revision: saved.revision };
+            }
+            skipNextSave.current = true;
+            return normalizeData(saved);
+          });
+        }
         setStatus("saved");
       } catch (error) {
         console.error("Could not save arena data to Wix.", error);

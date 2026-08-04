@@ -1,7 +1,7 @@
-# Arena Command
+# Destiny Ranch Arena
 
-A responsive team roping arena manager designed to run as an embedded web app
-inside a Wix site.
+A public team roping event website and responsive Arena Command staff manager
+designed to run as an embedded web app inside a Wix site.
 
 ## Features
 
@@ -25,6 +25,7 @@ inside a Wix site.
 - Permanent sidebar LED Screen shortcut for the active roping and latest generated round
 - Full workspace backup and restore for events, teams, registrations, results, and contestants
 - Wix-backed contestant portal with email and four-digit PIN login for personal entries, draws, teams, and results
+- Public event calendar, competition pages, publication-gated official results, and authenticated online entry
 - Configurable Short Go limits that advance only the fastest qualified teams
 - Final-round running orders listed from slowest qualifier to fastest qualifier
 - Live standings, round-robin points, and event overview
@@ -51,18 +52,30 @@ Run `npm run build`, host the generated `dist` folder on any static web host,
 then add it to Wix with **Embed Code > Embed a Site** using the hosted URL.
 The app is responsive and uses relative asset paths for embedded hosting.
 
+The default URL opens the public home page. Public routes use `?page=events`,
+`?page=event&id=...`, `?page=competition&id=...`, and
+`?page=signup&id=...`. Staff use `?app=command`; the existing
+`?portal=contestant` and `?display=leaderboard` routes remain available.
+
 ### Permanent Wix Data storage
 
 1. Enable Velo developer mode in Wix.
 2. Create these Wix Data collections: `ArenaMeets`, `ArenaCompetitions`,
    `ArenaContestants`, `ArenaTeams`, `ArenaRegistrations`, `ArenaSettings`, and
    `ArenaContestantCredentials`.
-3. Add `appId` and `payload` text fields to the first five collections. Add
+3. Add `appId` and `payload` text fields to the first five collections. Online
+   team and registration payloads may also contain optional `source`,
+   `submissionId`, and `submittedAt` properties. Add
    `activeEventId` (text), `participantDatabaseVersion` (number), and `updatedAt`
-   (date/time) to `ArenaSettings`.
-4. Set every collection's permissions to **Admin only**.
+   (date/time) to `ArenaSettings`, plus `value` (number, default `0`) for the
+   separate staff and online revision records created by the backend.
+4. Set every collection's permissions to **Admin only**. Public access is
+   provided only by the backend's purpose-built `Permissions.Anyone` methods;
+   visitors never query collections directly.
 5. Copy `wix/backend/arena-data.web.js` into the Wix backend and copy
-   `wix/page-code.js` into the page containing the app.
+   `wix/page-code.js` into the page containing the app. The backend exposes
+   `loadPublicArenaData`, `loadSignupOptions`, and `submitOnlineSignup`; keep
+   their checked-in permissions unchanged.
 6. Give the Wix HTML embed element the ID `arenaCommandEmbed` and set its URL
    to the hosted Arena Command app.
 7. Add `contestantId`, `emailNormalized`, `pinSalt`, `pinHash`,
@@ -79,3 +92,9 @@ The app is responsive and uses relative asset paths for embedded hosting.
 When opened by a Wix administrator, the app shows **Saved to Wix** and
 synchronizes events, contestants, registrations, teams, draws, and results.
 Outside Wix it shows **Local preview** and uses browser storage.
+
+Online entry is limited to existing contestant credentials. PINs are verified
+for both option loading and submission and are never stored in browser storage.
+Online teams and registrations start unpaid and do not enter generated draws
+until staff confirms payment. Revision-aware staff saves preserve online
+records submitted after the staff workspace was loaded.
