@@ -35,6 +35,8 @@ jobs:
         run: npm ci
 
       - name: Build
+        env:
+          VITE_WIX_HOST_ORIGIN: ${{ vars.VITE_WIX_HOST_ORIGIN }}
         run: npm run build
 
       - name: Configure Pages

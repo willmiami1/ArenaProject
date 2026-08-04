@@ -1,6 +1,8 @@
 import {
+  authenticateContestant,
   loadArenaData,
   saveArenaData,
+  setContestantPin,
 } from "backend/arena-data.web";
 
 const EMBED_ELEMENT_ID = "#arenaCommandEmbed";
@@ -11,10 +13,17 @@ $w.onReady(() => {
     if (message?.source !== "arena-command-app" || !message.requestId) return;
 
     try {
-      const data =
-        message.action === "load"
-          ? await loadArenaData()
-          : await saveArenaData(message.data);
+      let data;
+      if (message.action === "load") data = await loadArenaData();
+      else if (message.action === "save") {
+        data = await saveArenaData(message.data);
+      } else if (message.action === "authenticateContestant") {
+        data = await authenticateContestant(message.data);
+      } else if (message.action === "setContestantPin") {
+        data = await setContestantPin(message.data);
+      } else {
+        throw new Error("Unsupported Arena Command action.");
+      }
       $w(EMBED_ELEMENT_ID).postMessage({
         source: "arena-wix-host",
         requestId: message.requestId,

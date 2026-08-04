@@ -17,6 +17,8 @@ import {
   GitFork,
   Handshake,
   LayoutDashboard,
+  LogIn,
+  LogOut,
   ListOrdered,
   Lock,
   MapPin,
@@ -39,6 +41,12 @@ import {
 } from "lucide-react";
 import { normalizeData, useArenaData } from "./useArenaData";
 import { ReportsModule } from "./ReportsModule";
+import {
+  authenticateContestant,
+  isWixEmbed,
+  setContestantPin,
+  type ContestantPortalData,
+} from "./wixBridge";
 import {
   calculatePayouts,
   calculatePurse,
@@ -106,6 +114,9 @@ function App() {
   const activeEvent =
     data.events.find((event) => event.id === data.activeEventId) ?? data.events[0];
   const displayParams = new URLSearchParams(window.location.search);
+  if (displayParams.get("portal") === "contestant") {
+    return <ContestantPortal />;
+  }
   if (displayParams.get("display") === "leaderboard") {
     return (
       <LedLeaderboard
@@ -138,6 +149,12 @@ function App() {
     url.searchParams.set("display", "leaderboard");
     url.searchParams.set("event", activeEvent.id);
     url.searchParams.set("round", String(latestRound));
+    window.location.assign(url.toString());
+  };
+  const openContestantPortal = () => {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("portal", "contestant");
     window.location.assign(url.toString());
   };
   const downloadWorkspace = () => {
@@ -223,6 +240,10 @@ function App() {
           <button disabled={!activeEvent} onClick={openActiveLedScreen}>
             <MonitorUp size={19} />
             LED Screen
+          </button>
+          <button onClick={openContestantPortal}>
+            <LogIn size={19} />
+            Contestant Login
           </button>
         </nav>
 
@@ -602,6 +623,120 @@ function App() {
         </div>
       </main>
       {mobileOpen && <button className="scrim" onClick={() => setMobileOpen(false)} aria-label="Close menu" />}
+    </div>
+  );
+}
+
+function ContestantPortal() {
+  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
+  const [portalData, setPortalData] = useState<ContestantPortalData | null>(null);
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const rider = (id: string) =>
+    (portalData?.contestant.id === id
+      ? portalData.contestant.name
+      : portalData?.contestants.find((contestant) => contestant.id === id)
+          ?.name) ??
+    "Unknown";
+  const exitPortal = () => {
+    const url = new URL(window.location.href);
+    url.search = "";
+    window.location.assign(url.toString());
+  };
+  const login = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!isWixEmbed()) {
+      setMessage("Contestant login is available on the published Wix site.");
+      return;
+    }
+    setLoading(true);
+    setMessage("");
+    try {
+      const result = await authenticateContestant(email, pin);
+      if (!result) throw new Error("Contestant login did not return a profile.");
+      setPortalData(result);
+      setPin("");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Contestant login failed.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!portalData) {
+    return (
+      <div className="contestant-portal login-page">
+        <div className="portal-login-card">
+          <img src="./destiny-ranch-arena-logo.png" alt="Destiny Ranch Arena" />
+          <span className="eyebrow">Contestant portal</span>
+          <h1>Roper login</h1>
+          <p>Use the email and four-digit PIN configured by the event producer.</p>
+          <form onSubmit={login}>
+            <Field label="Email"><input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="rider@example.com" /></Field>
+            <Field label="4-digit PIN"><input required type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="current-password" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="••••" /></Field>
+            {message && <div className="portal-error">{message}</div>}
+            <button className="primary portal-login-button" disabled={loading}>{loading ? "Signing in..." : <><LogIn size={18} /> Sign in</>}</button>
+          </form>
+          <button className="portal-back" onClick={exitPortal}>Back to Arena Command</button>
+        </div>
+      </div>
+    );
+  }
+
+  const eventName = (eventId: string) =>
+    portalData.events.find((event) => event.id === eventId)?.name ??
+    "Competition";
+  const sortedTeams = [...portalData.teams].sort(
+    (a, b) =>
+      eventName(a.eventId).localeCompare(eventName(b.eventId)) ||
+      a.round - b.round ||
+      a.drawPosition - b.drawPosition,
+  );
+  return (
+    <div className="contestant-portal">
+      <header className="portal-header">
+        <div><span className="eyebrow">Contestant portal</span><h1>{portalData.contestant.name}</h1><p>{portalData.contestant.email}</p></div>
+        <button className="secondary" onClick={() => setPortalData(null)}><LogOut size={17} /> Sign out</button>
+      </header>
+      <main className="portal-content">
+        <section className="portal-summary">
+          <div><span>Competitions</span><strong>{portalData.events.length}</strong></div>
+          <div><span>Entries</span><strong>{portalData.registrations.reduce((total, entry) => total + entry.entries, 0) + portalData.teams.filter((team) => team.round === 1 && !team.generated).length}</strong></div>
+          <div><span>Team runs</span><strong>{portalData.teams.length}</strong></div>
+          <div><span>Qualified results</span><strong>{portalData.teams.filter((team) => team.status === "complete").length}</strong></div>
+        </section>
+        <section className="panel portal-panel">
+          <PanelHeading title="My draw and results" subtitle="Read-only competition details" />
+          <div className="portal-team-list">
+            {sortedTeams.map((team) => (
+              <div className="portal-team-row" key={team.id}>
+                <div><strong>{eventName(team.eventId)}</strong><small>Round {team.round} · Draw #{team.drawPosition}</small></div>
+                <div><span>Header</span><strong>{rider(team.headerId)}</strong></div>
+                <div><span>Heeler</span><strong>{rider(team.heelerId)}</strong></div>
+                <div className="portal-result"><span>Result</span><strong>{team.status === "complete" && team.rawTime !== null ? `${(team.rawTime + team.penalties).toFixed(2)}s` : team.status === "no-time" ? "No time" : team.rolled ? "Rolled" : "Ready"}</strong></div>
+              </div>
+            ))}
+            {!sortedTeams.length && <EmptyState text="No team entries are available yet." />}
+          </div>
+        </section>
+        <section className="panel portal-panel">
+          <PanelHeading title="My draw-pot entries" subtitle="Registration status by competition" />
+          <div className="portal-registration-list">
+            {portalData.registrations.map((registration) => (
+              <div className="portal-registration-row" key={registration.id}>
+                <strong>{eventName(registration.eventId)}</strong>
+                <span>{registration.role}</span>
+                <span>{registration.entries} entr{registration.entries === 1 ? "y" : "ies"}</span>
+                <span className={`tag ${registration.status === "entered" ? "complete" : "neutral"}`}>{registration.status}</span>
+              </div>
+            ))}
+            {!portalData.registrations.length && <EmptyState text="No draw-pot registrations are available." />}
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
@@ -1664,6 +1799,8 @@ function ContestantForm({
     email: contestant?.email ?? "",
   });
   const [photoError, setPhotoError] = useState("");
+  const [loginPin, setLoginPin] = useState("");
+  const [loginError, setLoginError] = useState("");
   const handlePhoto = async (file?: File) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -1678,10 +1815,11 @@ function ContestantForm({
       setPhotoError("The photo could not be loaded.");
     }
   };
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
-    onSubmit({
-      id: contestant?.id ?? uid("rider"),
+    const contestantId = contestant?.id ?? uid("rider");
+    const updatedContestant: Contestant = {
+      id: contestantId,
       name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
       role: contestant?.role ?? "Both",
       headerHandicap: Number(form.headerHandicap),
@@ -1692,7 +1830,30 @@ function ContestantForm({
       membershipNumber: contestant?.membershipNumber ?? "",
       categoryNumber: contestant?.categoryNumber ?? "",
       photo: form.photo,
-    });
+    };
+    if (loginPin) {
+      if (!form.email.trim()) {
+        setLoginError("Enter an email before configuring a contestant PIN.");
+        return;
+      }
+      if (!/^\d{4}$/.test(loginPin)) {
+        setLoginError("The contestant PIN must contain exactly four digits.");
+        return;
+      }
+      if (!isWixEmbed()) {
+        setLoginError("PIN setup is available from the app embedded in Wix.");
+        return;
+      }
+      try {
+        await setContestantPin(updatedContestant, loginPin);
+      } catch (error) {
+        setLoginError(
+          error instanceof Error ? error.message : "The PIN could not be saved.",
+        );
+        return;
+      }
+    }
+    onSubmit(updatedContestant);
   };
   return (
     <form className="form-panel" onSubmit={submit}>
@@ -1719,8 +1880,10 @@ function ContestantForm({
         <Field label="Heeler Handicap"><input required type="number" min="0" step="0.5" value={form.heelerHandicap} onChange={(e) => setForm({ ...form, heelerHandicap: e.target.value })} placeholder="0" /></Field>
         <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555-0123" /></Field>
         <Field label="Email"><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="rider@example.com" /></Field>
+        <Field label="Contestant Login PIN"><input type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} value={loginPin} onChange={(e) => { setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setLoginError(""); }} placeholder={contestant ? "Enter 4 digits to reset" : "Optional 4-digit PIN"} /></Field>
         <Field label="Hometown"><input value={form.hometown} onChange={(e) => setForm({ ...form, hometown: e.target.value })} placeholder="City, State" /></Field>
       </div>
+      {loginError && <div className="form-error">{loginError}</div>}
       <FormActions onCancel={onCancel} submitLabel={contestant ? "Save changes" : "Add contestant"} />
     </form>
   );

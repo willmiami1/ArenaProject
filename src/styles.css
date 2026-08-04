@@ -226,6 +226,7 @@ main { grid-column: 2; min-width: 0; }
 .photo-button input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .remove-photo { margin-left: 10px; padding: 5px; color: #a14a41; background: none; border: 0; font-size: 11px; font-weight: 700; }
 .field-error { display: block; margin-top: 6px; color: #a14a41; font-size: 10px; }
+.form-error { margin: 12px 0; padding: 10px 12px; color: #91453f; background: #f9e9e7; border: 1px solid #ecc9c5; border-radius: 7px; font-size: 10px; font-weight: 700; }
 
 .draw-list { padding: 4px 20px; }
 .draw-row { min-height: 73px; display: grid; grid-template-columns: 50px 1fr 25px 1fr auto 120px; align-items: center; gap: 15px; border-bottom: 1px solid #efefeb; }
@@ -475,6 +476,36 @@ main { grid-column: 2; min-width: 0; }
 .led-rolled { padding: .6vh .7vw; color: #5c3a0d; background: #ffe0a5; border-radius: 6px; font-size: clamp(10px, 1vw, 18px); font-weight: 900; text-transform: uppercase; }
 .led-location { margin-left: auto; font-size: clamp(10px, 1vw, 18px); font-weight: 800; text-transform: uppercase; white-space: nowrap; }
 
+.contestant-portal { min-height: 100vh; color: var(--ink); background: #f2f4f1; }
+.contestant-portal.login-page { display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 50% 0, #315943, #13231b 52%, #08100c); }
+.portal-login-card { width: min(430px, 100%); padding: 34px; background: #fff; border: 1px solid #dfe5df; border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.3); }
+.portal-login-card > img { width: 118px; height: 78px; display: block; margin: 0 auto 22px; object-fit: contain; background: #080b09; border-radius: 8px; }
+.portal-login-card h1 { margin: 4px 0 8px; font-family: "Manrope", sans-serif; font-size: 30px; }
+.portal-login-card > p { margin: 0 0 22px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.portal-login-card .field { margin-bottom: 14px; }
+.portal-login-card input { width: 100%; }
+.portal-login-button { width: 100%; margin-top: 5px; }
+.portal-error { margin-bottom: 12px; padding: 10px; color: #91453f; background: #f9e9e7; border-radius: 7px; font-size: 10px; font-weight: 700; }
+.portal-back { width: 100%; margin-top: 14px; color: var(--muted); background: none; border: 0; font-size: 10px; }
+.portal-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px clamp(20px, 5vw, 70px); color: #fff; background: var(--sidebar); }
+.portal-header h1 { margin: 2px 0; font-family: "Manrope", sans-serif; font-size: clamp(22px, 3vw, 36px); }
+.portal-header p { margin: 0; color: #aab8b0; font-size: 11px; }
+.portal-content { max-width: 1300px; margin: auto; padding: 28px clamp(16px, 4vw, 48px) 50px; }
+.portal-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+.portal-summary div { padding: 18px; background: #fff; border: 1px solid var(--line); border-radius: 10px; }
+.portal-summary span, .portal-summary strong { display: block; }
+.portal-summary span { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.portal-summary strong { margin-top: 6px; color: var(--green); font-family: "Manrope", sans-serif; font-size: 26px; }
+.portal-panel { margin-bottom: 18px; overflow: hidden; }
+.portal-team-row { min-height: 68px; display: grid; grid-template-columns: 1.2fr 1fr 1fr .65fr; align-items: center; gap: 14px; padding: 10px 20px; border-bottom: 1px solid #ecefeb; }
+.portal-team-row:last-child, .portal-registration-row:last-child { border-bottom: 0; }
+.portal-team-row strong, .portal-team-row small, .portal-team-row span { display: block; }
+.portal-team-row small { margin-top: 4px; color: var(--muted); font-size: 9px; }
+.portal-team-row > div > span { margin-bottom: 3px; color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.portal-result { text-align: right; }
+.portal-result strong { color: var(--green); font-family: "Manrope", sans-serif; font-size: 17px; }
+.portal-registration-row { min-height: 54px; display: grid; grid-template-columns: 1.5fr .7fr .7fr auto; align-items: center; gap: 14px; padding: 9px 20px; border-bottom: 1px solid #ecefeb; font-size: 10px; }
+
 @media (max-width: 1100px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .two-column, .run-desk-grid { grid-template-columns: 1fr; }
@@ -482,6 +513,8 @@ main { grid-column: 2; min-width: 0; }
   .competition-grid { grid-template-columns: repeat(2, 1fr); }
   .report-dashboard-grid { grid-template-columns: repeat(2, 1fr); }
   .report-filter-grid { grid-template-columns: repeat(3, 1fr); }
+  .portal-team-row { grid-template-columns: 1fr 1fr; }
+  .portal-result { text-align: left; }
 }
 
 @media (max-width: 760px) {
@@ -540,6 +573,8 @@ main { grid-column: 2; min-width: 0; }
   .report-document-header { grid-template-columns: 62px 1fr; }
   .report-document-header > div:last-child { grid-column: 1 / -1; text-align: left; }
   .report-metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .portal-summary { grid-template-columns: repeat(2, 1fr); }
+  .portal-registration-row { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 520px) {

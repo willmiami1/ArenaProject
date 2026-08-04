@@ -24,6 +24,7 @@ inside a Wix site.
 - Full-screen 16:9 LED leaderboard with live aggregate standings, next-team display, and same-browser data preview
 - Permanent sidebar LED Screen shortcut for the active roping and latest generated round
 - Full workspace backup and restore for events, teams, registrations, results, and contestants
+- Wix-backed contestant portal with email and four-digit PIN login for personal entries, draws, teams, and results
 - Configurable Short Go limits that advance only the fastest qualified teams
 - Final-round running orders listed from slowest qualifier to fastest qualifier
 - Live standings, round-robin points, and event overview
@@ -54,7 +55,8 @@ The app is responsive and uses relative asset paths for embedded hosting.
 
 1. Enable Velo developer mode in Wix.
 2. Create these Wix Data collections: `ArenaMeets`, `ArenaCompetitions`,
-   `ArenaContestants`, `ArenaTeams`, `ArenaRegistrations`, and `ArenaSettings`.
+   `ArenaContestants`, `ArenaTeams`, `ArenaRegistrations`, `ArenaSettings`, and
+   `ArenaContestantCredentials`.
 3. Add `appId` and `payload` text fields to the first five collections. Add
    `activeEventId` (text), `participantDatabaseVersion` (number), and `updatedAt`
    (date/time) to `ArenaSettings`.
@@ -63,6 +65,16 @@ The app is responsive and uses relative asset paths for embedded hosting.
    `wix/page-code.js` into the page containing the app.
 6. Give the Wix HTML embed element the ID `arenaCommandEmbed` and set its URL
    to the hosted Arena Command app.
+7. Add `contestantId`, `emailNormalized`, `pinSalt`, `pinHash`,
+   `failedAttempts`, `lockedUntil`, and `updatedAt` fields to
+   `ArenaContestantCredentials`.
+8. Create a long random secret named `ArenaContestantPinPepper` in Wix Secrets
+   Manager. Never expose this secret or the credentials collection to site visitors.
+9. Set `VITE_WIX_HOST_ORIGIN` to the exact public origin of the Wix site before
+   building (for example, `https://example.wixsite.com`). This prevents embedded
+   copies on other sites from receiving contestant credentials.
+   For GitHub Pages deployment, create a repository Actions variable with that name.
+   Add a unique index to `ArenaContestantCredentials.emailNormalized`.
 
 When opened by a Wix administrator, the app shows **Saved to Wix** and
 synchronizes events, contestants, registrations, teams, draws, and results.
