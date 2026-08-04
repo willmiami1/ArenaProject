@@ -37,7 +37,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useArenaData } from "./useArenaData";
+import { normalizeData, useArenaData } from "./useArenaData";
 import { ReportsModule } from "./ReportsModule";
 import {
   calculatePayouts,
@@ -102,6 +102,7 @@ function App() {
   const [data, setData, persistenceStatus] = useArenaData();
   const [view, setView] = useState<View>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [workspaceMessage, setWorkspaceMessage] = useState("");
   const activeEvent =
     data.events.find((event) => event.id === data.activeEventId) ?? data.events[0];
   const displayParams = new URLSearchParams(window.location.search);
@@ -139,6 +140,57 @@ function App() {
     url.searchParams.set("round", String(latestRound));
     window.location.assign(url.toString());
   };
+  const downloadWorkspace = () => {
+    const backup = {
+      format: "arena-command-workspace",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data,
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(backup, null, 2)], {
+        type: "application/json",
+      }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `arena-workspace-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setWorkspaceMessage("Workspace backup downloaded.");
+  };
+  const restoreWorkspace = async (file?: File) => {
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as {
+        format?: unknown;
+        data?: unknown;
+      };
+      const candidate =
+        parsed.format === "arena-command-workspace" ? parsed.data : parsed;
+      if (
+        !candidate ||
+        typeof candidate !== "object" ||
+        !Array.isArray((candidate as ArenaData).events) ||
+        !Array.isArray((candidate as ArenaData).contestants) ||
+        !Array.isArray((candidate as ArenaData).teams) ||
+        !Array.isArray((candidate as ArenaData).registrations)
+      ) {
+        throw new Error("Choose a valid Arena Command workspace backup.");
+      }
+      const restored = normalizeData(candidate as ArenaData);
+      setData(restored);
+      setWorkspaceMessage(
+        `Workspace restored: ${restored.events.length} ropings and ${restored.contestants.length} contestants.`,
+      );
+    } catch (error) {
+      setWorkspaceMessage(
+        error instanceof Error
+          ? error.message
+          : "The workspace backup could not be restored.",
+      );
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -174,6 +226,12 @@ function App() {
           </button>
         </nav>
 
+        <div className="sidebar-backup">
+          <p className="nav-label">Data safety</p>
+          <button onClick={downloadWorkspace}><Download size={15} /> Backup workspace</button>
+          <label><Upload size={15} /> Restore workspace<input type="file" accept="application/json,.json" onChange={(event) => { void restoreWorkspace(event.target.files?.[0]); event.target.value = ""; }} /></label>
+          {workspaceMessage && <small>{workspaceMessage}</small>}
+        </div>
         <div className="sidebar-event">
           <span className="live-dot" />
           <div>

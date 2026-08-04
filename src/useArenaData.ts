@@ -22,7 +22,7 @@ export type PersistenceStatus =
   | "local"
   | "error";
 
-function normalizeData(parsed: ArenaData): ArenaData {
+export function normalizeData(parsed: ArenaData): ArenaData {
   const meets: ArenaMeet[] = (
     parsed.meets ??
     parsed.events.map((event) => ({

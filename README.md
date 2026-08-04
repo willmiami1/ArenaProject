@@ -22,6 +22,7 @@ inside a Wix site.
 - Aggregate Results Standings ranked by total official time with completed-round counts
 - Full-screen 16:9 LED leaderboard with live aggregate standings, next-team display, and same-browser data preview
 - Permanent sidebar LED Screen shortcut for the active roping and latest generated round
+- Full workspace backup and restore for events, teams, registrations, results, and contestants
 - Configurable Short Go limits that advance only the fastest qualified teams
 - Final-round running orders listed from slowest qualifier to fastest qualifier
 - Live standings, round-robin points, and event overview
