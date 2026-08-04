@@ -438,6 +438,26 @@ describe("workspace compatibility", () => {
         correct: 1,
       });
     });
+
+    it("scores a Steer pick only when a finished run has no entered time", () => {
+      const competition = event({ status: "Live" });
+      const data = workspace(competition, [
+        run({ id: "untimed", status: "complete", rawTime: null }),
+        run({ id: "timed", status: "complete", rawTime: 8, drawPosition: 2 }),
+      ]);
+      data.spectators = [
+        { id: "fan-1", name: "Taylor Fan", phone: "5558675309", createdAt: now.toISOString() },
+      ];
+      data.spectatorPredictions = [
+        { id: "pick-1", spectatorId: "fan-1", eventId: competition.id, teamId: "untimed", round: 1, choice: "steer", submittedAt: now.toISOString() },
+        { id: "pick-2", spectatorId: "fan-1", eventId: competition.id, teamId: "timed", round: 1, choice: "steer", submittedAt: now.toISOString() },
+      ];
+
+      expect(spectatorLeaderboard(data, competition.id, 1)[0]).toMatchObject({
+        picks: 2,
+        correct: 1,
+      });
+    });
   });
 });
 
