@@ -55,7 +55,14 @@ interface WixResponse<T> {
 }
 
 export function isWixEmbed() {
-  return window.parent !== window;
+  if (window.parent === window) return false;
+  const configuredOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
+  if (!configuredOrigin || !document.referrer) return false;
+  try {
+    return new URL(document.referrer).origin === configuredOrigin;
+  } catch {
+    return false;
+  }
 }
 
 function requestWix<T>(

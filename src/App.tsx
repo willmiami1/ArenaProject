@@ -174,6 +174,14 @@ function StaffApp() {
     url.searchParams.set("portal", "contestant");
     window.location.assign(url.toString());
   };
+  const openPublicWebsite = () => {
+    window.localStorage.setItem("arena-command-data-v1", JSON.stringify(data));
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("page", "home");
+    url.hash = "events";
+    window.location.assign(url.toString());
+  };
   const downloadWorkspace = () => {
     const backup = {
       format: "arena-command-workspace",
@@ -262,7 +270,7 @@ function StaffApp() {
             <LogIn size={19} />
             Contestant Login
           </button>
-          <button onClick={() => window.location.assign("?page=home#events")}>
+          <button onClick={openPublicWebsite}>
             <Eye size={19} />
             View Public Website
           </button>
@@ -308,7 +316,7 @@ function StaffApp() {
           </div>
           <button
             className="topbar-front-screen"
-            onClick={() => window.location.assign("?page=home")}
+            onClick={openPublicWebsite}
           >
             <Eye size={17} />
             <span>Front Screen</span>
