@@ -262,6 +262,10 @@ function StaffApp() {
             <LogIn size={19} />
             Contestant Login
           </button>
+          <button onClick={() => window.location.assign("?page=home#events")}>
+            <Eye size={19} />
+            View Public Website
+          </button>
         </nav>
 
         <div className="sidebar-backup">
