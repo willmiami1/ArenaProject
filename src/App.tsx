@@ -45,6 +45,7 @@ import { PublicSite } from "./PublicSite";
 import { AdminAccessGate } from "./AdminAccessGate";
 import { parsePublicRoute } from "./publicData";
 import { ReportsModule } from "./ReportsModule";
+import { roundTimeSheetHtml } from "./runDeskPrint";
 import {
   authenticateContestant,
   isWixEmbed,
@@ -2478,6 +2479,20 @@ function RunDesk({
     if (selected) url.searchParams.set("team", selected.id);
     window.location.assign(url.toString());
   };
+  const printRoundTimeSheet = () => {
+    if (!event || !eventTeams.length) return;
+    const popup = window.open("", "_blank", "width=1200,height=800");
+    if (!popup) {
+      window.alert("Allow pop-ups to print the round time sheet.");
+      return;
+    }
+    popup.opener = null;
+    popup.document.write(
+      roundTimeSheetHtml(event, eventTeams, contestants, activeRound),
+    );
+    popup.document.close();
+    popup.addEventListener("load", () => popup.print(), { once: true });
+  };
   const riderStandings = useMemo(() => {
     const stats = new Map<string, { contestantId: string; runs: number; qualified: number; noTimes: number; totalTime: number; points: number }>();
     eventTeams.filter((team) => team.status !== "ready").forEach((team) => {
@@ -2608,6 +2623,13 @@ function RunDesk({
             })}
           </div>
           <div className="run-desk-round-actions">
+            <button
+              className="secondary"
+              disabled={!eventTeams.length}
+              onClick={printRoundTimeSheet}
+            >
+              <Printer size={16} /> Print time sheet
+            </button>
             {activeRound > 1 && (
               <button className="secondary" onClick={() => changeRound(activeRound - 1)}>
                 <ChevronLeft size={16} /> Previous round
