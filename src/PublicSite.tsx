@@ -72,6 +72,7 @@ function PublicHeader() {
         <a href={href("home")}>Home</a>
         <a href={href("events")}>Events</a>
         <a href="?portal=contestant"><LogIn size={16} /> Contestant login</a>
+        <a href="?app=command"><ShieldCheck size={16} /> Admin login</a>
       </nav>
     </header>
   );
@@ -87,6 +88,7 @@ function PublicFooter() {
       <nav aria-label="Footer navigation">
         <a href={href("events")}>Event calendar</a>
         <a href="?portal=contestant">Contestant portal</a>
+        <a href="?app=command">Admin login</a>
       </nav>
       <small>Official schedules and results are published by arena staff.</small>
     </footer>
@@ -160,6 +162,7 @@ function HomePage({ data }: { data: PublicArenaData }) {
           <div className="public-actions">
             <a className="public-button primary" href={href("events")}>View the event calendar <ArrowRight size={18} /></a>
             <a className="public-button quiet" href="?portal=contestant">Contestant login</a>
+            <a className="public-button quiet" href="?app=command"><ShieldCheck size={18} /> Admin login</a>
           </div>
         </div>
         <div className="public-hero-mark" aria-hidden="true">

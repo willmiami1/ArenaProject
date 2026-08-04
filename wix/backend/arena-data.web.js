@@ -2,6 +2,7 @@ import { Permissions, webMethod } from "wix-web-module";
 import wixData from "wix-data";
 import { getSecret } from "wix-secrets-backend";
 import { createHash, randomBytes } from "crypto";
+import { currentMember } from "wix-members-backend";
 
 const COLLECTIONS = {
   meets: "ArenaMeets",
@@ -17,8 +18,66 @@ const STAFF_REVISION_ID = "arena-command-staff-revision";
 const ONLINE_REVISION_ID = "arena-command-online-revision";
 const OPTIONS = { suppressAuth: true };
 const PIN_PEPPER_SECRET = "ArenaContestantPinPepper";
+const ADMIN_ROLE_SECRET = "ArenaAdminRoleId";
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
+
+async function resolveAdminAccess() {
+  let member;
+  try {
+    member = await currentMember.getMember();
+  } catch {
+    return {
+      state: "login-required",
+      message: "Sign in with a Wix account assigned the Arena Admin role.",
+    };
+  }
+  if (!member) {
+    return {
+      state: "login-required",
+      message: "Sign in with a Wix account assigned the Arena Admin role.",
+    };
+  }
+  try {
+    const [roles, configuredRoleId] = await Promise.all([
+      currentMember.getRoles(),
+      getSecret(ADMIN_ROLE_SECRET),
+    ]);
+    if (
+      typeof configuredRoleId === "string" &&
+      configuredRoleId.trim() &&
+      roles.some((role) => role._id === configuredRoleId.trim())
+    ) {
+      return {
+        state: "authorized",
+        message: "Administrator access verified.",
+      };
+    }
+    return {
+      state: "denied",
+      message:
+        "Your Wix account is signed in but does not have the required Arena Admin role.",
+    };
+  } catch {
+    return {
+      state: "denied",
+      message:
+        "Administrator access is not configured or could not be verified.",
+    };
+  }
+}
+
+async function requireArenaAdmin() {
+  const access = await resolveAdminAccess();
+  if (access.state !== "authorized") {
+    throw new Error("Arena Command requires the Wix Arena Admin role.");
+  }
+}
+
+export const getAdminAccess = webMethod(
+  Permissions.Anyone,
+  resolveAdminAccess,
+);
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
 const validPin = (value) => /^\d{4}$/.test(String(value || ""));
@@ -265,7 +324,8 @@ async function syncRecords(collectionId, records, removableAppIds) {
   }
 }
 
-export const loadArenaData = webMethod(Permissions.Admin, async () => {
+export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
+  await requireArenaAdmin();
   const settings = await wixData
     .get(SETTINGS_COLLECTION, SETTINGS_ID, OPTIONS)
     .catch(() => null);
@@ -274,7 +334,8 @@ export const loadArenaData = webMethod(Permissions.Admin, async () => {
   return readWorkspace();
 });
 
-export const saveArenaData = webMethod(Permissions.Admin, async (data) => {
+export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
+  await requireArenaAdmin();
   const latest = await readWorkspace();
   const submittedStaffRevision = Number(
     data.staffRevision ?? data.revision ?? 0,
@@ -363,8 +424,9 @@ export const loadPublicArenaData = webMethod(Permissions.Anyone, async () =>
 );
 
 export const setContestantPin = webMethod(
-  Permissions.Admin,
+  Permissions.SiteMember,
   async ({ contestantId, email, pin, contestant }) => {
+    await requireArenaAdmin();
     const normalizedEmail = normalizeEmail(email);
     if (
       !contestantId ||

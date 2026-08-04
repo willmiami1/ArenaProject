@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { normalizeData, useArenaData } from "./useArenaData";
 import { PublicSite } from "./PublicSite";
+import { AdminAccessGate } from "./AdminAccessGate";
 import { parsePublicRoute } from "./publicData";
 import { ReportsModule } from "./ReportsModule";
 import {
@@ -2849,6 +2850,13 @@ function App() {
     route.kind === "signup"
   ) {
     return <PublicSite route={route} />;
+  }
+  if (route.kind === "staff") {
+    return (
+      <AdminAccessGate>
+        <StaffApp />
+      </AdminAccessGate>
+    );
   }
   return <StaffApp />;
 }

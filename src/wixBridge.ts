@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import type { PublicArenaData } from "./publicData";
 import type { SignupRequest } from "./onlineSignup";
+import type { AdminAccessResult } from "./adminAccess";
 
 type WixAction =
   | "load"
@@ -16,7 +17,9 @@ type WixAction =
   | "setContestantPin"
   | "loadPublicArenaData"
   | "loadSignupOptions"
-  | "submitOnlineSignup";
+  | "submitOnlineSignup"
+  | "getAdminAccess"
+  | "promptAdminLogin";
 
 export interface ContestantPortalData {
   contestant: Contestant;
@@ -60,7 +63,9 @@ function requestWix<T>(
       action === "authenticateContestant" ||
       action === "setContestantPin" ||
       action === "loadSignupOptions" ||
-      action === "submitOnlineSignup";
+      action === "submitOnlineSignup" ||
+      action === "getAdminAccess" ||
+      action === "promptAdminLogin";
     let targetOrigin = "*";
     if (sensitiveAction) {
       const configuredOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
@@ -68,7 +73,7 @@ function requestWix<T>(
         ? new URL(document.referrer).origin
         : "";
       if (!configuredOrigin || parentOrigin !== configuredOrigin) {
-        reject(new Error("Contestant login is not configured for this Wix site."));
+        reject(new Error("Secure Wix login is not configured for this site."));
         return;
       }
       targetOrigin = configuredOrigin;
@@ -121,6 +126,14 @@ export function requestWixData(
 
 export function loadPublicArenaData() {
   return requestWix<PublicArenaData>("loadPublicArenaData");
+}
+
+export function getAdminAccess() {
+  return requestWix<AdminAccessResult>("getAdminAccess");
+}
+
+export function promptAdminLogin() {
+  return requestWix<AdminAccessResult>("promptAdminLogin");
 }
 
 export function loadSignupOptions(

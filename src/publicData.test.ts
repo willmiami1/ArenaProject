@@ -8,6 +8,7 @@ import {
 import { publicStandingRows } from "./standings";
 import { createOnlineSignup, mergeStaleOnlineEntries } from "./onlineSignup";
 import type { ArenaData, ArenaEvent, Contestant, Team } from "./types";
+import { canMountArenaCommand, localAdminAccess } from "./adminAccess";
 
 const event = (overrides: Partial<ArenaEvent> = {}): ArenaEvent => ({
   ...defaultCompetitionSettings,
@@ -61,6 +62,23 @@ describe("public routing", () => {
     expect(parsePublicRoute("?page=home&portal=contestant")).toEqual({ kind: "contestant" });
     expect(parsePublicRoute("?display=leaderboard&page=event&id=x")).toEqual({ kind: "leaderboard" });
     expect(parsePublicRoute("?page=competition&id=c")).toEqual({ kind: "competition", id: "c" });
+  });
+
+  describe("admin access boundary", () => {
+    it("allows an explicit local bypass only in development builds", () => {
+      expect(localAdminAccess(false, true)).toBe("local-development");
+      expect(canMountArenaCommand(localAdminAccess(false, true))).toBe(true);
+      expect(localAdminAccess(false, false)).toBe("unavailable");
+      expect(canMountArenaCommand(localAdminAccess(false, false))).toBe(false);
+    });
+
+    it("always requires Wix verification for embedded production routes", () => {
+      expect(localAdminAccess(true, true)).toBe("checking");
+      expect(localAdminAccess(true, false)).toBe("checking");
+      expect(canMountArenaCommand("checking")).toBe(false);
+      expect(canMountArenaCommand("denied")).toBe(false);
+      expect(canMountArenaCommand("authorized")).toBe(true);
+    });
   });
 });
 

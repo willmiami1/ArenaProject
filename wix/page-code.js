@@ -6,7 +6,9 @@ import {
   saveArenaData,
   setContestantPin,
   submitOnlineSignup,
+  getAdminAccess as getAdminAccessFromBackend,
 } from "backend/arena-data.web";
+import { authentication } from "wix-members-frontend";
 
 const EMBED_ELEMENT_ID = "#arenaCommandEmbed";
 
@@ -30,6 +32,11 @@ $w.onReady(() => {
         data = await loadSignupOptions(message.data);
       } else if (message.action === "submitOnlineSignup") {
         data = await submitOnlineSignup(message.data);
+      } else if (message.action === "getAdminAccess") {
+        data = await getAdminAccessFromBackend();
+      } else if (message.action === "promptAdminLogin") {
+        await authentication.promptLogin({ mode: "login", modal: true });
+        data = await getAdminAccessFromBackend();
       } else {
         throw new Error("Unsupported Arena Command action.");
       }

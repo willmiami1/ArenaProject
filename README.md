@@ -54,7 +54,8 @@ The app is responsive and uses relative asset paths for embedded hosting.
 
 The default URL opens the public home page. Public routes use `?page=events`,
 `?page=event&id=...`, `?page=competition&id=...`, and
-`?page=signup&id=...`. Staff use `?app=command`; the existing
+`?page=signup&id=...`. The public home page includes **Admin login**, which opens
+`?app=command`; the existing
 `?portal=contestant` and `?display=leaderboard` routes remain available.
 
 ### Permanent Wix Data storage
@@ -83,7 +84,17 @@ The default URL opens the public home page. Public routes use `?page=events`,
    `ArenaContestantCredentials`.
 8. Create a long random secret named `ArenaContestantPinPepper` in Wix Secrets
    Manager. Never expose this secret or the credentials collection to site visitors.
-9. Set `VITE_WIX_HOST_ORIGIN` to the exact public origin of the Wix site before
+9. In **Wix Dashboard → Customer Management → Roles & Permissions**, create a
+   dedicated member role for Arena Command administrators. Copy its role ID and
+   save it in Wix Secrets Manager as `ArenaAdminRoleId`. Assign the role only to
+   approved staff. The backend compares the exact role ID; the role name is not
+   trusted and the secret is never returned to the browser.
+10. Enable Wix Members login on the page. `wix/page-code.js` uses
+    `wix-members-frontend.authentication.promptLogin()` for the modal, while
+    `wix/backend/arena-data.web.js` uses `wix-members-backend.currentMember`
+    to enforce the role on every workspace load, save, and contestant PIN change.
+    Do not replace the backend check with page visibility or iframe state.
+11. Set `VITE_WIX_HOST_ORIGIN` to the exact public origin of the Wix site before
    building (for example, `https://example.wixsite.com`). This prevents embedded
    copies on other sites from receiving contestant credentials.
    For GitHub Pages deployment, create a repository Actions variable with that name.
@@ -92,6 +103,12 @@ The default URL opens the public home page. Public routes use `?page=events`,
 When opened by a Wix administrator, the app shows **Saved to Wix** and
 synchronizes events, contestants, registrations, teams, draws, and results.
 Outside Wix it shows **Local preview** and uses browser storage.
+
+`npm run dev` permits `?app=command` only in Vite development mode and displays
+a warning banner. Production builds served outside the configured Wix embed show
+an unavailable state instead of bypassing authorization. Wix Members APIs are
+only partially functional in Wix editor preview; verify role behavior on a
+published staging or production site.
 
 Online entry is limited to existing contestant credentials. PINs are verified
 for both option loading and submission and are never stored in browser storage.
