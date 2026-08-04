@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ArrowRight,
-  Beef,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -333,7 +332,9 @@ function SpectatorPage({
                   checked={choice === "steer"}
                   onChange={() => setChoice("steer")}
                 />
-                <span className="public-steer-picture"><Beef aria-hidden="true" /></span>
+                <span className="public-steer-picture">
+                  <img src="./spectator-steer.png" alt="Steer running in the arena" />
+                </span>
                 <span className="public-steer-label">Steer</span>
               </label>
             </fieldset>
