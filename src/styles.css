@@ -442,6 +442,7 @@ main { grid-column: 2; min-width: 0; }
 .led-clock { text-align: right; }
 .led-clock strong { display: block; font-family: "Manrope", sans-serif; font-size: clamp(24px, 2.5vw, 48px); line-height: 1; }
 .led-clock span { margin-top: .5vh; }
+.led-header-actions { display: flex; align-items: stretch; gap: .5vw; }
 .led-fullscreen { display: flex; align-items: center; gap: .5vw; padding: 1.1vh .9vw; color: #f8e6c5; background: transparent; border: 1px solid #806839; border-radius: 8px; font-size: clamp(9px, .8vw, 14px); font-weight: 800; text-transform: uppercase; }
 .led-board { grid-column: 1; min-height: 0; padding: 2vh 2.2vw; overflow: hidden; }
 .led-table-header, .led-row { display: grid; grid-template-columns: 8vw minmax(0, 1fr) 11vw 16vw; align-items: center; gap: 1.2vw; }

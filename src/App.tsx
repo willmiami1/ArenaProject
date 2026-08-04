@@ -586,6 +586,15 @@ function LedLeaderboard({
       console.error("Could not enter LED display fullscreen mode.", error);
     });
   };
+  const leaveDisplay = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.search = "";
+    window.location.assign(url.toString());
+  };
 
   return (
     <div className="led-leaderboard">
@@ -596,7 +605,10 @@ function LedLeaderboard({
         </div>
         <div className="led-round"><span>Live leaderboard</span><strong>Round {round}</strong></div>
         <div className="led-clock"><strong>{clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong><span>{clock.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</span></div>
-        <button className="led-fullscreen" onClick={enterFullscreen}><Maximize2 size={24} /> Full screen</button>
+        <div className="led-header-actions">
+          <button className="led-fullscreen" onClick={enterFullscreen}><Maximize2 size={24} /> Full screen</button>
+          <button className="led-fullscreen" onClick={leaveDisplay}><X size={24} /> Back to Run Desk</button>
+        </div>
       </header>
 
       <main className="led-board">
@@ -2145,11 +2157,7 @@ function RunDesk({
     url.searchParams.set("display", "leaderboard");
     url.searchParams.set("event", event.id);
     url.searchParams.set("round", String(activeRound));
-    window.open(
-      url.toString(),
-      "arena-led-leaderboard",
-      "popup,width=1920,height=1080",
-    );
+    window.location.assign(url.toString());
   };
   const riderStandings = useMemo(() => {
     const stats = new Map<string, { contestantId: string; runs: number; qualified: number; noTimes: number; totalTime: number; points: number }>();
@@ -2361,7 +2369,7 @@ function RunDesk({
         <div className="table-toolbar">
           <div><h3>Round {activeRound} standings</h3><p>{standings.length} qualified average{standings.length === 1 ? "" : "s"} · {event?.resultsPublished ? "Published live" : "Draft results"}</p></div>
           <div className="toolbar-actions">
-            <button className="secondary" disabled={!eventTeams.length || !event} onClick={openLedLeaderboard}><MonitorUp size={16} /> LED leaderboard</button>
+            <button className="secondary" disabled={!eventTeams.length || !event} onClick={openLedLeaderboard}><MonitorUp size={16} /> View LED leaderboard</button>
             <button className="secondary" disabled={!eventTeams.length || !event} onClick={() => event && exportResultsCsv(event, allEventTeams, contestants, activeRound)}><Download size={16} /> CSV / Excel</button>
             <button className="secondary" disabled={!eventTeams.length} onClick={() => window.print()}><Printer size={16} /> Print / PDF</button>
             {event && <button className="primary" onClick={() => onUpdateEvent({ ...event, resultsPublished: !event.resultsPublished })}>{event.resultsPublished ? "Unpublish" : "Publish live results"}</button>}
