@@ -209,16 +209,14 @@ function SpectatorPage({
   const [phone, setPhone] = useState(
     () => window.sessionStorage.getItem("arena-spectator-phone") ?? "",
   );
-  const [teamId, setTeamId] = useState(
-    competition?.predictionRuns.find((run) => run.open)?.id ?? "",
-  );
   const [choice, setChoice] = useState<SpectatorChoice>("cowboys");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   if (!competition || competition.status !== "Live") {
     return <NotFound />;
   }
-  const selectedRun = competition.predictionRuns.find((run) => run.id === teamId);
+  const selectedRun = competition.predictionRuns.find((run) => run.open);
+  const teamId = selectedRun?.id ?? "";
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -290,12 +288,6 @@ function SpectatorPage({
           <h2>Spectator sign-in</h2>
           <label>Name<input required maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
           <label>Phone number<input required type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
-          <label>Open run<select required value={teamId} onChange={(event) => setTeamId(event.target.value)}>
-            <option value="">Choose an open run</option>
-            {competition.predictionRuns.filter((run) => run.open).map((run) => (
-              <option value={run.id} key={run.id}>Round {run.round} · Draw #{run.drawPosition} · {run.headerName} & {run.heelerName}</option>
-            ))}
-          </select></label>
           {selectedRun && <p className="public-pick-cutoff">Picks close {new Date(selectedRun.closesAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}
           {selectedRun && (
             <fieldset className="public-pick-choices">
@@ -326,6 +318,7 @@ function SpectatorPage({
               </label>
             </fieldset>
           )}
+          {!selectedRun && <p className="public-empty">Waiting for the next cowboy team.</p>}
           <button className="public-button" disabled={busy || !teamId}>{busy ? "Saving…" : "Lock in free pick"}</button>
           {message && <p className="public-form-message" role="status">{message}</p>}
         </form>
