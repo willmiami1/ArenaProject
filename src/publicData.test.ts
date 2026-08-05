@@ -25,7 +25,7 @@ import {
   isBrowserStoragePreview,
   localAdminAccess,
 } from "./adminAccess";
-import { normalizeData } from "./useArenaData";
+import { mergeSavedArenaData, normalizeData } from "./useArenaData";
 import {
   createSpectatorPrediction,
   spectatorLeaderboard,
@@ -85,6 +85,7 @@ describe("public routing", () => {
     expect(parsePublicRoute("?app=registration")).toEqual({
       kind: "registration-desk",
     });
+
     expect(parsePublicRoute("?page=home&portal=contestant")).toEqual({ kind: "contestant" });
     expect(parsePublicRoute("?display=leaderboard&page=event&id=x")).toEqual({ kind: "leaderboard" });
     expect(parsePublicRoute("?page=competition&id=c")).toEqual({ kind: "competition", id: "c" });
@@ -110,6 +111,39 @@ describe("public routing", () => {
       expect(canMountArenaCommand("checking")).toBe(false);
       expect(canMountArenaCommand("denied")).toBe(false);
       expect(canMountArenaCommand("authorized")).toBe(true);
+    });
+  });
+});
+
+describe("staff save reconciliation", () => {
+  it("does not let a stale Wix response undo final-round Run Desk actions", () => {
+    const competition = event({ rounds: 3, status: "Live" });
+    const finalTeam = run({
+      id: "final-team",
+      round: 3,
+      status: "ready",
+      rawTime: null,
+      predictionClosesAt: "2026-08-05T20:00:00.000Z",
+      rolled: true,
+    });
+    const submitted = workspace(competition, [finalTeam]);
+    const staleSaved = {
+      ...submitted,
+      revision: 2,
+      staffRevision: 2,
+      teams: [
+        {
+          ...finalTeam,
+          predictionClosesAt: undefined,
+          rolled: false,
+        },
+      ],
+    };
+
+    expect(mergeSavedArenaData(submitted, staleSaved).teams[0]).toMatchObject({
+      id: "final-team",
+      predictionClosesAt: "2026-08-05T20:00:00.000Z",
+      rolled: true,
     });
   });
 });

@@ -161,6 +161,35 @@ function loadLocalData(): ArenaData {
   }
 }
 
+export function mergeSavedArenaData(submitted: ArenaData, saved: ArenaData) {
+  const appendMissingOnlineRecords = <T extends { id: string; source?: string }>(
+    incoming: T[],
+    persisted: T[],
+  ) => {
+    const incomingIds = new Set(incoming.map((record) => record.id));
+    return [
+      ...incoming,
+      ...persisted.filter(
+        (record) => record.source === "online" && !incomingIds.has(record.id),
+      ),
+    ];
+  };
+  return normalizeData({
+    ...submitted,
+    revision: saved.revision,
+    staffRevision: saved.staffRevision,
+    onlineRevision: saved.onlineRevision,
+    loadedAt: saved.loadedAt,
+    teams: appendMissingOnlineRecords(submitted.teams, saved.teams),
+    registrations: appendMissingOnlineRecords(
+      submitted.registrations,
+      saved.registrations,
+    ),
+    spectators: saved.spectators,
+    spectatorPredictions: saved.spectatorPredictions,
+  });
+}
+
 export function useArenaData() {
   const [data, setData] = useState<ArenaData>(loadLocalData);
   const [status, setStatus] = useState<PersistenceStatus>("loading");
@@ -225,7 +254,7 @@ export function useArenaData() {
               return { ...current, revision: saved.revision };
             }
             skipNextSave.current = true;
-            return normalizeData(saved);
+            return mergeSavedArenaData(submitted, saved);
           });
         }
         setStatus("saved");

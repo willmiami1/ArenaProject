@@ -691,7 +691,14 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       OPTIONS,
     ),
   ]);
-  return readWorkspace();
+  const staffRevision = latest.staffRevision + 1;
+  return {
+    ...next,
+    revision: staffRevision + latest.onlineRevision,
+    staffRevision,
+    onlineRevision: latest.onlineRevision,
+    loadedAt: new Date().toISOString(),
+  };
 });
 
 function registrationDeskProjection(workspace) {
