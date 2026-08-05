@@ -513,11 +513,6 @@ function HomePage({ data }: { data: PublicArenaData }) {
         <div className="public-hero-copy">
           <h1>The gate opens.<br />The clock starts.<br /><em>Ride your run.</em></h1>
           <p>Team roping events, online entries, and official results from Destiny Ranch Arena.</p>
-          <div className="public-actions">
-            <a className="public-button quiet" href={operationalHref("command")}>
-              <ShieldCheck size={18} /> Arena Command Admin Login
-            </a>
-          </div>
         </div>
         <figure className="public-hero-media">
           <img
