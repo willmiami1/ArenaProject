@@ -249,7 +249,7 @@ function resetInheritedPredictionCutoffs(teams) {
   });
 }
 
-async function readWorkspace() {
+async function readWorkspace({ includeSpectators = true } = {}) {
   const [settings, staffRevision, onlineRevision] = await Promise.all([
     wixData.get(SETTINGS_COLLECTION, SETTINGS_ID, OPTIONS).catch(() => null),
     wixData
@@ -265,8 +265,12 @@ async function readWorkspace() {
     readAll(COLLECTIONS.contestants),
     readAll(COLLECTIONS.teams),
     readAll(COLLECTIONS.registrations),
-    readOptionalAll(COLLECTIONS.spectators),
-    readOptionalAll(COLLECTIONS.spectatorPredictions),
+    includeSpectators
+      ? readOptionalAll(COLLECTIONS.spectators)
+      : Promise.resolve([]),
+    includeSpectators
+      ? readOptionalAll(COLLECTIONS.spectatorPredictions)
+      : Promise.resolve([]),
   ]);
   return {
     participantDatabaseVersion: settings?.participantDatabaseVersion || 1,
@@ -970,7 +974,7 @@ export const setRegistrationDeskContestantPin = webMethod(
 );
 
 export const loadPublicArenaData = webMethod(Permissions.Anyone, async () =>
-  publicProjection(await readWorkspace()),
+  publicProjection(await readWorkspace({ includeSpectators: false })),
 );
 
 export const setContestantPin = webMethod(
