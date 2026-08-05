@@ -1,4 +1,14 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import {
   ArrowRight,
   Camera,
@@ -846,6 +856,55 @@ function LedSpectatorTop({
   );
 }
 
+function LedScrollingRows({
+  children,
+  rowCount,
+}: {
+  children: ReactNode;
+  rowCount: number;
+}) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const [scrollDistance, setScrollDistance] = useState(0);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const rows = rowsRef.current;
+    if (!viewport || !rows) return;
+
+    const measureOverflow = () => {
+      const nextDistance = Math.max(rows.scrollHeight - viewport.clientHeight, 0);
+      setScrollDistance((current) =>
+        Math.abs(current - nextDistance) < 1 ? current : nextDistance,
+      );
+    };
+
+    measureOverflow();
+    const observer = new ResizeObserver(measureOverflow);
+    observer.observe(viewport);
+    observer.observe(rows);
+    return () => observer.disconnect();
+  }, [rowCount]);
+
+  const duration = Math.max(30, Math.round((scrollDistance * 2) / 12 + 12));
+  const scrollStyle = {
+    "--led-scroll-distance": `${scrollDistance}px`,
+    "--led-scroll-duration": `${duration}s`,
+  } as CSSProperties;
+
+  return (
+    <div className="led-rows-viewport" ref={viewportRef}>
+      <div
+        className={`led-rows${scrollDistance > 0 ? " is-scrolling" : ""}`}
+        ref={rowsRef}
+        style={scrollStyle}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function LedLeaderboard({
   data,
   eventId,
@@ -1004,7 +1063,7 @@ function LedLeaderboard({
 
       <main className="led-board">
         <div className="led-table-header"><span>Place</span><span>Team</span><span>Rounds</span><span>Total time</span></div>
-        <div className="led-rows">
+        <LedScrollingRows rowCount={standings.length}>
           {standings.map((team, index) => {
             const completedRounds = eventTeams.filter(
               (run) =>
@@ -1023,7 +1082,7 @@ function LedLeaderboard({
             );
           })}
           {!standings.length && <div className="led-waiting"><Trophy size={54} /><strong>Waiting for qualified results</strong></div>}
-        </div>
+        </LedScrollingRows>
       </main>
 
       <footer className="led-footer">
