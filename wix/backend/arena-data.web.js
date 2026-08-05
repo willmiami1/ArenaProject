@@ -195,6 +195,15 @@ async function readAll(collectionId) {
   return items.map((item) => JSON.parse(item.payload));
 }
 
+async function readOptionalAll(collectionId) {
+  try {
+    return await readAll(collectionId);
+  } catch (error) {
+    if (error?.code === "WDE0025" || error?.code === "WDE0026") return [];
+    throw error;
+  }
+}
+
 async function replaceAll(collectionId, records) {
   let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
   const ids = result.items.map((item) => item._id);
@@ -256,8 +265,8 @@ async function readWorkspace() {
     readAll(COLLECTIONS.contestants),
     readAll(COLLECTIONS.teams),
     readAll(COLLECTIONS.registrations),
-    readAll(COLLECTIONS.spectators),
-    readAll(COLLECTIONS.spectatorPredictions),
+    readOptionalAll(COLLECTIONS.spectators),
+    readOptionalAll(COLLECTIONS.spectatorPredictions),
   ]);
   return {
     participantDatabaseVersion: settings?.participantDatabaseVersion || 1,
