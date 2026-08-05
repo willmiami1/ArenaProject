@@ -1481,15 +1481,19 @@ function EventForm({
   onSubmit: (event: ArenaEvent) => void;
   onCancel: () => void;
 }) {
+  const initialCompetitionType =
+    competitionType ?? event?.competitionType ?? defaultCompetitionSettings.competitionType;
+  const isNewPickAndDraw =
+    !event && initialCompetitionType === "pick-and-draw";
   const [form, setForm] = useState({
     name: event?.name ?? "",
     description: event?.description ?? "",
     status: event?.status ?? "Upcoming" as EventStatus,
     entryFee: event?.entryFee.toString() ?? "50",
-    competitionType: competitionType ?? event?.competitionType ?? defaultCompetitionSettings.competitionType,
+    competitionType: initialCompetitionType,
     registrationOpen: event?.registrationOpen ?? true,
-    entriesAllowed: (event?.entriesAllowed ?? 1).toString(),
-    minDrawsAllowed: (event?.minDrawsAllowed ?? 0).toString(),
+    entriesAllowed: (event?.entriesAllowed ?? (isNewPickAndDraw ? 4 : 1)).toString(),
+    minDrawsAllowed: (event?.minDrawsAllowed ?? (isNewPickAndDraw ? 4 : 0)).toString(),
     allowRepeatPartners: event?.allowRepeatPartners ?? false,
     handicapTotal: (event?.handicapTotal ?? 20).toString(),
     slideNumber: (event?.slideNumber ?? 10).toString(),
