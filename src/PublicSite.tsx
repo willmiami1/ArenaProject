@@ -303,7 +303,10 @@ function SpectatorPage({
       </div>
       <div className="public-spectator-grid">
         <form onSubmit={submit}>
-          <h2>Play Cowboys X Steer</h2>
+          <h2 className="public-play-title">
+            <span>Play</span>
+            <strong>Cowboys × Steer</strong>
+          </h2>
           <label>Name<input required maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
           {selectedRun?.open && selectedRun.closesAt && (
             <p className="public-pick-cutoff">Picks close {new Date(selectedRun.closesAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>
