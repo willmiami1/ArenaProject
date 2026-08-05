@@ -11,6 +11,10 @@ import type { SignupRequest } from "./onlineSignup";
 import type { SpectatorChoice } from "./spectatorPredictions";
 import type { AdminAccessResult } from "./adminAccess";
 import type { ContestantAccountRequest } from "./contestantAccount";
+import type {
+  RegistrationDeskContestantInput,
+  RegistrationDeskData,
+} from "./registrationDeskData";
 
 type WixAction =
   | "load"
@@ -23,7 +27,12 @@ type WixAction =
   | "submitSpectatorPrediction"
   | "createContestantAccount"
   | "getAdminAccess"
-  | "promptAdminLogin";
+  | "promptAdminLogin"
+  | "getRegistrationDeskAccess"
+  | "promptRegistrationDeskLogin"
+  | "loadRegistrationDeskData"
+  | "saveRegistrationDeskContestant"
+  | "submitRegistrationDeskSignup";
 
 export interface ContestantPortalData {
   contestant: Contestant;
@@ -78,7 +87,12 @@ function requestWix<T>(
       action === "submitSpectatorPrediction" ||
       action === "createContestantAccount" ||
       action === "getAdminAccess" ||
-      action === "promptAdminLogin";
+      action === "promptAdminLogin" ||
+      action === "getRegistrationDeskAccess" ||
+      action === "promptRegistrationDeskLogin" ||
+      action === "loadRegistrationDeskData" ||
+      action === "saveRegistrationDeskContestant" ||
+      action === "submitRegistrationDeskSignup";
     let targetOrigin = "*";
     if (sensitiveAction) {
       const configuredOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
@@ -147,6 +161,34 @@ export function getAdminAccess() {
 
 export function promptAdminLogin() {
   return requestWix<AdminAccessResult>("promptAdminLogin");
+}
+
+export function getRegistrationDeskAccess() {
+  return requestWix<AdminAccessResult>("getRegistrationDeskAccess");
+}
+
+export function promptRegistrationDeskLogin() {
+  return requestWix<AdminAccessResult>("promptRegistrationDeskLogin");
+}
+
+export function loadRegistrationDeskData() {
+  return requestWix<RegistrationDeskData>("loadRegistrationDeskData");
+}
+
+export function saveRegistrationDeskContestant(
+  contestant: RegistrationDeskContestantInput,
+) {
+  return requestWix<{
+    contestant: Contestant;
+    data: RegistrationDeskData;
+  }>("saveRegistrationDeskContestant", contestant);
+}
+
+export function submitRegistrationDeskSignup(signup: SignupRequest) {
+  return requestWix<{
+    summary: string;
+    data: RegistrationDeskData;
+  }>("submitRegistrationDeskSignup", signup);
 }
 
 export function loadSignupOptions(

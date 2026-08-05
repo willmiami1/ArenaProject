@@ -44,6 +44,8 @@ import {
 import { normalizeData, useArenaData } from "./useArenaData";
 import { PublicSite } from "./PublicSite";
 import { AdminAccessGate } from "./AdminAccessGate";
+import { RegistrationDeskAccessGate } from "./RegistrationDeskAccessGate";
+import { RegistrationDesk } from "./RegistrationDesk";
 import { parsePublicRoute } from "./publicData";
 import { ReportsModule } from "./ReportsModule";
 import {
@@ -3222,6 +3224,13 @@ function App() {
       <AdminAccessGate>
         <StaffApp />
       </AdminAccessGate>
+    );
+  }
+  if (route.kind === "registration-desk") {
+    return (
+      <RegistrationDeskAccessGate>
+        <RegistrationDesk />
+      </RegistrationDeskAccessGate>
     );
   }
   return <StaffApp />;

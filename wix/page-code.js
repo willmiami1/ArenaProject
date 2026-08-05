@@ -9,6 +9,10 @@ import {
   submitSpectatorPrediction,
   createContestantAccount,
   getAdminAccess as getAdminAccessFromBackend,
+  getRegistrationDeskAccess as getRegistrationDeskAccessFromBackend,
+  loadRegistrationDeskData,
+  saveRegistrationDeskContestant,
+  submitRegistrationDeskSignup,
 } from "backend/arena-data.web";
 import { authentication } from "wix-members-frontend";
 
@@ -43,6 +47,17 @@ $w.onReady(() => {
       } else if (message.action === "promptAdminLogin") {
         await authentication.promptLogin({ mode: "login", modal: true });
         data = await getAdminAccessFromBackend();
+      } else if (message.action === "getRegistrationDeskAccess") {
+        data = await getRegistrationDeskAccessFromBackend();
+      } else if (message.action === "promptRegistrationDeskLogin") {
+        await authentication.promptLogin({ mode: "login", modal: true });
+        data = await getRegistrationDeskAccessFromBackend();
+      } else if (message.action === "loadRegistrationDeskData") {
+        data = await loadRegistrationDeskData();
+      } else if (message.action === "saveRegistrationDeskContestant") {
+        data = await saveRegistrationDeskContestant(message.data);
+      } else if (message.action === "submitRegistrationDeskSignup") {
+        data = await submitRegistrationDeskSignup(message.data);
       } else {
         throw new Error("Unsupported Arena Command action.");
       }

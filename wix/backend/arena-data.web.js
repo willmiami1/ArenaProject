@@ -21,6 +21,7 @@ const ONLINE_REVISION_ID = "arena-command-online-revision";
 const OPTIONS = { suppressAuth: true };
 const PIN_PEPPER_SECRET = "ArenaContestantPinPepper";
 const ADMIN_ROLE_SECRET = "ArenaAdminRoleId";
+const REGISTRATION_ROLE_SECRET = "ArenaRegistrationRoleId";
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
 const ONLINE_REGISTRATION_LEAD_MS = 60 * 60 * 1000;
@@ -96,9 +97,66 @@ async function requireArenaAdmin() {
   }
 }
 
+async function resolveRegistrationDeskAccess() {
+  let member;
+  try {
+    member = await currentMember.getMember();
+  } catch {
+    return {
+      state: "login-required",
+      message: "Sign in with a Wix Registration Desk account.",
+    };
+  }
+  if (!member) {
+    return {
+      state: "login-required",
+      message: "Sign in with a Wix Registration Desk account.",
+    };
+  }
+  try {
+    const [roles, registrationRoleId, adminRoleId] = await Promise.all([
+      currentMember.getRoles(),
+      getSecret(REGISTRATION_ROLE_SECRET).catch(() => ""),
+      getSecret(ADMIN_ROLE_SECRET).catch(() => ""),
+    ]);
+    const allowedRoleIds = [registrationRoleId, adminRoleId]
+      .filter((roleId) => typeof roleId === "string" && roleId.trim())
+      .map((roleId) => roleId.trim());
+    if (roles.some((role) => allowedRoleIds.includes(role._id))) {
+      return {
+        state: "authorized",
+        message: "Registration Desk access verified.",
+      };
+    }
+    return {
+      state: "denied",
+      message:
+        "Your Wix account does not have the Registration Desk role.",
+    };
+  } catch {
+    return {
+      state: "denied",
+      message:
+        "Registration Desk access is not configured or could not be verified.",
+    };
+  }
+}
+
+async function requireRegistrationDesk() {
+  const access = await resolveRegistrationDeskAccess();
+  if (access.state !== "authorized") {
+    throw new Error("This action requires the Wix Registration Desk role.");
+  }
+}
+
 export const getAdminAccess = webMethod(
   Permissions.Anyone,
   resolveAdminAccess,
+);
+
+export const getRegistrationDeskAccess = webMethod(
+  Permissions.Anyone,
+  resolveRegistrationDeskAccess,
 );
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
@@ -538,6 +596,195 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
   ]);
   return readWorkspace();
 });
+
+function registrationDeskProjection(workspace) {
+  const events = workspace.events.filter((event) =>
+    onlineRegistrationIsOpen(event),
+  );
+  const eventIds = new Set(events.map((event) => event.id));
+  return {
+    events: events.map(
+      ({
+        id,
+        parentEventId,
+        name,
+        date,
+        startTime,
+        location,
+        status,
+        entryFee,
+        competitionType,
+        pickDrawRole,
+        registrationOpen,
+        drawLocked,
+        entriesAllowed,
+        allowRepeatPartners,
+        handicapTotal,
+        maxContestantHandicap,
+      }) => ({
+        id,
+        parentEventId,
+        name,
+        date,
+        startTime,
+        location,
+        status,
+        entryFee,
+        competitionType,
+        pickDrawRole,
+        registrationOpen,
+        drawLocked,
+        entriesAllowed,
+        allowRepeatPartners,
+        handicapTotal,
+        maxContestantHandicap,
+      }),
+    ),
+    contestants: workspace.contestants,
+    teams: workspace.teams
+      .filter((team) => eventIds.has(team.eventId) && Number(team.round) === 1)
+      .map((team) => ({
+        id: team.id,
+        eventId: team.eventId,
+        headerId: team.headerId,
+        heelerId: team.heelerId,
+        drawPosition: Number(team.drawPosition || 0),
+        status: team.status,
+        rawTime: null,
+        penalties: 0,
+        notes: "",
+        round: 1,
+        checkedIn: false,
+        scratched: team.scratched === true,
+        generated: team.generated === true,
+        points: 0,
+        paid: team.paid === true,
+        source: team.source,
+        submissionId: team.submissionId,
+        submittedAt: team.submittedAt,
+      })),
+    registrations: workspace.registrations
+      .filter((registration) => eventIds.has(registration.eventId))
+      .map((registration) => ({ ...registration, notes: "" })),
+  };
+}
+
+export const loadRegistrationDeskData = webMethod(
+  Permissions.SiteMember,
+  async () => {
+    await requireRegistrationDesk();
+    return registrationDeskProjection(await readWorkspace());
+  },
+);
+
+export const saveRegistrationDeskContestant = webMethod(
+  Permissions.SiteMember,
+  async (input) => {
+    await requireRegistrationDesk();
+    const workspace = await readWorkspace();
+    const name = String(input.name || "").trim().replace(/\s+/g, " ");
+    const email = normalizeEmail(input.email);
+    const phone = String(input.phone || "").trim();
+    const id = input.id || `desk-contestant-${Date.now()}-${randomBytes(4).toString("hex")}`;
+    const headerHandicap = Number(input.headerHandicap);
+    const heelerHandicap = Number(input.heelerHandicap);
+    if (
+      !validAppId(id) ||
+      name.length < 2 ||
+      name.length > 100 ||
+      !["Header", "Heeler", "Both"].includes(input.role) ||
+      !Number.isFinite(headerHandicap) ||
+      !Number.isFinite(heelerHandicap) ||
+      headerHandicap < 0 ||
+      heelerHandicap < 0 ||
+      headerHandicap > 20 ||
+      heelerHandicap > 20 ||
+      (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    ) {
+      throw new Error("Enter valid contestant profile information.");
+    }
+    if (
+      email &&
+      workspace.contestants.some(
+        (contestant) =>
+          contestant.id !== id && normalizeEmail(contestant.email) === email,
+      )
+    ) {
+      throw new Error("Another contestant already uses that email.");
+    }
+    const [contestantCredential, duplicateCredential] = await Promise.all([
+      wixData
+        .query(CREDENTIALS_COLLECTION)
+        .eq("contestantId", id)
+        .limit(1)
+        .find(OPTIONS),
+      email
+        ? wixData
+            .query(CREDENTIALS_COLLECTION)
+            .eq("emailNormalized", email)
+            .limit(1)
+            .find(OPTIONS)
+        : Promise.resolve({ items: [] }),
+    ]);
+    if (
+      duplicateCredential.items.some(
+        (credential) => credential.contestantId !== id,
+      )
+    ) {
+      throw new Error("That email is already used by another contestant login.");
+    }
+    const existingCredential = contestantCredential.items[0];
+    if (
+      existingCredential &&
+      normalizeEmail(existingCredential.emailNormalized) !== email
+    ) {
+      throw new Error(
+        "Arena Admin must update the email and PIN for contestants with a login account.",
+      );
+    }
+    const previous = workspace.contestants.find((contestant) => contestant.id === id);
+    const contestant = {
+      id,
+      name,
+      role: input.role,
+      headerHandicap,
+      heelerHandicap,
+      photo: previous?.photo || "",
+      phone,
+      email,
+      hometown: String(input.hometown || "").trim(),
+      membershipNumber: previous?.membershipNumber || "",
+      categoryNumber: previous?.categoryNumber || "",
+    };
+    const existing = await wixData
+      .query(COLLECTIONS.contestants)
+      .eq("appId", id)
+      .limit(1)
+      .find(OPTIONS);
+    await wixData.save(
+      COLLECTIONS.contestants,
+      {
+        ...(existing.items[0] || {}),
+        appId: id,
+        payload: JSON.stringify(contestant),
+      },
+      OPTIONS,
+    );
+    await wixData.save(
+      SETTINGS_COLLECTION,
+      {
+        _id: STAFF_REVISION_ID,
+        value: workspace.staffRevision + 1,
+        updatedAt: new Date(),
+      },
+      OPTIONS,
+    );
+    return {
+      contestant,
+      data: registrationDeskProjection(await readWorkspace()),
+    };
+  },
+);
 
 export const loadPublicArenaData = webMethod(Permissions.Anyone, async () =>
   publicProjection(await readWorkspace()),
@@ -1010,9 +1257,7 @@ async function insertUniqueArenaRecord(collectionId, record) {
   }
 }
 
-export const submitOnlineSignup = webMethod(
-  Permissions.Anyone,
-  async (request) => {
+async function createSignupRecords(request, authenticatedId, source) {
     if (
       !validAppId(request.competitionId || request.eventId) ||
       !validAppId(request.contestantId) ||
@@ -1021,10 +1266,6 @@ export const submitOnlineSignup = webMethod(
       throw new Error("Invalid signup request.");
     }
     const eventId = request.competitionId || request.eventId;
-    const authenticatedId = await verifyContestantCredentials(
-      request.email,
-      request.pin,
-    );
     if (authenticatedId !== request.contestantId) {
       throw new Error("Contestant account does not match this entry.");
     }
@@ -1037,20 +1278,46 @@ export const submitOnlineSignup = webMethod(
     assertOnlineRegistrationOpen(event);
 
     const priorTeams = workspace.teams.filter(
-      (team) => team.submissionId === request.submissionId,
+      (team) =>
+        team.submissionId === request.submissionId && team.source === source,
     );
     const priorRegistrations = workspace.registrations.filter(
-      (registration) => registration.submissionId === request.submissionId,
+      (registration) =>
+        registration.submissionId === request.submissionId &&
+        registration.source === source,
     );
     const repeated = priorTeams.length > 0 || priorRegistrations.length > 0;
+    if (repeated) {
+      const belongsToRequest =
+        [...priorTeams, ...priorRegistrations].every(
+          (record) => record.eventId === event.id,
+        ) &&
+        (priorTeams.some(
+          (team) =>
+            team.headerId === authenticatedId || team.heelerId === authenticatedId,
+        ) ||
+          priorRegistrations.some(
+            (registration) => registration.contestantId === authenticatedId,
+          ));
+      if (!belongsToRequest) {
+        throw new Error("That submission ID is already in use.");
+      }
+      return {
+        submissionId: request.submissionId,
+        competitionId: event.id,
+        summary: `Your entry in ${event.name} is already confirmed and pending payment.`,
+        existing: true,
+      };
+    }
 
     const submittedAt = new Date().toISOString();
     const metadata = {
       paid: false,
-      source: "online",
+      source,
       submissionId: request.submissionId,
       submittedAt,
     };
+    const idPrefix = source === "online" ? "online" : "desk";
     const registrations = [];
     const teams = [];
     if (
@@ -1083,7 +1350,7 @@ export const submitOnlineSignup = webMethod(
         throw new Error("Entry limit exceeded.");
       }
       registrations.push({
-        id: `online-registration-${request.submissionId}`,
+        id: `${idPrefix}-registration-${request.submissionId}`,
         eventId: event.id,
         contestantId: contestant.id,
         role: request.role,
@@ -1143,7 +1410,7 @@ export const submitOnlineSignup = webMethod(
       ) {
         throw new Error("Entry limit exceeded.");
       }
-      const teamId = `online-team-${request.submissionId}`;
+      const teamId = `${idPrefix}-team-${request.submissionId}`;
       teams.push({
         id: teamId,
         eventId: event.id,
@@ -1168,7 +1435,7 @@ export const submitOnlineSignup = webMethod(
             : [event.pickDrawRole === "header" ? "Header" : "Heeler"];
         roles.forEach((role, index) => {
           registrations.push({
-            id: `online-registration-${request.submissionId}-${index + 1}`,
+            id: `${idPrefix}-registration-${request.submissionId}-${index + 1}`,
             eventId: event.id,
             contestantId: role === "Header" ? header.id : heeler.id,
             sourceTeamId: teamId,
@@ -1192,8 +1459,11 @@ export const submitOnlineSignup = webMethod(
     await wixData.save(
       SETTINGS_COLLECTION,
       {
-        _id: ONLINE_REVISION_ID,
-        value: workspace.onlineRevision + 1,
+        _id: source === "online" ? ONLINE_REVISION_ID : STAFF_REVISION_ID,
+        value:
+          source === "online"
+            ? workspace.onlineRevision + 1
+            : workspace.staffRevision + 1,
         updatedAt: new Date(),
       },
       OPTIONS,
@@ -1201,10 +1471,37 @@ export const submitOnlineSignup = webMethod(
     return {
       submissionId: request.submissionId,
       competitionId: event.id,
-      summary: repeated
-        ? `Your entry in ${event.name} is already confirmed and pending payment.`
-        : `Entry confirmed for ${event.name}. Payment is due with arena staff.`,
-      existing: repeated,
+      summary: `Entry confirmed for ${event.name}. Payment is due with arena staff.`,
+      existing: false,
+    };
+}
+
+export const submitOnlineSignup = webMethod(
+  Permissions.Anyone,
+  async (request) => {
+    const authenticatedId = await verifyContestantCredentials(
+      request.email,
+      request.pin,
+    );
+    return createSignupRecords(request, authenticatedId, "online");
+  },
+);
+
+export const submitRegistrationDeskSignup = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireRegistrationDesk();
+    const result = await createSignupRecords(
+      request,
+      request.contestantId,
+      "staff",
+    );
+    return {
+      ...result,
+      summary: result.existing
+        ? "That entry is already saved."
+        : "Contestant entry saved and pending payment.",
+      data: registrationDeskProjection(await readWorkspace()),
     };
   },
 );

@@ -66,6 +66,9 @@ describe("public routing", () => {
   it("defaults to public home and preserves operational precedence", () => {
     expect(parsePublicRoute("")).toEqual({ kind: "home" });
     expect(parsePublicRoute("?page=events&app=command")).toEqual({ kind: "staff" });
+    expect(parsePublicRoute("?app=registration")).toEqual({
+      kind: "registration-desk",
+    });
     expect(parsePublicRoute("?page=home&portal=contestant")).toEqual({ kind: "contestant" });
     expect(parsePublicRoute("?display=leaderboard&page=event&id=x")).toEqual({ kind: "leaderboard" });
     expect(parsePublicRoute("?page=competition&id=c")).toEqual({ kind: "competition", id: "c" });

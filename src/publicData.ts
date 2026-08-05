@@ -26,6 +26,7 @@ export type PublicRoute =
   | { kind: "spectator"; id: string }
   | { kind: "contestant" }
   | { kind: "staff" }
+  | { kind: "registration-desk" }
   | { kind: "leaderboard" };
 
 export interface PublicStandingRow {
@@ -119,6 +120,9 @@ export function parsePublicRoute(search: string): PublicRoute {
   if (params.get("portal") === "contestant") return { kind: "contestant" };
   if (params.get("display") === "leaderboard") return { kind: "leaderboard" };
   if (params.get("app") === "command") return { kind: "staff" };
+  if (params.get("app") === "registration") {
+    return { kind: "registration-desk" };
+  }
   const page = params.get("page") ?? "home";
   const id = params.get("id") ?? "";
   if (page === "events") return { kind: "events" };

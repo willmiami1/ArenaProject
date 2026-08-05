@@ -693,6 +693,42 @@ main { grid-column: 2; min-width: 0; }
 .app-shell ::-webkit-scrollbar-track { background: #0d0a08; }
 .app-shell ::-webkit-scrollbar-thumb { background: #5d412f; border: 2px solid #0d0a08; border-radius: 10px; }
 
+.registration-desk { min-height: 100vh; color: #eadcc6; background: #0d0a08; }
+.registration-desk-header { min-height: 110px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px max(22px,calc((100vw - 1300px)/2 + 44px)); background: #17110d; border-bottom: 1px solid #49372b; }
+.registration-desk-header h1 { display: flex; align-items: center; gap: 11px; margin: 3px 0; font-family: "Manrope",sans-serif; font-size: clamp(25px,3vw,38px); }
+.registration-desk-header h1 svg { color: #d49a61; }
+.registration-desk-header p { margin: 0; color: #a9937d; font-size: 12px; }
+.registration-desk-header>a { display: inline-flex; align-items: center; gap: 7px; padding: 11px 14px; color: #eadcc6; border: 1px solid #66503d; border-radius: 7px; font-size: 11px; font-weight: 800; text-decoration: none; }
+.registration-desk-main { max-width: 1300px; margin: auto; padding: 34px clamp(22px,4vw,44px) 70px; }
+.registration-desk-events { margin-bottom: 22px; padding: 20px; background: #17110d; border: 1px solid #3e2e23; border-radius: 10px; }
+.registration-desk-events label,.registration-entry-form label,.registration-profile-form label { display: grid; gap: 7px; color: #cdb9a3; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.registration-desk :is(input,select) { width: 100%; min-height: 46px; padding: 10px 12px; color: #eadcc6; background: #0d0a08; border: 1px solid #5a4434; border-radius: 6px; }
+.registration-desk-events select { max-width: 650px; margin-top: 7px; }
+.registration-desk-events p { margin: 8px 0 0; color: #bd9b75; }
+.registration-desk-columns { display: grid; grid-template-columns: minmax(0,1fr) minmax(340px,.8fr); gap: 22px; align-items: start; }
+.registration-desk-panel { overflow: hidden; background: #17110d; border: 1px solid #3e2e23; border-radius: 10px; box-shadow: 0 14px 32px rgba(0,0,0,.2); }
+.registration-desk-panel-heading { min-height: 75px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px 20px; border-bottom: 1px solid #3e2e23; }
+.registration-desk-panel-heading span { color: #b88458; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
+.registration-desk-panel-heading h2 { margin: 4px 0 0; font-family: "Manrope",sans-serif; font-size: 19px; }
+.registration-desk-panel-heading button { display: inline-flex; align-items: center; gap: 6px; padding: 9px 12px; color: #fff; background: #875538; border: 1px solid #a46b47; border-radius: 6px; font-size: 10px; font-weight: 800; }
+.registration-search { display: flex; align-items: center; gap: 9px; margin: 15px; padding: 0 12px; color: #9b8673; background: #0d0a08; border: 1px solid #49372b; border-radius: 7px; }
+.registration-search input { padding: 0; border: 0; }
+.registration-contestant-list { max-height: 520px; overflow-y: auto; padding: 0 15px 15px; }
+.registration-contestant-list>button { width: 100%; min-height: 65px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; color: #d9c8b5; background: transparent; border: 0; border-bottom: 1px solid #33261e; text-align: left; }
+.registration-contestant-list>button:hover,.registration-contestant-list>button.selected { background: #2a1e16; }
+.registration-contestant-list>button.selected { box-shadow: inset 3px 0 #d49a61; }
+.registration-contestant-list strong,.registration-contestant-list small { display: block; }
+.registration-contestant-list small { margin-top: 4px; color: #8e7b69; font-size: 9px; }
+.registration-contestant-list i { padding: 8px; color: #bba58e; font-style: normal; }
+.registration-entry-form { display: grid; gap: 17px; padding: 24px; }
+.registration-selected-contestant { display: flex; align-items: center; gap: 10px; padding: 14px; color: #e4c494; background: #2c2015; border: 1px solid #5b422a; border-radius: 7px; font-size: 12px; }
+.registration-entry-form .primary,.registration-profile-form .primary { min-height: 48px; margin-top: 5px; background: #875538; border-color: #a46b47; }
+.registration-desk-empty { min-height: 290px; display: grid; place-items: center; align-content: center; gap: 12px; color: #796a5b; text-align: center; }
+.registration-profile-panel { margin-top: 22px; }
+.registration-profile-form { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; padding: 22px; }
+.registration-profile-form .primary { align-self: end; }
+.registration-desk-message { position: sticky; bottom: 16px; margin: 20px auto 0; padding: 14px 18px; color: #2a1b0f; background: #e2bc83; border: 1px solid #b47b44; border-radius: 7px; font-size: 12px; font-weight: 800; box-shadow: 0 10px 28px rgba(0,0,0,.28); }
+
 @media (max-width: 1100px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .two-column, .run-desk-grid { grid-template-columns: 1fr; }
@@ -702,9 +738,12 @@ main { grid-column: 2; min-width: 0; }
   .report-filter-grid { grid-template-columns: repeat(3, 1fr); }
   .portal-team-row { grid-template-columns: 1fr 1fr; }
   .portal-result { text-align: left; }
+  .registration-desk-columns { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
+  .registration-desk-header { align-items: flex-start; flex-direction: column; }
+  .registration-profile-form { grid-template-columns: 1fr 1fr; }
   .app-shell { display: block; }
   main { width: 100%; }
   .sidebar { transform: translateX(-100%); transition: transform .2s ease; }

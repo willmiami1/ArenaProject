@@ -60,6 +60,9 @@ The default URL opens the public home page. Public routes use `?page=events`,
 `?page=signup&id=...`. The public home page includes **Admin login**, which opens
 `?app=command`; the existing
 `?portal=contestant` and `?display=leaderboard` routes remain available.
+`?app=registration` opens the restricted Registration Desk for staff who may
+maintain contestant profiles and submit eligible entries but may not access event
+configuration, Run Desk, reports, results, payouts, or LED controls.
 
 ### Permanent Wix Data storage
 
@@ -93,6 +96,9 @@ The default URL opens the public home page. Public routes use `?page=events`,
    save it in Wix Secrets Manager as `ArenaAdminRoleId`. Assign the role only to
    approved staff. The backend compares the exact role ID; the role name is not
    trusted and the secret is never returned to the browser.
+   Create a second role for restricted registration staff and save its role ID as
+   `ArenaRegistrationRoleId`. Members with this role can use only the
+   Registration Desk APIs; Arena Admin members may also open that desk.
 10. Enable Wix Members login on the page. `wix/page-code.js` uses
     `wix-members-frontend.authentication.promptLogin()` for the modal, while
     `wix/backend/arena-data.web.js` uses `wix-members-backend.currentMember`

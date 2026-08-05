@@ -3,6 +3,7 @@ import {
   ArrowRight,
   CalendarDays,
   CheckCircle2,
+  ClipboardPen,
   Clock3,
   Facebook,
   Instagram,
@@ -132,6 +133,7 @@ function PublicHeader() {
       <nav className={open ? "open" : ""} aria-label="Public navigation">
         <a href={href("home")}>Home</a>
         <a href={eventsHref}>Events</a>
+        <a href="?app=registration"><ClipboardPen size={16} /> Registration Desk</a>
         <a href="?app=command"><ShieldCheck size={16} /> Admin login</a>
         <SocialLinks />
       </nav>
@@ -149,6 +151,7 @@ function PublicFooter() {
       <nav aria-label="Footer navigation">
         <a href={href("home")}>Home</a>
         <a href={eventsHref}>Events</a>
+        <a href="?app=registration">Registration Desk</a>
         <a href="?app=command">Admin login</a>
       </nav>
       <div className="public-footer-connect">
