@@ -53,8 +53,9 @@ export function registrationDeskProjection(
   data: ArenaData,
   now = new Date(),
 ): RegistrationDeskData {
-  const events = data.events.filter((event) =>
-    onlineRegistrationIsOpen(event, now),
+  const events = data.events.filter(
+    (event) =>
+      event.status === "Live" && onlineRegistrationIsOpen(event, now),
   );
   const eventIds = new Set(events.map((event) => event.id));
   return {

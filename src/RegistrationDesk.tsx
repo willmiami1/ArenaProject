@@ -238,7 +238,7 @@ export function RegistrationDesk() {
       <main className="registration-desk-main">
         <section className="registration-desk-events">
           <label>
-            Open competition
+            Live competition
             <select value={eventId} onChange={(change) => {
               setEventId(change.target.value);
               setPartnerId("");
@@ -253,7 +253,7 @@ export function RegistrationDesk() {
           </label>
           {!data && <p>Loading registration desk…</p>}
           {data && !data.events.length && (
-            <p>No competitions are currently accepting registration.</p>
+            <p>No live competitions are currently accepting registration.</p>
           )}
         </section>
 

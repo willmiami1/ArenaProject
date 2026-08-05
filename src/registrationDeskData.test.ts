@@ -25,6 +25,18 @@ const data: ArenaData = {
     },
     {
       ...defaultCompetitionSettings,
+      id: "upcoming-event",
+      parentEventId: "meet",
+      name: "Upcoming Roping",
+      date: "2026-08-05",
+      startTime: "20:00",
+      location: "Arena",
+      status: "Upcoming",
+      registrationOpen: true,
+      entryFee: 50,
+    },
+    {
+      ...defaultCompetitionSettings,
       id: "closed-event",
       parentEventId: "meet",
       name: "Closed Roping",
@@ -74,7 +86,7 @@ const data: ArenaData = {
 };
 
 describe("registration desk boundary", () => {
-  it("includes only open competitions and strips run results", () => {
+  it("includes only live open competitions and strips run results", () => {
     const projected = registrationDeskProjection(
       data,
       new Date("2026-08-05T15:00:00"),

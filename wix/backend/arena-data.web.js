@@ -598,8 +598,9 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
 });
 
 function registrationDeskProjection(workspace) {
-  const events = workspace.events.filter((event) =>
-    onlineRegistrationIsOpen(event),
+  const events = workspace.events.filter(
+    (event) =>
+      event.status === "Live" && onlineRegistrationIsOpen(event),
   );
   const eventIds = new Set(events.map((event) => event.id));
   return {
@@ -1275,6 +1276,9 @@ async function createSignupRecords(request, authenticatedId, source) {
       (item) => item.id === authenticatedId,
     );
     if (!event || !contestant) throw new Error("Competition or contestant not found.");
+    if (source === "staff" && event.status !== "Live") {
+      throw new Error("Registration Desk entries are limited to live competitions.");
+    }
     assertOnlineRegistrationOpen(event);
 
     const priorTeams = workspace.teams.filter(
