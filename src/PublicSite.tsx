@@ -101,7 +101,11 @@ function Status({ value }: { value: string }) {
 }
 
 const socialLinks = [
-  { label: "Facebook", url: "https://www.facebook.com/", Icon: Facebook },
+  {
+    label: "Facebook",
+    url: "https://www.facebook.com/profile.php?id=61590614630641",
+    Icon: Facebook,
+  },
   { label: "Instagram", url: "https://www.instagram.com/", Icon: Instagram },
   { label: "YouTube", url: "https://www.youtube.com/", Icon: Youtube },
 ];
