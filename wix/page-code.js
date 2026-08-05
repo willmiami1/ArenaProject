@@ -17,10 +17,13 @@ import {
 } from "backend/arena-data.web";
 import { authentication } from "wix-members-frontend";
 
-const EMBED_ELEMENT_ID = "#comp-msgn54ge";
-
 $w.onReady(() => {
-  $w(EMBED_ELEMENT_ID).onMessage(async (event) => {
+  const [embed] = $w("HtmlComponent");
+  if (!embed) {
+    console.error("Add an HTML Component containing the Arena app bridge.");
+    return;
+  }
+  embed.onMessage(async (event) => {
     const message = event.data;
     if (message?.source !== "arena-command-app" || !message.requestId) return;
 
@@ -64,7 +67,7 @@ $w.onReady(() => {
       } else {
         throw new Error("Unsupported Arena Command action.");
       }
-      $w(EMBED_ELEMENT_ID).postMessage({
+      embed.postMessage({
         source: "arena-wix-host",
         requestId: message.requestId,
         ok: true,
@@ -72,7 +75,7 @@ $w.onReady(() => {
       });
     } catch (error) {
       console.error("Arena Command persistence failed.", error);
-      $w(EMBED_ELEMENT_ID).postMessage({
+      embed.postMessage({
         source: "arena-wix-host",
         requestId: message.requestId,
         ok: false,

@@ -64,15 +64,31 @@ interface WixResponse<T> {
   error?: string;
 }
 
-export function isWixEmbed() {
+function wixParentOrigin() {
   if (window.parent === window) return false;
   const configuredOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
   if (!configuredOrigin || !document.referrer) return false;
   try {
-    return new URL(document.referrer).origin === configuredOrigin;
+    const referrer = new URL(document.referrer);
+    if (referrer.origin === configuredOrigin) return referrer.origin;
+    const configuredRelayHost = new URL(
+      window.location.href,
+    ).searchParams.get("wixHostOrigin");
+    const wixRelay =
+      referrer.hostname === "htmlcomponentservice.com" ||
+      referrer.hostname.endsWith(".htmlcomponentservice.com") ||
+      referrer.hostname.endsWith(".filesusr.com") ||
+      referrer.hostname.endsWith(".wixstatic.com");
+    return configuredRelayHost === configuredOrigin && wixRelay
+      ? referrer.origin
+      : false;
   } catch {
     return false;
   }
+}
+
+export function isWixEmbed() {
+  return Boolean(wixParentOrigin());
 }
 
 function requestWix<T>(
@@ -98,10 +114,8 @@ function requestWix<T>(
     let targetOrigin = "*";
     if (sensitiveAction) {
       const configuredOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
-      const parentOrigin = document.referrer
-        ? new URL(document.referrer).origin
-        : "";
-      if (!configuredOrigin || parentOrigin !== configuredOrigin) {
+      const parentOrigin = wixParentOrigin();
+      if (!configuredOrigin || !parentOrigin) {
         reject(new Error("Secure Wix login is not configured for this site."));
         return;
       }
