@@ -107,7 +107,11 @@ const socialLinks = [
     Icon: Facebook,
   },
   { label: "Instagram", url: "https://www.instagram.com/", Icon: Instagram },
-  { label: "YouTube", url: "https://www.youtube.com/", Icon: Youtube },
+  {
+    label: "YouTube",
+    url: "https://www.youtube.com/@destinyranchvideos-hp9im",
+    Icon: Youtube,
+  },
 ];
 
 function SocialLinks() {
