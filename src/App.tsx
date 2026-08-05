@@ -1492,7 +1492,7 @@ function EventForm({
     entryFee: event?.entryFee.toString() ?? "50",
     competitionType: initialCompetitionType,
     registrationOpen: event?.registrationOpen ?? true,
-    entriesAllowed: (event?.entriesAllowed ?? (isNewPickAndDraw ? 4 : 1)).toString(),
+    entriesAllowed: (event?.entriesAllowed ?? 10).toString(),
     minDrawsAllowed: (event?.minDrawsAllowed ?? (isNewPickAndDraw ? 4 : 0)).toString(),
     allowRepeatPartners: event?.allowRepeatPartners ?? false,
     handicapTotal: (event?.handicapTotal ?? 20).toString(),
