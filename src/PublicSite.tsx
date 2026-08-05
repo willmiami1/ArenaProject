@@ -497,6 +497,22 @@ function HomePage({ data }: { data: PublicArenaData }) {
             <span><strong>Email</strong>admin@destinyranchevents.com</span>
           </a>
         </address>
+        <div className="public-contact-map">
+          <iframe
+            title="Destiny Ranch Arena location on Google Maps"
+            src="https://www.google.com/maps?q=2549+E+C+476,+Bushnell,+FL+33513&output=embed"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
+          <a
+            className="public-button"
+            href="https://www.google.com/maps/dir/?api=1&destination=2549+E+C+476+Bushnell+FL+33513"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <MapPin size={18} /> Open Directions in Google Maps
+          </a>
+        </div>
       </section>
     </>
   );
