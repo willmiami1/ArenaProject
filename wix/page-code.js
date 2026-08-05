@@ -17,7 +17,7 @@ import {
 } from "backend/arena-data.web";
 import { authentication } from "wix-members-frontend";
 
-const EMBED_ELEMENT_ID = "#arenaCommandEmbed";
+const EMBED_ELEMENT_ID = "#comp-msgn54ge";
 
 $w.onReady(() => {
   $w(EMBED_ELEMENT_ID).onMessage(async (event) => {

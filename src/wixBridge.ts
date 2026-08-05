@@ -110,7 +110,21 @@ function requestWix<T>(
     const requestId =
       window.crypto.randomUUID?.() ??
       `request-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const message = {
+      source: "arena-command-app",
+      requestId,
+      action,
+      data,
+    };
+    const retry =
+      action === "loadPublicArenaData"
+        ? window.setInterval(
+            () => window.parent.postMessage(message, targetOrigin),
+            750,
+          )
+        : undefined;
     const timeout = window.setTimeout(() => {
+      if (retry !== undefined) window.clearInterval(retry);
       window.removeEventListener("message", handleMessage);
       reject(new Error("Wix persistence did not respond."));
     }, 8000);
@@ -124,6 +138,7 @@ function requestWix<T>(
       ) {
         return;
       }
+      if (retry !== undefined) window.clearInterval(retry);
       window.clearTimeout(timeout);
       window.removeEventListener("message", handleMessage);
       if (!event.data.ok) {
@@ -134,15 +149,7 @@ function requestWix<T>(
     }
 
     window.addEventListener("message", handleMessage);
-    window.parent.postMessage(
-      {
-        source: "arena-command-app",
-        requestId,
-        action,
-        data,
-      },
-      targetOrigin,
-    );
+    window.parent.postMessage(message, targetOrigin);
   });
 }
 
