@@ -63,7 +63,11 @@ The default URL opens the public home page. Public routes use `?page=events`,
 `?app=registration` opens the restricted Registration Desk for staff who may
 maintain contestant profiles, configure contestant four-digit login PINs, and
 submit eligible entries but may not access event configuration, Run Desk,
-reports, results, payouts, or LED controls.
+reports, results, payouts, or LED controls. At checkout, the cashier selects
+**Paid in cash**, **Paid with credit card**, or **Open a tab**. Credit cards are
+charged separately on the arena's portable Square Terminal before the cashier
+records the payment; ArenaProject never receives or stores card data. Open tabs
+remain visibly unpaid for settlement but are authorized to enter the draw.
 
 ### Permanent Wix Data storage
 

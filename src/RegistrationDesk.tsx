@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
+  Banknote,
   CheckCircle2,
   ClipboardPen,
+  CreditCard,
   KeyRound,
   Pencil,
   Plus,
@@ -41,6 +43,12 @@ const emptyContestant = (): RegistrationDeskContestantInput => ({
   email: "",
   hometown: "",
 });
+
+const formatMoney = (value: number) =>
+  value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
 
 function asWorkspace(data: RegistrationDeskData): ArenaData {
   return {
@@ -85,6 +93,9 @@ export function RegistrationDesk() {
   const [partnerId, setPartnerId] = useState("");
   const [partnerIds, setPartnerIds] = useState<string[]>([]);
   const [pickStage, setPickStage] = useState<"draws" | "picks">("draws");
+  const [paymentMethod, setPaymentMethod] = useState<
+    "" | "cash" | "card" | "tab"
+  >("");
   const [search, setSearch] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
@@ -140,6 +151,8 @@ export function RegistrationDesk() {
   const selectedPartners = partners.filter((partner) =>
     partnerIds.includes(partner.id),
   );
+  const totalRuns = entries + partnerIds.length;
+  const totalDue = totalRuns * Number(event?.entryFee ?? 0);
   const drawEligible =
     Boolean(workspaceEvent && contestant) &&
     contestantEligibleForRole(workspaceEvent!, contestant, drawRole);
@@ -149,6 +162,10 @@ export function RegistrationDesk() {
       setEntries(minimumDraws);
     }
   }, [entries, minimumDraws, pickAndDraw]);
+
+  useEffect(() => {
+    setPaymentMethod("");
+  }, [contestantId, entries, eventId, partnerId, partnerIds, role]);
   const normalizedSearch = search.trim().toLowerCase();
   const filteredContestants =
     normalizedSearch.length < 2
@@ -274,24 +291,27 @@ export function RegistrationDesk() {
     }
   };
 
-  const submitEntry = async (formEvent: FormEvent) => {
-    formEvent.preventDefault();
-    if (!event || !contestant) return;
-    setBusy(true);
-    setMessage("");
-    const request: SignupRequest = {
-      submissionId:
-        window.crypto.randomUUID?.() ??
-        `desk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      eventId: event.id,
-      contestantId: contestant.id,
+  const buildSignupRequest = (
+    submissionId: string,
+    method: "cash" | "card" | "tab",
+    signupEvent: { id: string },
+    signupContestant: Contestant,
+  ): SignupRequest => ({
+      submissionId,
+      eventId: signupEvent.id,
+      contestantId: signupContestant.id,
       role,
       drawRole: pickAndDraw ? drawRole : undefined,
       entries: individual || pickAndDraw ? entries : undefined,
       partnerId:
         individual || pickAndDraw ? undefined : partnerId,
       partnerIds: pickAndDraw && addPick ? partnerIds : undefined,
-    };
+      paymentConfirmed: method !== "tab",
+      paymentMethod: method,
+    });
+
+  const finishSignup = async (request: SignupRequest) => {
+    if (!event) return;
     try {
       if (embedded) {
         const result = await submitRegistrationDeskSignup(request);
@@ -310,6 +330,7 @@ export function RegistrationDesk() {
       setEntries(1);
       setAddPick(false);
       setPickStage("draws");
+      setPaymentMethod("");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "The entry could not be saved.",
@@ -317,6 +338,19 @@ export function RegistrationDesk() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const submitEntry = (formEvent: FormEvent) => {
+    formEvent.preventDefault();
+    if (!event || !contestant || !paymentMethod) return;
+    setBusy(true);
+    setMessage("");
+    const submissionId =
+      window.crypto.randomUUID?.() ??
+      `desk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    void finishSignup(
+      buildSignupRequest(submissionId, paymentMethod, event, contestant),
+    );
   };
 
   return (
@@ -546,6 +580,10 @@ export function RegistrationDesk() {
                               <input
                                 type="checkbox"
                                 checked={partnerIds.includes(partner.id)}
+                                disabled={
+                                  !partnerIds.includes(partner.id) &&
+                                  totalRuns >= event.entriesAllowed
+                                }
                                 onChange={(change) =>
                                   setPartnerIds((current) =>
                                     change.target.checked
@@ -559,9 +597,39 @@ export function RegistrationDesk() {
                           ))}
                         </fieldset>
                       )}
-                      <div className="registration-confirmation">
-                        <strong>Confirm {partnerIds.length} pick{partnerIds.length === 1 ? "" : "s"}</strong>
+                      <section
+                        className="registration-entry-receipt"
+                        aria-label="Entry receipt"
+                      >
+                        <div className="registration-receipt-heading">
+                          <span>Entry receipt</span>
+                          <strong>{contestant.name}</strong>
+                        </div>
+                        <dl>
+                          <div>
+                            <dt>Draws</dt>
+                            <dd>{entries}</dd>
+                          </div>
+                          <div>
+                            <dt>Picked teams</dt>
+                            <dd>{partnerIds.length}</dd>
+                          </div>
+                          <div className="registration-receipt-total-runs">
+                            <dt>Total runs</dt>
+                            <dd>{totalRuns}</dd>
+                          </div>
+                          <div>
+                            <dt>Amount per run</dt>
+                            <dd>{formatMoney(event.entryFee)}</dd>
+                          </div>
+                          <div className="registration-receipt-total-due">
+                            <dt>Total due</dt>
+                            <dd>{formatMoney(totalDue)}</dd>
+                          </div>
+                        </dl>
                         {selectedPartners.length ? (
+                          <div className="registration-receipt-teams">
+                            <span>Picked teams</span>
                           <ul>
                             {selectedPartners.map((partner) => (
                               <li key={partner.id}>
@@ -571,10 +639,11 @@ export function RegistrationDesk() {
                               </li>
                             ))}
                           </ul>
+                          </div>
                         ) : (
                           <p>No picked teams selected.</p>
                         )}
-                      </div>
+                      </section>
                     </>
                   ) : (
                     <label>Partner<select required value={partnerId} onChange={(change) => setPartnerId(change.target.value)}>
@@ -583,6 +652,50 @@ export function RegistrationDesk() {
                     </select></label>
                   )}
                   {(!pickAndDraw || pickStage === "picks") && (
+                    <fieldset className="registration-payment-method">
+                      <legend>Cashier payment selection</legend>
+                      <label className={paymentMethod === "cash" ? "selected" : ""}>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          checked={paymentMethod === "cash"}
+                          onChange={() => setPaymentMethod("cash")}
+                        />
+                        <Banknote />
+                        <span>
+                          <strong>Paid in cash</strong>
+                          <small>{formatMoney(totalDue)} received by cashier</small>
+                        </span>
+                      </label>
+                      <label className={paymentMethod === "card" ? "selected" : ""}>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          checked={paymentMethod === "card"}
+                          onChange={() => setPaymentMethod("card")}
+                        />
+                        <CreditCard />
+                        <span>
+                          <strong>Paid with credit card</strong>
+                          <small>Charge {formatMoney(totalDue)} on the portable Square Terminal first</small>
+                        </span>
+                      </label>
+                      <label className={paymentMethod === "tab" ? "selected" : ""}>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          checked={paymentMethod === "tab"}
+                          onChange={() => setPaymentMethod("tab")}
+                        />
+                        <ClipboardPen />
+                        <span>
+                          <strong>Open a tab</strong>
+                          <small>Add {formatMoney(totalDue)} to this contestant's balance</small>
+                        </span>
+                      </label>
+                    </fieldset>
+                  )}
+                  {(!pickAndDraw || pickStage === "picks") && paymentMethod && (
                     <button
                       className="primary"
                       disabled={
@@ -593,14 +706,15 @@ export function RegistrationDesk() {
                           !partnerId) ||
                         (pickAndDraw &&
                           ((entries < 1 && !addPick) ||
-                            (addPick && !partnerIds.length)))
+                            (addPick && !partnerIds.length) ||
+                            totalRuns > event.entriesAllowed))
                       }
                     >
                       {busy
                         ? "Saving…"
-                        : pickAndDraw
-                          ? `Confirm ${entries} draw${entries === 1 ? "" : "s"} and ${partnerIds.length} pick${partnerIds.length === 1 ? "" : "s"}`
-                          : "Register contestant"}
+                        : paymentMethod === "tab"
+                          ? "Open tab and send entries to draw"
+                          : "Record payment and send entries to draw"}
                     </button>
                   )}
                   </form>

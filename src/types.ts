@@ -86,6 +86,8 @@ export interface Team {
   arenaPosition?: string;
   barrierPenalty?: boolean;
   paid?: boolean;
+  paymentMethod?: "cash" | "card" | "tab";
+  paymentReference?: string;
   source?: "online" | "staff";
   submissionId?: string;
   submittedAt?: string;
@@ -126,6 +128,8 @@ export interface EventRegistration {
   status: EntryStatus;
   notes: string;
   paid?: boolean;
+  paymentMethod?: "cash" | "card" | "tab";
+  paymentReference?: string;
   source?: "online" | "staff";
   submissionId?: string;
   submittedAt?: string;

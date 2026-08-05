@@ -194,16 +194,28 @@ export function submitLocalRegistrationDeskSignup(
   request: SignupRequest,
   now = new Date(),
 ) {
+  if (!["cash", "card", "tab"].includes(request.paymentMethod ?? "")) {
+    throw new Error("Choose paid in cash, paid with credit card, or open a tab.");
+  }
+  if (request.paymentMethod !== "tab" && request.paymentConfirmed !== true) {
+    throw new Error("Cashier must confirm payment before sending entries to the draw.");
+  }
   const result = createOnlineSignup(data, request, now, "staff");
   if (result.existing) {
     return { result, data };
   }
   const teams = result.teams.map((team) => ({
     ...team,
+    paid: request.paymentMethod !== "tab",
+    paymentMethod: request.paymentMethod,
+    paymentReference: request.submissionId,
     source: "staff" as const,
   }));
   const registrations = result.registrations.map((registration) => ({
     ...registration,
+    paid: request.paymentMethod !== "tab",
+    paymentMethod: request.paymentMethod,
+    paymentReference: request.submissionId,
     source: "staff" as const,
   }));
   return {

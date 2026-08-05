@@ -67,6 +67,7 @@ import {
   competitionTypes,
   contestantEligibleForRole,
   defaultCompetitionSettings,
+  entryClearedForDraw,
   generateCompetitionDraw,
   registrationsForPickedTeam,
   teamEligibleForCompetition,
@@ -2119,10 +2120,10 @@ function Teams({
   const eventTeams = teams.filter((team) => team.eventId === event?.id).sort((a, b) => a.drawPosition - b.drawPosition);
   const eventRegistrations = registrations.filter((entry) => entry.eventId === event?.id);
   const headerEntryCount = eventRegistrations
-    .filter((entry) => entry.role === "Header" && entry.status === "entered" && entry.paid !== false)
+    .filter((entry) => entry.role === "Header" && entry.status === "entered" && entryClearedForDraw(entry))
     .reduce((total, entry) => total + entry.entries, 0);
   const heelerEntryCount = eventRegistrations
-    .filter((entry) => entry.role === "Heeler" && entry.status === "entered" && entry.paid !== false)
+    .filter((entry) => entry.role === "Heeler" && entry.status === "entered" && entryClearedForDraw(entry))
     .reduce((total, entry) => total + entry.entries, 0);
   const rider = (id: string) => contestants.find((item) => item.id === id);
   const displayedTeams = eventTeams.filter((team) =>
@@ -2307,13 +2308,13 @@ function Teams({
           <div className="table-toolbar">
             <div><h3>{event.competitionType === "pick-and-draw" ? "Draw Pot contestants" : "Rider registration"}</h3><p>{eventRegistrations.length} registered riders</p></div>
             <div className="entry-totals">
-              <span><strong>{headerEntryCount}</strong> Paid header entries</span>
-              <span><strong>{heelerEntryCount}</strong> Paid heeler entries</span>
+              <span><strong>{headerEntryCount}</strong> Draw-cleared header entries</span>
+              <span><strong>{heelerEntryCount}</strong> Draw-cleared heeler entries</span>
               {event.competitionType === "pick-and-draw" && (
                 <span><strong>{event.pickDrawRole === "header" ? headerEntryCount : event.pickDrawRole === "heeler" ? heelerEntryCount : Math.max(headerEntryCount, heelerEntryCount)}</strong> Round 1 draw teams</span>
               )}
               {event.competitionType === "round-robin" && (
-                <span><strong>{eventRegistrations.filter((entry) => entry.role === "Header" && entry.status === "entered" && entry.paid !== false).length * eventRegistrations.filter((entry) => entry.role === "Heeler" && entry.status === "entered" && entry.paid !== false).length}</strong> Round Robin teams</span>
+                <span><strong>{eventRegistrations.filter((entry) => entry.role === "Header" && entry.status === "entered" && entryClearedForDraw(entry)).length * eventRegistrations.filter((entry) => entry.role === "Heeler" && entry.status === "entered" && entryClearedForDraw(entry)).length}</strong> Round Robin teams</span>
               )}
               {event.competitionType === "draw-pot" && headerEntryCount !== heelerEntryCount && (
                 <span className="free-total"><strong>{Math.abs(headerEntryCount - heelerEntryCount)}</strong> Free {headerEntryCount > heelerEntryCount ? "heeler" : "header"} run{Math.abs(headerEntryCount - heelerEntryCount) === 1 ? "" : "s"}</span>
@@ -2323,9 +2324,9 @@ function Teams({
           <div className="registration-list">
             {eventRegistrations.map((registration) => (
               <div className="registration-row" key={registration.id}>
-                <span className="person"><i>{initials(rider(registration.contestantId)?.name ?? "")}</i><span><strong>{rider(registration.contestantId)?.name}</strong><small>{registration.role} · {registration.entries} entr{registration.entries === 1 ? "y" : "ies"}{registration.sourceTeamId ? " · Picked team" : ""}</small></span></span>
+                <span className="person"><i>{initials(rider(registration.contestantId)?.name ?? "")}</i><span><strong>{rider(registration.contestantId)?.name}</strong><small>{registration.role} · {registration.entries} entr{registration.entries === 1 ? "y" : "ies"}{registration.sourceTeamId ? " · Picked team" : ""}{registration.paid === false && registration.paymentMethod === "tab" ? " · Open tab" : ""}</small></span></span>
                 <span className={`tag ${registration.status === "entered" ? "complete" : registration.status === "waitlist" ? "amber" : "no-time"}`}>{registration.status}</span>
-                <button className={registration.paid === false ? "secondary small-action" : "selected-button small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, paid: registration.paid === false })}>{registration.paid === false ? "Mark paid" : "Paid"}</button>
+                <button className={registration.paid === false ? "secondary small-action" : "selected-button small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, paid: registration.paid === false })}>{registration.paid === false ? (registration.paymentMethod === "tab" ? "Open tab · mark paid" : "Mark paid") : "Paid"}</button>
                 <button className={registration.checkedIn ? "selected-button small-action" : "secondary small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, checkedIn: !registration.checkedIn })}>{registration.checkedIn ? <><Check size={14} /> Checked in</> : "Check in"}</button>
                 <button className="secondary small-action" disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, status: registration.status === "scratched" ? "entered" : "scratched" })}>{registration.status === "scratched" ? "Restore" : "Scratch"}</button>
                 <button className="icon-action delete-action small-icon" disabled={event.drawLocked} title="Delete registration" onClick={() => onDeleteRegistration(registration.id)}><Trash2 size={14} /></button>
@@ -2355,8 +2356,17 @@ function Teams({
               <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}</small></span></div>
               <span className="pair-mark">&</span>
               <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}</small></span></div>
-              <span className="draw-status"><span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}</small></span>
+              <span className="draw-status"><span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}{team.paid === false && team.paymentMethod === "tab" ? " · Open tab" : ""}</small></span>
               <span className="row-actions no-print">
+                {!team.generated && team.paid === false && (
+                  <button
+                    title={team.paymentMethod === "tab" ? "Open tab · mark paid" : "Mark paid"}
+                    disabled={event?.drawLocked}
+                    onClick={() => onUpdateTeam({ ...team, paid: true })}
+                  >
+                    <CircleDollarSign size={15} />
+                  </button>
+                )}
                 <button title={team.checkedIn ? "Checked in" : "Check in"} disabled={event?.drawLocked} onClick={() => onUpdateTeam({ ...team, checkedIn: !team.checkedIn })}>{team.checkedIn ? <Check size={15} /> : <UserRound size={15} />}</button>
                 {!team.generated && <button title="Edit team" disabled={!canEdit} onClick={() => { setEditingTeam(team); setShowForm(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil size={15} /></button>}
                 <button title={team.scratched ? "Restore team" : "Scratch team"} disabled={event?.drawLocked} onClick={() => onUpdateTeam({ ...team, scratched: !team.scratched })}><X size={15} /></button>

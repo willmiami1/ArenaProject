@@ -159,6 +159,7 @@ async function requireRegistrationDesk() {
   if (access.state !== "authorized") {
     throw new Error("This action requires the Wix Registration Desk role.");
   }
+
 }
 
 export const getAdminAccess = webMethod(
@@ -1335,8 +1336,11 @@ async function createSignupRecords(request, authenticatedId, source) {
       (item) => item.id === authenticatedId,
     );
     if (!event || !contestant) throw new Error("Competition or contestant not found.");
-    if (source === "staff") assertRegistrationDeskOpen(event);
-    else assertOnlineRegistrationOpen(event);
+    if (source === "staff") {
+      assertRegistrationDeskOpen(event);
+    } else {
+      assertOnlineRegistrationOpen(event);
+    }
     const normalizedPartnerIds =
       event.competitionType === "pick-and-draw" &&
       Array.isArray(request.partnerIds)
@@ -1355,6 +1359,7 @@ async function createSignupRecords(request, authenticatedId, source) {
           entries:
             request.entries === undefined ? null : Number(request.entries),
           partnerIds: normalizedPartnerIds,
+          paymentMethod: source === "staff" ? request.paymentMethod || "" : "",
         }),
       )
       .digest("hex");
@@ -1404,7 +1409,13 @@ async function createSignupRecords(request, authenticatedId, source) {
 
     const submittedAt = new Date().toISOString();
     const metadata = {
-      paid: false,
+      paid: source === "staff" && request.paymentMethod !== "tab",
+      ...(source === "staff"
+        ? {
+            paymentMethod: request.paymentMethod,
+            paymentReference: request.submissionId,
+          }
+        : {}),
       source,
       submissionId: request.submissionId,
       submissionFingerprint,
@@ -1656,6 +1667,18 @@ async function createSignupRecords(request, authenticatedId, source) {
       }
     }
 
+    if (source === "staff") {
+      if (!["cash", "card", "tab"].includes(request.paymentMethod)) {
+        throw new Error("Choose paid in cash, paid with credit card, or open a tab.");
+      }
+      if (
+        request.paymentMethod !== "tab" &&
+        request.paymentConfirmed !== true
+      ) {
+        throw new Error("Cashier must confirm the payment before sending entries.");
+      }
+    }
+
     await Promise.all([
       ...teams.map((team) => insertUniqueArenaRecord(COLLECTIONS.teams, team)),
       ...registrations.map((registration) =>
@@ -1708,7 +1731,9 @@ export const submitRegistrationDeskSignup = webMethod(
       ...result,
       summary: result.existing
         ? "That entry is already saved."
-        : "Contestant entry saved and pending payment.",
+        : request.paymentMethod === "tab"
+          ? "Contestant tab opened. Entries were sent to the draw area."
+          : "Payment recorded. Contestant entries were sent to the draw area.",
       data: registrationDeskProjection(await readWorkspace()),
     };
   },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultCompetitionSettings } from "./competition";
+import { defaultCompetitionSettings, entryClearedForDraw } from "./competition";
 import {
   registrationDeskProjection,
   submitLocalRegistrationDeskSignup,
@@ -146,6 +146,8 @@ describe("registration desk boundary", () => {
       eventId: "open-event",
       role: "Header" as const,
       entries: 1,
+      paymentConfirmed: true,
+      paymentMethod: "cash" as const,
     };
     const first = submitLocalRegistrationDeskSignup(
       data,
@@ -160,6 +162,7 @@ describe("registration desk boundary", () => {
 
     expect(first.data.registrations).toHaveLength(1);
     expect(first.data.registrations[0].source).toBe("staff");
+    expect(first.data.registrations[0].paid).toBe(true);
     expect(retry.result.existing).toBe(true);
     expect(retry.data.registrations).toHaveLength(1);
   });
@@ -215,6 +218,8 @@ describe("registration desk boundary", () => {
         role: "Header",
         entries: 2,
         partnerIds: ["heeler", "heeler-two"],
+        paymentConfirmed: true,
+        paymentMethod: "cash",
       },
       new Date("2026-08-05T21:00:00"),
     );
@@ -238,9 +243,49 @@ describe("registration desk boundary", () => {
           role: "Header",
           entries: 1,
           partnerIds: ["heeler"],
+          paymentConfirmed: true,
+          paymentMethod: "cash",
         },
         new Date("2026-08-05T21:00:00"),
       ),
     ).toThrow("at least 2 draw entries");
+  });
+
+  it("does not create draw records before cashier payment confirmation", () => {
+    expect(() =>
+      submitLocalRegistrationDeskSignup(
+        data,
+        {
+          submissionId: "unpaid-desk-entry",
+          contestantId: "rider",
+          eventId: "open-event",
+          role: "Header",
+          entries: 1,
+          paymentMethod: "cash",
+        },
+        new Date("2026-08-05T21:00:00"),
+      ),
+    ).toThrow("confirm payment");
+  });
+
+  it("opens an unpaid tab while clearing its entries for the draw", () => {
+    const result = submitLocalRegistrationDeskSignup(
+      data,
+      {
+        submissionId: "desk-tab-entry",
+        contestantId: "rider",
+        eventId: "open-event",
+        role: "Header",
+        entries: 1,
+        paymentMethod: "tab",
+      },
+      new Date("2026-08-05T21:00:00"),
+    );
+
+    expect(result.data.registrations[0]).toMatchObject({
+      paid: false,
+      paymentMethod: "tab",
+    });
+    expect(entryClearedForDraw(result.data.registrations[0])).toBe(true);
   });
 });

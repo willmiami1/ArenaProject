@@ -23,6 +23,8 @@ export interface SignupRequest {
   entries?: number;
   partnerId?: string;
   partnerIds?: string[];
+  paymentConfirmed?: boolean;
+  paymentMethod?: "cash" | "card" | "tab";
 }
 
 const safeId = (value: string) => /^[a-zA-Z0-9_-]{1,100}$/.test(value);

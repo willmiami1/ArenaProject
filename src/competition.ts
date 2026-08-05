@@ -247,7 +247,7 @@ function drawPotTeams(
     (entry) =>
       entry.eventId === event.id &&
       entry.status === "entered" &&
-      entry.paid !== false,
+      entryClearedForDraw(entry),
   );
   const headerEntries =
     active
@@ -355,6 +355,10 @@ export function teamEligibleForCompetition(
   return eligiblePair(event, team.headerId, team.heelerId, contestants);
 }
 
+export const entryClearedForDraw = (
+  entry: Pick<Team | EventRegistration, "paid" | "paymentMethod">,
+) => entry.paid !== false || entry.paymentMethod === "tab";
+
 function pickAndDrawTeams(
   event: ArenaEvent,
   fixedTeams: Team[],
@@ -366,14 +370,14 @@ function pickAndDrawTeams(
       team.eventId === event.id &&
       !team.generated &&
       !team.scratched &&
-      team.paid !== false &&
+      entryClearedForDraw(team) &&
       teamEligibleForCompetition(event, team, contestants),
   );
   const activeDrawEntries = registrations.filter(
     (registration) =>
       registration.eventId === event.id &&
       registration.status === "entered" &&
-      registration.paid !== false,
+      entryClearedForDraw(registration),
   );
   const headers = activeDrawEntries
     .filter((registration) => registration.role === "Header")
@@ -554,7 +558,7 @@ function roundRobinTeams(
     (registration) =>
       registration.eventId === event.id &&
       registration.status === "entered" &&
-      registration.paid !== false,
+      entryClearedForDraw(registration),
   );
   const headerEntries = active.filter(
     (registration) => registration.role === "Header",
@@ -617,7 +621,7 @@ export function generateCompetitionDraw(
       team.eventId === event.id &&
       !team.generated &&
       !team.scratched &&
-      team.paid !== false &&
+      entryClearedForDraw(team) &&
       teamEligibleForCompetition(event, team, contestants),
   );
   return shuffle(baseTeams).map((team, index) => ({
