@@ -3062,12 +3062,13 @@ function RunDesk({
                 <i>&</i>
                 <div><span>Heeler</span><strong>{rider(selected.heelerId)}</strong></div>
               </div>
-              {(selected.headerFreeRun || selected.heelerFreeRun || repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`)) && (
-                <div className="run-entry-markers">
-                  {(selected.headerFreeRun || selected.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}
-                  {repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}
-                </div>
-              )}
+              <div className="run-entry-markers">
+                <span className={`tag team-source-tag ${selected.generated ? "draw" : "pick"}`}>
+                  {selected.generated ? "Draw" : "Pick"}
+                </span>
+                {(selected.headerFreeRun || selected.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}
+                {repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}
+              </div>
               <div className="run-handicap"><span>Team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
               {selected.status === "ready" && (
                 <button
@@ -3115,7 +3116,7 @@ function RunDesk({
               <div className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""}`} key={team.id}>
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>

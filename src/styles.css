@@ -339,6 +339,9 @@ main { grid-column: 2; min-width: 0; }
 .queue-row.repeat-team-row, .desk-entry.repeat-team-panel { background: rgba(75, 118, 170, .14); box-shadow: inset 4px 0 #4b76aa; }
 .queue-row.free-run-row.repeat-team-row, .desk-entry.free-run-panel.repeat-team-panel { background: linear-gradient(90deg, rgba(214, 145, 43, .18), rgba(75, 118, 170, .14)); box-shadow: inset 4px 0 #d6912b, inset 8px 0 #4b76aa; }
 .run-entry-markers { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 12px; }
+.team-source-tag.draw, .team-source-inline.draw { color: #245d43; background: #dcefe4; border-color: #91bea3; }
+.team-source-tag.pick, .team-source-inline.pick { color: #754616; background: #f5e3cc; border-color: #d6aa76; }
+.team-source-inline { display: inline-flex; margin-left: 5px; padding: 2px 5px; border: 1px solid; border-radius: 4px; font-size: 7px; font-weight: 900; letter-spacing: .08em; vertical-align: 1px; }
 .queue-team-select { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 11px; padding: 4px 0; color: inherit; background: transparent; border: 0; text-align: left; }
 .queue-team-name { min-width: 0; }
 .queue-row strong, .queue-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
