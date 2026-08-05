@@ -1649,7 +1649,7 @@ function EventForm({
     incentiveAmountPerTeam: (event?.incentiveAmountPerTeam ?? 0).toString(),
     officeCharge: (event?.officeCharge ?? 0).toString(),
     stockCharge: (event?.stockCharge ?? 0).toString(),
-    producerFeePercent: (event?.producerFeePercent ?? 0).toString(),
+    producerFeePercent: (event?.producerFeePercent ?? 50).toString(),
     payoutPercentages: (event?.payoutPercentages ?? [50, 30, 20]).join(", "),
   });
   const submit = (formEvent: FormEvent) => {
