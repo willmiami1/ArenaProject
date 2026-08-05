@@ -426,16 +426,6 @@ function publicProjection(workspace) {
     const contestantsById = new Map(
       workspace.contestants.map((contestant) => [contestant.id, contestant]),
     );
-    const publicProfilePhoto = (photo) => {
-      if (
-        typeof photo !== "string" ||
-        photo.length > 3000000 ||
-        !/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\s]+$/i.test(photo)
-      ) {
-        return undefined;
-      }
-      return photo;
-    };
     const competitions = workspace.events.map((event) => ({
       id: event.id,
       parentEventId: event.parentEventId,
@@ -519,8 +509,6 @@ function publicProjection(workspace) {
             ),
             headerName: header?.name || "Unknown",
             heelerName: heeler?.name || "Unknown",
-            headerPhoto: publicProfilePhoto(header?.photo),
-            heelerPhoto: publicProfilePhoto(heeler?.photo),
             steerNumber: team.steerNumber || "",
             closesAt: team.predictionClosesAt,
             open:
