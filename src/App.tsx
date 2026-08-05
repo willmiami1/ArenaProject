@@ -1487,7 +1487,6 @@ function EventForm({
     status: event?.status ?? "Upcoming" as EventStatus,
     entryFee: event?.entryFee.toString() ?? "50",
     competitionType: competitionType ?? event?.competitionType ?? defaultCompetitionSettings.competitionType,
-    pickDrawRole: "both" as const,
     registrationOpen: event?.registrationOpen ?? true,
     entriesAllowed: (event?.entriesAllowed ?? 1).toString(),
     minDrawsAllowed: (event?.minDrawsAllowed ?? 0).toString(),
