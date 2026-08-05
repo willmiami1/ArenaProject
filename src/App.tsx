@@ -10,7 +10,6 @@ import {
   Clock3,
   Cloud,
   CloudOff,
-  Copy,
   Dices,
   Download,
   Eye,
@@ -1160,7 +1159,6 @@ function Events({
   const [editingMeet, setEditingMeet] = useState<ArenaMeet | null>(null);
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [editing, setEditing] = useState<ArenaEvent | null>(null);
-  const [copying, setCopying] = useState<ArenaEvent | null>(null);
   const [selectedType, setSelectedType] = useState<CompetitionType | null>(null);
   const selectedParent =
     meets.find((meet) => meet.id === selectedParentId) ??
@@ -1173,7 +1171,6 @@ function Events({
         text="Create an arena event, then add independent roping competitions beneath it."
         button="New event"
         onClick={() => {
-          setCopying(null);
           setEditingMeet(null);
           setShowMeetForm(true);
           setEditing(null);
@@ -1194,36 +1191,6 @@ function Events({
             setEditingMeet(null);
             setShowMeetForm(false);
           }}
-        />
-      )}
-      {copying && (
-        <CopyCompetitionForm
-          competition={copying}
-          sourceMeet={meets.find((meet) => meet.id === copying.parentEventId)}
-          targetMeets={meets.filter(
-            (meet) =>
-              meet.id !== copying.parentEventId &&
-              meet.date >= new Date().toISOString().slice(0, 10),
-          )}
-          onSubmit={(targetMeet, name) => {
-            onAdd({
-              ...copying,
-              id: uid("event"),
-              parentEventId: targetMeet.id,
-              name,
-              date: targetMeet.date,
-              startTime: targetMeet.startTime,
-              location: targetMeet.location,
-              status: "Upcoming",
-              registrationOpen: true,
-              drawLocked: false,
-              drawApproved: false,
-              resultsPublished: false,
-              drawHistory: [],
-            });
-            setCopying(null);
-          }}
-          onCancel={() => setCopying(null)}
         />
       )}
       {selectedParentId && !selectedType && !editing && (
@@ -1269,8 +1236,8 @@ function Events({
                   <p><MapPin size={14} /> {meet.location} <i /> <Clock3 size={14} /> {formatTime(meet.startTime)}</p>
                 </div>
                 <div className="event-actions">
-                  <button className="primary" onClick={() => { setCopying(null); setSelectedParentId(meet.id); setSelectedType(null); setEditing(null); setShowMeetForm(false); }}><Plus size={16} /> Add roping</button>
-                  <button className="icon-action" title="Edit event" onClick={() => { setCopying(null); setEditingMeet(meet); setShowMeetForm(false); setSelectedParentId(null); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil size={16} /></button>
+                  <button className="primary" onClick={() => { setSelectedParentId(meet.id); setSelectedType(null); setEditing(null); setShowMeetForm(false); }}><Plus size={16} /> Add roping</button>
+                  <button className="icon-action" title="Edit event" onClick={() => { setEditingMeet(meet); setShowMeetForm(false); setSelectedParentId(null); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil size={16} /></button>
                   <button className="icon-action delete-action" title="Delete event" onClick={() => {
                     if (window.confirm(`Delete ${meet.name} and all of its roping competitions, draws, and results?`)) {
                       onDeleteMeet(meet.id);
@@ -1321,8 +1288,7 @@ function Events({
                       <button className={event.id === activeEventId ? "selected-button" : "secondary"} onClick={() => onSelect(event.id)}>
                         {event.id === activeEventId ? <><Check size={16} /> Active roping</> : "Open roping"}
                       </button>
-                      <button className="icon-action" title="Copy roping to upcoming event" onClick={() => { setCopying(event); setEditing(null); setSelectedParentId(null); setShowMeetForm(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Copy size={16} /></button>
-                      <button className="icon-action" title="Edit roping" onClick={() => { setCopying(null); setEditing(event); setSelectedParentId(meet.id); setSelectedType(null); setShowMeetForm(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil size={16} /></button>
+                      <button className="icon-action" title="Edit roping" onClick={() => { setEditing(event); setSelectedParentId(meet.id); setSelectedType(null); setShowMeetForm(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil size={16} /></button>
                       <button className="icon-action delete-action" title="Delete roping" onClick={() => {
                         if (window.confirm(`Delete ${event.name}? This will also delete its entries, draw, and results.`)) {
                           onDelete(event.id);
@@ -1340,56 +1306,6 @@ function Events({
         {!meets.length && <div className="panel"><EmptyState text="Create your first arena event to add roping competitions." /></div>}
       </div>
     </>
-  );
-}
-
-function CopyCompetitionForm({
-  competition,
-  sourceMeet,
-  targetMeets,
-  onSubmit,
-  onCancel,
-}: {
-  competition: ArenaEvent;
-  sourceMeet?: ArenaMeet;
-  targetMeets: ArenaMeet[];
-  onSubmit: (targetMeet: ArenaMeet, name: string) => void;
-  onCancel: () => void;
-}) {
-  const [targetId, setTargetId] = useState(targetMeets[0]?.id ?? "");
-  const [name, setName] = useState(competition.name);
-  const submit = (formEvent: FormEvent) => {
-    formEvent.preventDefault();
-    const target = targetMeets.find((meet) => meet.id === targetId);
-    if (target) onSubmit(target, name.trim());
-  };
-  return (
-    <form className="form-panel copy-form" onSubmit={submit}>
-      <div className="form-heading">
-        <div><span className="tag neutral"><Copy size={12} /> Copy roping</span><h3>{competition.name}</h3><p>Copy configuration from {sourceMeet?.name ?? "the current event"} without entries, draw, or results.</p></div>
-        <button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button>
-      </div>
-      {targetMeets.length ? (
-        <>
-          <div className="form-grid two">
-            <Field label="Roping name"><input required value={name} onChange={(event) => setName(event.target.value)} /></Field>
-            <Field label="Upcoming event"><select required value={targetId} onChange={(event) => setTargetId(event.target.value)}>{targetMeets.map((meet) => <option value={meet.id} key={meet.id}>{meet.name} · {formatDate(meet.date)}</option>)}</select></Field>
-          </div>
-          <div className="copy-summary">
-            <span>{competitionName(competition.competitionType)}</span>
-            <span>HC {competition.handicapTotal}</span>
-            <span>{competition.rounds} round{competition.rounds === 1 ? "" : "s"}</span>
-            <span>${competition.entryFee} entry</span>
-          </div>
-          <FormActions onCancel={onCancel} submitLabel="Copy to event" />
-        </>
-      ) : (
-        <>
-          <div className="notice"><span>Create another upcoming event before copying this roping.</span></div>
-          <div className="form-actions"><button type="button" className="secondary" onClick={onCancel}>Close</button></div>
-        </>
-      )}
-    </form>
   );
 }
 
