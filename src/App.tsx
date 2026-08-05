@@ -1535,7 +1535,7 @@ function EventForm({
         <label className="toggle-row"><input type="checkbox" checked={form.incentivePayouts} onChange={(e) => setForm({ ...form, incentivePayouts: e.target.checked })} /><span><strong>Incentive payout</strong><small>Award the fastest qualifying team or teams from Round 1.</small></span></label>
         {form.incentivePayouts && (
           <>
-            <Field label="Incentive team handicap"><input required type="number" min="0" max={form.handicapTotal} step="0.5" value={form.incentiveHandicapTotal} onChange={(e) => setForm({ ...form, incentiveHandicapTotal: e.target.value })} /><small>Only teams with this exact combined handicap qualify.</small></Field>
+            <Field label="Incentive team handicap limit"><input required type="number" min="0" max={form.handicapTotal} step="0.5" value={form.incentiveHandicapTotal} onChange={(e) => setForm({ ...form, incentiveHandicapTotal: e.target.value })} /><small>Teams at or below this combined handicap qualify.</small></Field>
             <Field label="Number of incentive teams"><input required type="number" min="1" step="1" value={form.incentiveTeams} onChange={(e) => setForm({ ...form, incentiveTeams: e.target.value })} /><small>The fastest qualifying Round 1 teams receive the award.</small></Field>
             <Field label="Amount per incentive team"><input required type="number" min="0" step="0.01" value={form.incentiveAmountPerTeam} onChange={(e) => setForm({ ...form, incentiveAmountPerTeam: e.target.value })} /></Field>
           </>

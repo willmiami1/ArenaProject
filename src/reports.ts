@@ -243,7 +243,7 @@ function incentiveAwards(
         team.status === "complete" &&
         team.rawTime !== null &&
         !team.scratched &&
-        teamHandicapTotal(team.headerId, team.heelerId, contestants) ===
+        teamHandicapTotal(team.headerId, team.heelerId, contestants) <=
           (event.incentiveHandicapTotal ?? 7),
     )
     .forEach((team) => {
@@ -878,7 +878,7 @@ function payoutRows(
               standing.headerId,
               standing.heelerId,
               data.contestants,
-            )} / ${event.incentiveHandicapTotal ?? 7} · Fastest Round 1`
+            )} · Limit ${event.incentiveHandicapTotal ?? 7} · Fastest Round 1`
           : event.incentivePayouts
             ? "Not eligible"
             : "—",

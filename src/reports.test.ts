@@ -233,7 +233,7 @@ describe("incentive rules", () => {
       totalPaid: "$100.00",
       time: 6,
     });
-    expect(String(report.rows[0].incentives)).toContain("Team HC 8 / 8");
+    expect(String(report.rows[0].incentives)).toContain("Team HC 8 · Limit 8");
     expect(
       contestantFinancials(workspace, [incentiveEvent]).map(
         (summary) => summary.earnings,
@@ -241,7 +241,7 @@ describe("incentive rules", () => {
     ).toEqual([150, 150]);
   });
 
-  it("requires an exact combined handicap", () => {
+  it("accepts combined handicaps at or below the limit", () => {
     const incentiveEvent = {
       ...event,
       incentivePayouts: true,
@@ -293,10 +293,11 @@ describe("incentive rules", () => {
       competitionId: incentiveEvent.id,
     });
 
-    expect(report.rows).toHaveLength(1);
-    expect(report.rows[0]).toMatchObject({
-      team: "Ada Header / Bo Heeler",
-      bonus: "$75.00",
-    });
+    expect(report.rows).toHaveLength(2);
+    expect(report.rows.map((row) => row.team)).toEqual([
+      "Low Header / Bo Heeler",
+      "Ada Header / Bo Heeler",
+    ]);
+    expect(report.rows.map((row) => row.bonus)).toEqual(["$75.00", "$75.00"]);
   });
 });
