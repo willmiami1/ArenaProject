@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyRunResult,
   defaultCompetitionSettings,
   generateCompetitionDraw,
   officialRunTime,
@@ -234,6 +235,65 @@ describe("aggregate public standings", () => {
       publicStandingRows(slide, [roundOne, roundTwo], handicapNine)[0]
         .officialTotal,
     ).toBe(15);
+  });
+});
+
+describe("multi-round Run Desk results", () => {
+  it("keeps a Round 2 Round Robin score and leaves the next team ready", () => {
+    const competition = event({
+      competitionType: "round-robin",
+      rounds: 2,
+      shortGoTeams: 0,
+    });
+    const roundOneTeams = [
+      run({
+        id: "round-1-team-1",
+        drawPosition: 1,
+        status: "complete",
+        rawTime: 8,
+        penalties: 0,
+      }),
+      run({
+        id: "round-1-team-2",
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+        drawPosition: 2,
+        status: "complete",
+        rawTime: 9,
+        penalties: 0,
+      }),
+    ];
+    const withFinalists = applyRunResult(
+      roundOneTeams,
+      "round-1-team-2",
+      { status: "complete", rawTime: 9, penalties: 0 },
+      2,
+      0,
+      competition,
+      contestants,
+    );
+    const roundTwoTeams = withFinalists.filter((team) => team.round === 2);
+    expect(roundTwoTeams).toHaveLength(2);
+
+    const scoredTeam = roundTwoTeams[0];
+    const nextTeams = applyRunResult(
+      withFinalists,
+      scoredTeam.id,
+      { status: "complete", rawTime: 7.5, penalties: 0, points: 1 },
+      2,
+      0,
+      competition,
+      contestants,
+    );
+
+    expect(nextTeams.find((team) => team.id === scoredTeam.id)).toMatchObject({
+      round: 2,
+      status: "complete",
+      rawTime: 7.5,
+    });
+    expect(
+      nextTeams.filter((team) => team.round === 2 && team.status === "ready"),
+    ).toHaveLength(1);
   });
 });
 

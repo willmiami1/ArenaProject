@@ -3146,6 +3146,25 @@ function RunDesk({
   };
   const saveRun = (status: Team["status"]) => {
     if (!selected) return;
+    const followingTeam =
+      eventTeams.find(
+        (team) =>
+          team.id !== selected.id &&
+          team.status === "ready" &&
+          !team.rolled &&
+          team.drawPosition > selected.drawPosition,
+      ) ??
+      eventTeams.find(
+        (team) =>
+          team.id !== selected.id &&
+          team.status === "ready" &&
+          !team.rolled,
+      ) ??
+      eventTeams.find(
+        (team) =>
+          team.id !== selected.id &&
+          team.status === "ready",
+      );
     const previewTeam = {
       ...selected,
       rawTime: Number(rawTime),
@@ -3163,7 +3182,7 @@ function RunDesk({
       points: status === "complete" && !exceededLimit ? 1 : 0,
       rolled: false,
     });
-    setSelectedId(null);
+    setSelectedId(followingTeam?.id ?? null);
     setRawTime("");
     setPenalties("0");
     setNotes("");
