@@ -116,6 +116,15 @@ export function AdminAccessGate({ children }: { children: ReactNode }) {
               {busy ? "Checking access..." : "Log in with Wix Members"}
             </button>
           )}
+          {state === "unavailable" &&
+            import.meta.env.VITE_WIX_HOST_ORIGIN?.trim() && (
+              <a
+                className="public-button primary"
+                href={`${import.meta.env.VITE_WIX_HOST_ORIGIN.replace(/\/$/, "")}/?app=command`}
+              >
+                <LogIn size={18} /> Open secure Wix admin login
+              </a>
+            )}
           <a className="public-button quiet" href="?page=home">
             <ArrowLeft size={18} /> Return to public website
           </a>

@@ -63,6 +63,13 @@ function loadLocalPublicData() {
 const href = (page: string, id?: string) =>
   `?page=${encodeURIComponent(page)}${id ? `&id=${encodeURIComponent(id)}` : ""}`;
 const eventsHref = `${href("home")}#events`;
+const operationalHref = (app: "command" | "registration") => {
+  if (isWixEmbed() || import.meta.env.DEV) return `?app=${app}`;
+  const wixOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
+  return wixOrigin
+    ? `${wixOrigin.replace(/\/$/, "")}/?app=${app}`
+    : `?app=${app}`;
+};
 
 const formatDate = (date: string) =>
   new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
@@ -133,8 +140,8 @@ function PublicHeader() {
       <nav className={open ? "open" : ""} aria-label="Public navigation">
         <a href={href("home")}>Home</a>
         <a href={eventsHref}>Events</a>
-        <a href="?app=registration"><ClipboardPen size={16} /> Registration Desk</a>
-        <a href="?app=command"><ShieldCheck size={16} /> Admin login</a>
+        <a href={operationalHref("registration")}><ClipboardPen size={16} /> Registration Desk</a>
+        <a href={operationalHref("command")}><ShieldCheck size={16} /> Admin login</a>
         <SocialLinks />
       </nav>
     </header>
@@ -151,8 +158,8 @@ function PublicFooter() {
       <nav aria-label="Footer navigation">
         <a href={href("home")}>Home</a>
         <a href={eventsHref}>Events</a>
-        <a href="?app=registration">Registration Desk</a>
-        <a href="?app=command">Admin login</a>
+        <a href={operationalHref("registration")}>Registration Desk</a>
+        <a href={operationalHref("command")}>Admin login</a>
       </nav>
       <div className="public-footer-connect">
         <SocialLinks />
@@ -503,7 +510,7 @@ function HomePage({ data }: { data: PublicArenaData }) {
           <h1>The gate opens.<br />The clock starts.<br /><em>Ride your run.</em></h1>
           <p>Team roping events, online entries, and official results from Destiny Ranch Arena.</p>
           <div className="public-actions">
-            <a className="public-button quiet" href="?app=command">
+            <a className="public-button quiet" href={operationalHref("command")}>
               <ShieldCheck size={18} /> Arena Command Admin Login
             </a>
           </div>
