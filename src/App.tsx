@@ -2976,32 +2976,17 @@ function RunDesk({
               </div>
               <div className="run-handicap"><span>Team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
               {selected.status === "ready" && (
-                <div className="prediction-cutoff-control">
-                  <div><span>Spectator pick cutoff</span><small>Free Steer or Cowboys predictions close at this time.</small></div>
-                  <input
-                    type="datetime-local"
-                    value={localDateTimeValue(selected.predictionClosesAt)}
-                    onChange={(event) =>
-                      onSetPredictionCutoff(
-                        selected.id,
-                        event.target.value
-                          ? new Date(event.target.value).toISOString()
-                          : undefined,
-                      )
-                    }
-                  />
-                  <button
-                    className={`prediction-close-button${spectatorPicksClosed ? " closed" : ""}`}
-                    disabled={spectatorPicksClosed}
-                    onClick={() =>
-                      onSetPredictionCutoff(selected.id, new Date().toISOString())
-                    }
-                  >
-                    {spectatorPicksClosed
-                      ? "Spectator Picks Closed"
-                      : "Close Spectator Picks Before Gate Opens"}
-                  </button>
-                </div>
+                <button
+                  className={`prediction-close-button${spectatorPicksClosed ? " closed" : ""}`}
+                  disabled={spectatorPicksClosed}
+                  onClick={() =>
+                    onSetPredictionCutoff(selected.id, new Date().toISOString())
+                  }
+                >
+                  {spectatorPicksClosed
+                    ? "Spectator Picks Closed"
+                    : "Close Spectator Picks Before Gate Opens"}
+                </button>
               )}
               {event && activeRound === roundCount && roundCount > 1 && selected.status === "ready" && (
                 <div className="announcer-times">
@@ -3156,13 +3141,6 @@ function formatTime(time: string) {
 
 function initials(name: string) {
   return name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-}
-
-function localDateTimeValue(value?: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function exportDrawCsv(event: ArenaEvent, teams: Team[], contestants: Contestant[]) {
