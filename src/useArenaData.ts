@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { seedData } from "./data";
 import {
+  assignOriginalTeamNumbers,
   defaultCompetitionSettings,
   reconcilePickDrawRegistrations,
   reconcileQualifiedAdvancements,
@@ -121,7 +122,7 @@ export function normalizeData(parsed: ArenaData): ArenaData {
     events,
     contestants,
     teams: reconcileQualifiedAdvancements(
-      resetInheritedPredictionCutoffs(teams),
+      assignOriginalTeamNumbers(resetInheritedPredictionCutoffs(teams)),
       events,
       contestants,
     ),

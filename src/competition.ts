@@ -868,6 +868,7 @@ export function applyRunResult(
     ...update,
     id: `team-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     drawPosition: nextDrawPosition,
+    originalTeamNumber: source.originalTeamNumber ?? source.drawPosition,
     round: nextRound,
     status: "ready",
     rawTime: null,
@@ -889,6 +890,21 @@ function entryKey(team: Team) {
     team.headerEntryNumber ?? 1,
     team.heelerEntryNumber ?? 1,
   ].join("|");
+}
+
+export function assignOriginalTeamNumbers(teams: Team[]) {
+  const roundOneNumbers = new Map(
+    teams
+      .filter((team) => team.round === 1)
+      .map((team) => [entryKey(team), team.originalTeamNumber ?? team.drawPosition]),
+  );
+  return teams.map((team) => ({
+    ...team,
+    originalTeamNumber:
+      team.originalTeamNumber ??
+      roundOneNumbers.get(entryKey(team)) ??
+      team.drawPosition,
+  }));
 }
 
 export function resetInheritedPredictionCutoffs(teams: Team[]) {
@@ -984,6 +1000,8 @@ function syncShortGoFinalists(
       ...qualifier,
       id: `team-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
       drawPosition: index + 1,
+      originalTeamNumber:
+        qualifier.originalTeamNumber ?? qualifier.drawPosition,
       round: finalRound,
       status: "ready" as const,
       rawTime: null,

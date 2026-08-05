@@ -80,6 +80,7 @@ export interface Team {
   headerHorseName?: string;
   heelerHorseName?: string;
   drawPosition: number;
+  originalTeamNumber?: number;
   status: RunStatus;
   rawTime: number | null;
   penalties: number;

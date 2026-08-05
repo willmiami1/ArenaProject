@@ -496,6 +496,9 @@ function publicProjection(workspace) {
             id: team.id,
             round: Number(team.round || 1),
             drawPosition: Number(team.drawPosition),
+            originalTeamNumber: Number(
+              team.originalTeamNumber || team.drawPosition,
+            ),
             headerName: header?.name || "Unknown",
             heelerName: heeler?.name || "Unknown",
             headerPhoto: publicProfilePhoto(header?.photo),
@@ -743,6 +746,9 @@ function registrationDeskProjection(workspace) {
         headerId: team.headerId,
         heelerId: team.heelerId,
         drawPosition: Number(team.drawPosition || 0),
+        originalTeamNumber: Number(
+          team.originalTeamNumber || team.drawPosition || 0,
+        ),
         status: team.status,
         rawTime: null,
         penalties: 0,

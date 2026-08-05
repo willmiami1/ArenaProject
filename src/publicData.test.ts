@@ -277,6 +277,10 @@ describe("multi-round Run Desk results", () => {
     );
     const roundTwoTeams = withFinalists.filter((team) => team.round === 2);
     expect(roundTwoTeams).toHaveLength(2);
+    expect(roundTwoTeams.map((team) => team.originalTeamNumber).sort()).toEqual([
+      1,
+      2,
+    ]);
     expect(roundTwoTeams.every((team) => team.predictionClosesAt === undefined))
       .toBe(true);
 

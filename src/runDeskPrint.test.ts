@@ -43,8 +43,8 @@ describe("Run Desk manual time sheet", () => {
     const html = roundTimeSheetHtml(
       event,
       [
-        team({ id: "second", drawPosition: 2 }),
-        team({ id: "first", drawPosition: 1 }),
+        team({ id: "second", drawPosition: 2, originalTeamNumber: 12 }),
+        team({ id: "first", drawPosition: 1, originalTeamNumber: 7 }),
         team({ id: "later", round: 2 }),
         team({ id: "scratched", drawPosition: 3, scratched: true }),
       ],
@@ -53,11 +53,13 @@ describe("Run Desk manual time sheet", () => {
     );
 
     expect(html).toContain("Round 1 Manual Time Sheet");
-    expect(html).toContain("<th>Team Number</th>");
+    expect(html).toContain("<th>Original Team #</th>");
     expect(html).not.toContain("<th>Draw</th>");
     expect(html).toContain("Raw Time");
     expect(html).not.toContain("No teams in this round.");
     expect(html.match(/Ada &lt;Header&gt;/g)).toHaveLength(2);
+    expect(html).toContain('<td class="draw">7</td>');
+    expect(html).toContain('<td class="draw">12</td>');
     expect(html).not.toContain("scratched");
   });
 

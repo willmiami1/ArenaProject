@@ -1164,7 +1164,7 @@ function LedLeaderboard({
         <div className="led-current-label">
           <span className="live-dot" />
           <span>Now roping</span>
-          <strong>{currentTeam ? `Draw #${currentTeam.drawPosition}` : "Round complete"}</strong>
+          <strong>{currentTeam ? `Team #${currentTeam.originalTeamNumber ?? currentTeam.drawPosition}` : "Round complete"}</strong>
         </div>
         {currentTeam && (
           <>
@@ -1229,7 +1229,7 @@ function LedLeaderboard({
         <div className="led-next-label"><span className="live-dot" /><strong>Next team</strong></div>
         {nextTeam ? (
           <>
-            <span className="led-next-draw">Draw #{nextTeam.drawPosition}</span>
+            <span className="led-next-draw">Team #{nextTeam.originalTeamNumber ?? nextTeam.drawPosition}</span>
             <span className="led-next-team">{ledRider(nextTeam.headerId, nextTeam.headerHorseName)}<i>&</i>{ledRider(nextTeam.heelerId, nextTeam.heelerHorseName)}</span>
             {nextTeam.rolled && <span className="led-rolled">Rolled</span>}
           </>
@@ -3375,7 +3375,7 @@ function RunDesk({
       )}
       <div className="run-desk-grid">
         <section className={`panel desk-entry ${selected?.headerFreeRun || selected?.heelerFreeRun ? "free-run-panel" : ""} ${selected && repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) ? "repeat-team-panel" : ""}`}>
-          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>Round {activeRound} · {isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Draw #${selected.drawPosition}` : "Round complete"}</h3></div></div>
+          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>Round {activeRound} · {isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Team #${selected.originalTeamNumber ?? selected.drawPosition}${activeRound > 1 ? ` · Draw #${selected.drawPosition}` : ""}` : "Round complete"}</h3></div></div>
           {selected ? (
             <>
               <div className="active-team">
@@ -3439,7 +3439,7 @@ function RunDesk({
             {eventTeams.map((team) => (
               <div className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""}`} key={team.id}>
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
-                  <span className="draw-number">{team.drawPosition}</span>
+                  <span className="draw-number">{team.originalTeamNumber ?? team.drawPosition}</span>
                   <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.competitionType === "slide" ? ` · R2 ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
@@ -3469,7 +3469,7 @@ function RunDesk({
           {standings.map((team, index) => (
             <div className="table-row" key={team.id}>
               <span><b className={`place place-${index + 1}`}>{index + 1}</b></span>
-              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong>{event?.competitionType === "slide" && <small>Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)} · R2 {slideAdjustmentLabel(team)}</small>}<small>Draw #{team.drawPosition}{activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
+              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong>{event?.competitionType === "slide" && <small>Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)} · R2 {slideAdjustmentLabel(team)}</small>}<small>Team #{team.originalTeamNumber ?? team.drawPosition}{activeRound > 1 ? ` · Draw #${team.drawPosition}` : ""}{activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
               <span>{entryRuns(team).filter((run) => run.status === "complete" && run.rawTime !== null).length} / {roundCount}</span>
               <span><b className="total-time">{qualifiedTotal(team).toFixed(2)}</b></span>
             </div>

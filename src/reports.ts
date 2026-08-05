@@ -493,7 +493,7 @@ function teamRows(
         competition: event?.name ?? "Unknown",
         round: team.round,
         draw: team.drawPosition,
-        teamNumber: team.drawPosition,
+        teamNumber: team.originalTeamNumber ?? team.drawPosition,
         headerHorse: ridingHorse(team.headerHorseName),
         header: slideDetails.header,
         heelerHorse: ridingHorse(team.heelerHorseName),
