@@ -17,15 +17,34 @@ import {
 } from "backend/arena-data.web";
 import { authentication } from "wix-members-frontend";
 
+const wait = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+async function loadPublicArenaDataWhenReady() {
+  let lastError;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      return await loadPublicArenaData();
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await wait(500 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 $w.onReady(() => {
   const [embed] = $w("HtmlComponent");
   if (!embed) {
     console.error("Add an HTML Component containing the Arena app bridge.");
     return;
   }
+  const pendingRequests = new Set();
   embed.onMessage(async (event) => {
     const message = event.data;
     if (message?.source !== "arena-command-app" || !message.requestId) return;
+    if (pendingRequests.has(message.requestId)) return;
+    pendingRequests.add(message.requestId);
 
     try {
       let data;
@@ -37,7 +56,7 @@ $w.onReady(() => {
       } else if (message.action === "setContestantPin") {
         data = await setContestantPin(message.data);
       } else if (message.action === "loadPublicArenaData") {
-        data = await loadPublicArenaData();
+        data = await loadPublicArenaDataWhenReady();
       } else if (message.action === "loadSignupOptions") {
         data = await loadSignupOptions(message.data);
       } else if (message.action === "submitOnlineSignup") {
@@ -81,6 +100,8 @@ $w.onReady(() => {
         ok: false,
         error: error?.message || "Wix Data request failed.",
       });
+    } finally {
+      pendingRequests.delete(message.requestId);
     }
   });
 });
