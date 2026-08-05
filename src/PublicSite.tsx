@@ -159,6 +159,10 @@ function PublicFooter() {
   );
 }
 
+function ReturnToEventsLink() {
+  return <a href={eventsHref}>← Return to Events on Main Page</a>;
+}
+
 function RopingCard({
   competition,
 }: {
@@ -288,7 +292,7 @@ function SpectatorPage({
   );
   return (
     <section className="public-spectator">
-      <a href={eventsHref}>← Back to current events</a>
+      <ReturnToEventsLink />
       <div className="public-page-head">
         <Status value="Live" />
         <h1>Pick the run.</h1>
@@ -522,7 +526,7 @@ function EventPage({ meet }: { meet?: PublicMeet }) {
   return (
     <>
       <section className="public-page-head">
-        <a href={href("events")}>← All events</a>
+        <ReturnToEventsLink />
         <h1>{meet.name}</h1>
         <div className="public-page-meta">
           <span><CalendarDays /> {formatDate(meet.date)}</span>
@@ -569,7 +573,7 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
   return (
     <>
       <section className="public-page-head">
-        <a href={meet ? href("event", meet.id) : href("events")}>← {meet?.name ?? "All events"}</a>
+        <ReturnToEventsLink />
         <Status value={competition.status} />
         <h1>{competition.name}</h1>
         <p>{competition.competitionLabel} at {competition.location}</p>
@@ -794,7 +798,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
 
   return (
     <section className="public-signup">
-      <a href={href("competition", competition.id)}>← {competition.name}</a>
+      <ReturnToEventsLink />
       <h1>Enter the arena</h1>
       <p>Online registration closes {new Date(competition.registrationClosesAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.</p>
       <p>{authMode === "login" ? "Sign in with the email and four-digit PIN already connected to your contestant account." : "Create your contestant account, then continue directly to this competition’s entry form."}</p>
