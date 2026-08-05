@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultCompetitionSettings,
   generateCompetitionDraw,
+  repeatedTeamPairKeys,
   reorderDraftDrawTeams,
   spaceDrawTeamsApart,
 } from "./competition";
@@ -415,6 +416,24 @@ describe("online signup", () => {
       ["picked", 3],
     ]);
     expect(reorderDraftDrawTeams(teams, "picked", "generated-1")).toBe(teams);
+  });
+
+  it("marks only exact teams entered more than once in round one", () => {
+    const firstEntry = run({ id: "entry-1", round: 1 });
+    const secondEntry = run({
+      id: "entry-2",
+      round: 1,
+      headerEntryNumber: 2,
+      heelerEntryNumber: 2,
+    });
+    const advancedRound = run({ id: "round-2", round: 2 });
+
+    expect(repeatedTeamPairKeys([firstEntry, secondEntry])).toEqual(
+      new Set(["header|heeler"]),
+    );
+    expect(repeatedTeamPairKeys([firstEntry, advancedRound])).toEqual(
+      new Set(),
+    );
   });
 
   it("spaces repeated riders and teams as far apart as the draw allows", () => {

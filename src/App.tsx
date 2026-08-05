@@ -72,6 +72,7 @@ import {
   generateCompetitionDraw,
   minimumDrawEntries,
   pickedTeamRidersMissingFromDraw,
+  repeatedTeamPairKeys,
   reorderDraftDrawTeams,
   teamEligibleForCompetition,
   teamHandicapTotal,
@@ -2125,17 +2126,11 @@ function Teams({
     .reduce((total, entry) => total + entry.entries, 0);
   const rider = (id: string) => contestants.find((item) => item.id === id);
   const visibleDrawTeams = draftDraw ?? eventTeams;
-  const teamAppearanceCounts = visibleDrawTeams.reduce((counts, team) => {
-    const key = `${team.headerId}|${team.heelerId}`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-    return counts;
-  }, new Map<string, number>());
+  const repeatedTeamKeys = repeatedTeamPairKeys(visibleDrawTeams);
   const hasFreeRuns = visibleDrawTeams.some(
     (team) => team.headerFreeRun || team.heelerFreeRun,
   );
-  const hasRepeatEntries = [...teamAppearanceCounts.values()].some(
-    (count) => count > 1,
-  );
+  const hasRepeatEntries = repeatedTeamKeys.size > 0;
   const displayedTeams = visibleDrawTeams.filter((team) =>
     `${rider(team.headerId)?.name ?? ""} ${rider(team.heelerId)?.name ?? ""}`
       .toLowerCase()
@@ -2458,7 +2453,7 @@ function Teams({
                   </div>
                 )}
             <div
-              className={`draw-row ${team.scratched ? "scratched-row" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${(teamAppearanceCounts.get(`${team.headerId}|${team.heelerId}`) ?? 0) > 1 ? "repeat-team-row" : ""} ${draftDraw ? "draggable-draw-row" : ""} ${draggedTeamId === team.id ? "dragging" : ""}`}
+              className={`draw-row ${team.scratched ? "scratched-row" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""} ${draftDraw ? "draggable-draw-row" : ""} ${draggedTeamId === team.id ? "dragging" : ""}`}
               draggable={Boolean(draftDraw && !teamSearch)}
               onDragStart={(dragEvent: DragEvent<HTMLDivElement>) => {
                 if (!draftDraw || teamSearch) return;
@@ -2485,7 +2480,7 @@ function Teams({
               <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}</small></span></div>
               <span className="pair-mark">&</span>
               <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}</small></span></div>
-              <span className="draw-status">{(team.headerFreeRun || team.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}{(teamAppearanceCounts.get(`${team.headerId}|${team.heelerId}`) ?? 0) > 1 && <span className="tag repeat-team-tag">Repeat Team</span>}<span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}{team.paid === false && team.paymentMethod === "tab" ? " · Open tab" : ""}</small></span>
+              <span className="draw-status">{(team.headerFreeRun || team.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}{repeatedTeamKeys.has(`${team.headerId}|${team.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}<span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}{team.paid === false && team.paymentMethod === "tab" ? " · Open tab" : ""}</small></span>
               <span className="row-actions no-print">
                 {!team.generated && team.paid === false && (
                   <button
@@ -2694,6 +2689,7 @@ function RunDesk({
         Number(Boolean(a.rolled)) - Number(Boolean(b.rolled)) ||
         a.drawPosition - b.drawPosition,
     );
+  const repeatedRunDeskTeamKeys = repeatedTeamPairKeys(allEventTeams);
   const nextTeam =
     eventTeams.find((team) => team.status === "ready" && !team.rolled) ??
     eventTeams.find((team) => team.status === "ready");
@@ -3057,7 +3053,7 @@ function RunDesk({
         </div>
       )}
       <div className="run-desk-grid">
-        <section className="panel desk-entry">
+        <section className={`panel desk-entry ${selected?.headerFreeRun || selected?.heelerFreeRun ? "free-run-panel" : ""} ${selected && repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) ? "repeat-team-panel" : ""}`}>
           <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>Round {activeRound} · {isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Draw #${selected.drawPosition}` : "Round complete"}</h3></div></div>
           {selected ? (
             <>
@@ -3066,6 +3062,12 @@ function RunDesk({
                 <i>&</i>
                 <div><span>Heeler</span><strong>{rider(selected.heelerId)}</strong></div>
               </div>
+              {(selected.headerFreeRun || selected.heelerFreeRun || repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`)) && (
+                <div className="run-entry-markers">
+                  {(selected.headerFreeRun || selected.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}
+                  {repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}
+                </div>
+              )}
               <div className="run-handicap"><span>Team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
               {selected.status === "ready" && (
                 <button
@@ -3110,10 +3112,10 @@ function RunDesk({
           <PanelHeading title={`Round ${activeRound} run order`} subtitle={`${eventTeams.filter((team) => team.status === "ready").length} teams remaining`} />
           <div className="queue-scroll">
             {eventTeams.map((team) => (
-              <div className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""}`} key={team.id}>
+              <div className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""}`} key={team.id}>
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>

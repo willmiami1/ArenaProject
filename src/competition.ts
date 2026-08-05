@@ -468,6 +468,21 @@ export function reorderDraftDrawTeams(
   }));
 }
 
+export function repeatedTeamPairKeys(teams: Team[]) {
+  const pairCounts = teams
+    .filter((team) => team.round === 1 && !team.scratched)
+    .reduce((counts, team) => {
+      const key = pairKey(team.headerId, team.heelerId);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>());
+  return new Set(
+    [...pairCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([key]) => key),
+  );
+}
+
 function pickAndDrawTeams(
   event: ArenaEvent,
   fixedTeams: Team[],

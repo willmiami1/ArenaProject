@@ -335,6 +335,10 @@ main { grid-column: 2; min-width: 0; }
 .queue-row:hover, .queue-row.active { background: #f3f7f4; }
 .queue-row.active { box-shadow: inset 3px 0 var(--green); }
 .queue-row.rolled { background: #fff8eb; }
+.queue-row.free-run-row, .desk-entry.free-run-panel { background: rgba(214, 145, 43, .14); box-shadow: inset 4px 0 #d6912b; }
+.queue-row.repeat-team-row, .desk-entry.repeat-team-panel { background: rgba(75, 118, 170, .14); box-shadow: inset 4px 0 #4b76aa; }
+.queue-row.free-run-row.repeat-team-row, .desk-entry.free-run-panel.repeat-team-panel { background: linear-gradient(90deg, rgba(214, 145, 43, .18), rgba(75, 118, 170, .14)); box-shadow: inset 4px 0 #d6912b, inset 8px 0 #4b76aa; }
+.run-entry-markers { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 12px; }
 .queue-team-select { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 11px; padding: 4px 0; color: inherit; background: transparent; border: 0; text-align: left; }
 .queue-team-name { min-width: 0; }
 .queue-row strong, .queue-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -655,6 +659,9 @@ main { grid-column: 2; min-width: 0; }
 .app-shell .event-date span { color: #e2cdb7; }
 .app-shell .queue-row { color: var(--ink); background: #18120e; border-color: #382a20; }
 .app-shell .queue-row.rolled { background: #2b2114; }
+.app-shell .queue-row.free-run-row, .app-shell .desk-entry.free-run-panel { background: #302411; }
+.app-shell .queue-row.repeat-team-row, .app-shell .desk-entry.repeat-team-panel { background: #172438; }
+.app-shell .queue-row.free-run-row.repeat-team-row, .app-shell .desk-entry.free-run-panel.repeat-team-panel { background: linear-gradient(90deg, #302411, #172438); }
 .app-shell .round-tabs button.active { color: #fff8eb; background: #8d5a3b; border-color: #a66c43; }
 .app-shell .round-tabs button.active small { color: #ead5c0; }
 .app-shell :is(.active-team div,.run-handicap,.photo-field,.toggle-row,.payout-places > div,.entry-totals span,.copy-summary span,.penalty-buttons button) { color: #d6c4af; background: #211812; border-color: #443225; }
