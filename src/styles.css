@@ -521,10 +521,14 @@ main { grid-column: 2; min-width: 0; }
 .led-current-targets small { font-size: clamp(8px, .7vw, 12px); font-weight: 800; letter-spacing: .06em; }
 .led-current-targets strong { margin-top: .1vh; font-size: clamp(14px, 1.4vw, 26px); line-height: 1; white-space: nowrap; }
 .led-spectator-top { min-height: 10vh; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 2vw; padding: 1vh 2.2vw; color: #17100a; background: linear-gradient(90deg,#f2c775,#c98b37); border-block: 3px solid #ffe0a5; text-transform: uppercase; }
+.led-spectator-top.picks-closed { grid-template-columns: auto auto minmax(0,1fr); }
 .led-spectator-top>span { padding-right: 2vw; border-right: 2px solid rgba(70,42,13,.38); font-family: "Manrope",sans-serif; font-size: clamp(20px,2vw,38px); font-weight: 900; line-height: .95; letter-spacing: .05em; white-space: nowrap; }
 .led-spectator-top>span small { display: block; margin-top: .7vh; font-size: .48em; letter-spacing: .14em; }
+.led-picks-closed { padding: 1vh 1.2vw; color: #fff; background: #8a251c; border: 2px solid #fff0d6; border-radius: 8px; font-family: "Manrope",sans-serif; font-size: clamp(14px,1.3vw,25px); font-style: normal; font-weight: 900; line-height: 1; letter-spacing: .06em; text-align: center; white-space: nowrap; }
 .led-spectator-top>div { min-width: 0; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .8vw; }
 .led-spectator-top strong { min-width: 0; display: flex; align-items: center; gap: .7vw; padding: .8vh .8vw; overflow: hidden; color: #fff; background: #17100a; border: 2px solid rgba(255,255,255,.45); border-radius: 8px; font-family: "Manrope",sans-serif; font-size: clamp(20px,2.1vw,42px); line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+.led-spectator-top strong>span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.led-spectator-top strong small { display: block; margin-top: .35vh; color: #f2c775; font-size: .34em; letter-spacing: .08em; }
 .led-spectator-top strong b { flex: 0 0 auto; width: clamp(34px,3vw,58px); height: clamp(34px,3vw,58px); display: grid; place-items: center; color: #17100a; background: #ffe0a5; border-radius: 50%; font-size: .72em; }
 .led-spectator-top strong.waiting { grid-column: 1 / -1; justify-content: center; }
 .led-board { grid-column: 1; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 2vh 2.2vw; overflow: hidden; }

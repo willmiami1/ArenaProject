@@ -56,7 +56,11 @@ import { PublicSite } from "./PublicSite";
 import { AdminAccessGate } from "./AdminAccessGate";
 import { RegistrationDeskAccessGate } from "./RegistrationDeskAccessGate";
 import { RegistrationDesk } from "./RegistrationDesk";
-import { parsePublicRoute } from "./publicData";
+import {
+  parsePublicRoute,
+  type PublicArenaData,
+  type PublicSpectatorLeaderboardRow,
+} from "./publicData";
 import { ReportsModule } from "./ReportsModule";
 import {
   roundTimeSheetFileName,
@@ -110,6 +114,59 @@ const navItems: { id: View; label: string; icon: typeof Gauge }[] = [
   { id: "run-desk", label: "Run Desk", icon: Gauge },
   { id: "reports", label: "Reports", icon: FileBarChart },
 ];
+const LED_PUBLIC_DATA_REQUEST = "arena-led-public-data-request";
+const LED_PUBLIC_DATA_RESPONSE = "arena-led-public-data-response";
+
+function spectatorRowsForRound(
+  publicData: Pick<PublicArenaData, "competitions"> | null,
+  eventId: string,
+  round: number,
+) {
+  const competition = publicData?.competitions.find(
+    (item) => item.id === eventId,
+  );
+  return (competition?.spectatorLeaderboards ?? [])
+    .filter((row) => row.round === round)
+    .slice(0, 3);
+}
+
+function requestPublicArenaDataFromOpener() {
+  const opener = window.opener;
+  if (!opener) return Promise.resolve<PublicArenaData | null>(null);
+  return new Promise<PublicArenaData | null>((resolve, reject) => {
+    const requestId =
+      window.crypto.randomUUID?.() ??
+      `led-request-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener("message", handleResponse);
+      reject(new Error("The Run Desk did not respond."));
+    }, 8000);
+    function handleResponse(event: MessageEvent) {
+      if (
+        event.source !== opener ||
+        event.origin !== window.location.origin ||
+        event.data?.source !== LED_PUBLIC_DATA_RESPONSE ||
+        event.data?.requestId !== requestId
+      ) {
+        return;
+      }
+      window.clearTimeout(timeout);
+      window.removeEventListener("message", handleResponse);
+      resolve(event.data.publicData ?? null);
+    }
+    window.addEventListener("message", handleResponse);
+    opener.postMessage(
+      { source: LED_PUBLIC_DATA_REQUEST, requestId },
+      window.location.origin,
+    );
+  });
+}
+
+function openLedWindow(url: string) {
+  const popup = window.open(url, "_blank");
+  if (popup && !isWixEmbed()) popup.opener = null;
+  return popup;
+}
 
 const uid = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -155,6 +212,36 @@ function StaffApp() {
   const [workspaceMessage, setWorkspaceMessage] = useState("");
   const activeEvent =
     data.events.find((event) => event.id === data.activeEventId) ?? data.events[0];
+  useEffect(() => {
+    if (!isWixEmbed()) return;
+    const relayPublicResults = (event: MessageEvent) => {
+      if (
+        event.origin !== window.location.origin ||
+        event.data?.source !== LED_PUBLIC_DATA_REQUEST ||
+        typeof event.data?.requestId !== "string" ||
+        !event.source
+      ) {
+        return;
+      }
+      const target = event.source as Window;
+      void loadPublicArenaData()
+        .then((publicData) => {
+          target.postMessage(
+            {
+              source: LED_PUBLIC_DATA_RESPONSE,
+              requestId: event.data.requestId,
+              publicData,
+            },
+            event.origin,
+          );
+        })
+        .catch((error) => {
+          console.error("Could not send spectator results to the LED display.", error);
+        });
+    };
+    window.addEventListener("message", relayPublicResults);
+    return () => window.removeEventListener("message", relayPublicResults);
+  }, []);
   const displayParams = new URLSearchParams(window.location.search);
   if (displayParams.get("portal") === "contestant") {
     return <ContestantPortal />;
@@ -167,6 +254,7 @@ function StaffApp() {
         eventId={displayParams.get("event") ?? activeEvent?.id}
         requestedRound={Number(displayParams.get("round")) || undefined}
         requestedTeamId={displayParams.get("team") ?? undefined}
+        usePublicRelay={displayParams.get("relay") === "wix"}
       />
     );
   }
@@ -193,7 +281,8 @@ function StaffApp() {
     url.searchParams.set("display", "leaderboard");
     url.searchParams.set("event", activeEvent.id);
     url.searchParams.set("round", String(latestRound));
-    const popup = window.open(url.toString(), "_blank", "noopener,noreferrer");
+    if (isWixEmbed()) url.searchParams.set("relay", "wix");
+    const popup = openLedWindow(url.toString());
     if (!popup) {
       window.alert("Allow pop-ups to open the LED screen in a new tab.");
     }
@@ -803,52 +892,88 @@ function ContestantPortal() {
 function LedSpectatorTop({
   eventId,
   round,
-  fallbackNames,
+  fallbackRows,
+  picksClosed,
+  usePublicRelay,
+  teamId,
 }: {
   eventId: string;
   round: number;
-  fallbackNames: string[];
+  fallbackRows: PublicSpectatorLeaderboardRow[];
+  picksClosed: boolean;
+  usePublicRelay: boolean;
+  teamId?: string;
 }) {
-  const [names, setNames] = useState(fallbackNames);
+  const [rows, setRows] = useState(fallbackRows);
+  const [relayedPicksClosed, setRelayedPicksClosed] = useState(false);
   useEffect(() => {
-    if (!isWixEmbed()) {
-      setNames(fallbackNames);
-      return;
-    }
     let cancelled = false;
+    const usePublicData = (
+      publicData: Pick<PublicArenaData, "competitions"> | null,
+    ) => {
+      if (cancelled) return;
+      const nextRows = spectatorRowsForRound(publicData, eventId, round);
+      setRows(publicData ? nextRows : fallbackRows);
+      const competition = publicData?.competitions.find(
+        (item) => item.id === eventId,
+      );
+      const selectedRun = competition?.predictionRuns.find(
+        (run) => run.id === teamId,
+      );
+      setRelayedPicksClosed(Boolean(selectedRun && !selectedRun.open));
+    };
+    let refreshing = false;
     const refresh = () => {
-      void loadPublicArenaData()
+      if (refreshing) return;
+      refreshing = true;
+      const request = isWixEmbed()
+        ? loadPublicArenaData()
+        : usePublicRelay
+          ? requestPublicArenaDataFromOpener()
+          : Promise.resolve(null);
+      void request
         .then((publicData) => {
-          if (cancelled || !publicData) return;
-          const competition = (
-            publicData.competitions ??
-            publicData.meets.flatMap((meet) => meet.competitions)
-          ).find((item) => item.id === eventId);
-          setNames(
-            (competition?.spectatorLeaderboards ?? [])
-              .filter((row) => row.round === round)
-              .slice(0, 3)
-              .map((row) => row.name),
-          );
+          usePublicData(publicData);
         })
         .catch((error) => {
           console.error("Could not refresh spectator leaderboard.", error);
+        })
+        .finally(() => {
+          refreshing = false;
         });
     };
+    if (!isWixEmbed() && !usePublicRelay) {
+      setRows(fallbackRows);
+      setRelayedPicksClosed(false);
+      return;
+    }
     refresh();
-    const timer = window.setInterval(refresh, 5000);
+    const timer = window.setInterval(refresh, 3000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [eventId, round, fallbackNames.join("|")]);
+  }, [
+    eventId,
+    round,
+    teamId,
+    usePublicRelay,
+    fallbackRows
+      .map((row) => `${row.name}:${row.correct}:${row.picks}`)
+      .join("|"),
+  ]);
+  const effectivePicksClosed = picksClosed || relayedPicksClosed;
   return (
-    <section className="led-spectator-top">
+    <section className={`led-spectator-top${effectivePicksClosed ? " picks-closed" : ""}`}>
       <span>Spectator Results <small>Round {round}</small></span>
+      {effectivePicksClosed && <em className="led-picks-closed">Picks are closed</em>}
       <div>
-        {names.length
-          ? names.map((name, index) => (
-              <strong key={`${index}-${name}`}><b>{index + 1}</b>{name}</strong>
+        {rows.length
+          ? rows.map((row, index) => (
+              <strong key={`${index}-${row.name}`}>
+                <b>{index + 1}</b>
+                <span>{row.name}<small>{row.correct} correct / {row.picks} picks</small></span>
+              </strong>
             ))
           : <strong className="waiting">Waiting for spectator picks</strong>}
       </div>
@@ -910,11 +1035,13 @@ function LedLeaderboard({
   eventId,
   requestedRound,
   requestedTeamId,
+  usePublicRelay,
 }: {
   data: ArenaData;
   eventId?: string;
   requestedRound?: number;
   requestedTeamId?: string;
+  usePublicRelay: boolean;
 }) {
   const [clock, setClock] = useState(new Date());
   useEffect(() => {
@@ -995,8 +1122,8 @@ function LedLeaderboard({
             : <span aria-hidden="true">{initials(name)}</span>}
         </span>
         <span className="led-rider-name">
-          {horseName && <small>{horseName}</small>}
           <strong>{name}</strong>
+          {horseName && <small>riding {horseName}</small>}
         </span>
       </span>
     );
@@ -1058,7 +1185,20 @@ function LedLeaderboard({
       <LedSpectatorTop
         eventId={event.id}
         round={round}
-        fallbackNames={spectatorTopThree.map((row) => row.name)}
+        fallbackRows={spectatorTopThree.map(
+          ({ name, round: resultRound, picks, correct }) => ({
+            name,
+            round: resultRound,
+            picks,
+            correct,
+          }),
+        )}
+        picksClosed={Boolean(
+          currentTeam?.predictionClosesAt &&
+            Date.parse(currentTeam.predictionClosesAt) <= clock.getTime(),
+        )}
+        usePublicRelay={usePublicRelay}
+        teamId={currentTeam?.id}
       />
 
       <main className="led-board">
@@ -2940,7 +3080,8 @@ function RunDesk({
     url.searchParams.set("event", event.id);
     url.searchParams.set("round", String(activeRound));
     if (selected) url.searchParams.set("team", selected.id);
-    const popup = window.open(url.toString(), "_blank", "noopener,noreferrer");
+    if (isWixEmbed()) url.searchParams.set("relay", "wix");
+    const popup = openLedWindow(url.toString());
     if (!popup) {
       window.alert("Allow pop-ups to open the LED screen in a new tab.");
     }

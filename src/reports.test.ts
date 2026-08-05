@@ -183,7 +183,7 @@ describe("Slide reports", () => {
     });
 
     describe("horse report fields", () => {
-      it("places each horse before its contestant column", () => {
+      it("places each riding horse after its contestant column", () => {
         const workspace = data([team()]);
         const definition = reportDefinitions.find(
           (report) => report.id === "competition-final",
@@ -194,18 +194,18 @@ describe("Slide reports", () => {
         });
 
         expect(report.rows[0]).toMatchObject({
-          headerHorse: "Blue",
+          headerHorse: "Riding Blue",
           header: "Ada Header",
-          heelerHorse: "Star",
+          heelerHorse: "Riding Star",
           heeler: "Bo Heeler",
         });
         expect(report.columns.map((column) => column.key)).toEqual(
           expect.arrayContaining(["headerHorse", "header", "heelerHorse", "heeler"]),
         );
         expect(report.columns.findIndex((column) => column.key === "headerHorse"))
-          .toBeLessThan(report.columns.findIndex((column) => column.key === "header"));
+          .toBeGreaterThan(report.columns.findIndex((column) => column.key === "header"));
         expect(report.columns.findIndex((column) => column.key === "heelerHorse"))
-          .toBeLessThan(report.columns.findIndex((column) => column.key === "heeler"));
+          .toBeGreaterThan(report.columns.findIndex((column) => column.key === "heeler"));
       });
     });
   });

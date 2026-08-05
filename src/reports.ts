@@ -169,6 +169,8 @@ export const emptyReportFilters = (data: ArenaData): ReportFilters => ({
 
 const money = (value: number) =>
   value.toLocaleString(undefined, { style: "currency", currency: "USD" });
+const ridingHorse = (horseName?: string) =>
+  horseName?.trim() ? `Riding ${horseName.trim()}` : "—";
 
 const finalTime = (
   event: ArenaEvent | undefined,
@@ -492,9 +494,9 @@ function teamRows(
         round: team.round,
         draw: team.drawPosition,
         teamNumber: team.drawPosition,
-        headerHorse: team.headerHorseName ?? "—",
+        headerHorse: ridingHorse(team.headerHorseName),
         header: slideDetails.header,
-        heelerHorse: team.heelerHorseName ?? "—",
+        heelerHorse: ridingHorse(team.heelerHorseName),
         heeler: slideDetails.heeler,
         teamHandicap: slideDetails.teamHandicap,
         slideAdjustment: slideDetails.slideAdjustment,
@@ -752,7 +754,7 @@ function registrationRows(
   const eventMap = new Map(events.map((event) => [event.id, event]));
   return registrations.map((registration) => ({
     competition: eventMap.get(registration.eventId)?.name ?? "Unknown",
-    horse: registration.horseName ?? "—",
+    horse: ridingHorse(registration.horseName),
     contestant: contestantName(data.contestants, registration.contestantId),
     role: registration.role,
     entries: registration.entries,
@@ -779,7 +781,7 @@ function statusRows(
     .map((registration) => ({
       competition: eventMap.get(registration.eventId)?.name ?? "Unknown",
       recordType: "Registration",
-      horses: registration.horseName ?? "—",
+      horses: ridingHorse(registration.horseName),
       contestantTeam: contestantName(
         data.contestants,
         registration.contestantId,
@@ -801,8 +803,10 @@ function statusRows(
       competition: eventMap.get(team.eventId)?.name ?? "Unknown",
       recordType: "Team",
       horses:
-        [team.headerHorseName, team.heelerHorseName].filter(Boolean).join(" / ") ||
-        "—",
+        [team.headerHorseName, team.heelerHorseName]
+          .filter((horseName): horseName is string => Boolean(horseName))
+          .map(ridingHorse)
+          .join(" / ") || "—",
       contestantTeam: `${contestantName(
         data.contestants,
         team.headerId,
@@ -881,7 +885,8 @@ function payoutRows(
         place: incentiveOnly ? (incentive?.place ?? "—") : standing.rank,
         horses:
           [sourceTeam?.headerHorseName, sourceTeam?.heelerHorseName]
-            .filter(Boolean)
+            .filter((horseName): horseName is string => Boolean(horseName))
+            .map(ridingHorse)
             .join(" / ") || "—",
         team: standing && slideDetails
           ? event.competitionType === "slide"
@@ -931,9 +936,9 @@ function standingRows(data: ArenaData, events: ArenaEvent[], teams: Team[]) {
       return {
         competition: event.name,
         rank: standing.rank,
-        headerHorse: sourceTeam?.headerHorseName ?? "—",
+        headerHorse: ridingHorse(sourceTeam?.headerHorseName),
         header: slideDetails.header,
-        heelerHorse: sourceTeam?.heelerHorseName ?? "—",
+        heelerHorse: ridingHorse(sourceTeam?.heelerHorseName),
         heeler: slideDetails.heeler,
         teamHandicap: slideDetails.teamHandicap,
         slideAdjustment: slideDetails.slideAdjustment,
@@ -1023,8 +1028,8 @@ const columns = {
     ["payment", "Payment Status"],
   ],
   contestant: [
-    ["horses", "Horse"],
     ["name", "Name"],
+    ["horses", "Horse"],
     ["role", "Header / Heeler"],
     ["membership", "Membership #"],
     ["phone", "Phone"],
@@ -1036,8 +1041,8 @@ const columns = {
     ["winnings", "Winnings"],
   ],
   "contestant-financial": [
-    ["horses", "Horse"],
     ["name", "Contestant"],
+    ["horses", "Horse"],
     ["role", "Header / Heeler"],
     ["entries", "Entries"],
     ["spent", "Amount Spent"],
@@ -1047,8 +1052,8 @@ const columns = {
   ],
   registration: [
     ["competition", "Competition"],
-    ["horse", "Horse"],
     ["contestant", "Contestant"],
+    ["horse", "Horse"],
     ["role", "Role"],
     ["entries", "Entries"],
     ["payment", "Payment"],
@@ -1059,8 +1064,8 @@ const columns = {
   status: [
     ["competition", "Competition"],
     ["recordType", "Record Type"],
-    ["horses", "Horse"],
     ["contestantTeam", "Contestant / Team"],
+    ["horses", "Horse"],
     ["position", "Position / Draw"],
     ["entries", "Entries"],
     ["payment", "Payment"],
@@ -1072,10 +1077,10 @@ const columns = {
     ["competition", "Competition"],
     ["round", "Round"],
     ["draw", "Draw"],
-    ["headerHorse", "Horse"],
     ["header", "Header"],
-    ["heelerHorse", "Horse"],
+    ["headerHorse", "Horse"],
     ["heeler", "Heeler"],
+    ["heelerHorse", "Horse"],
     ["teamHandicap", "Team HC"],
     ["slideAdjustment", "Slide Adjustment"],
     ["time", "Time"],
@@ -1088,10 +1093,10 @@ const columns = {
     ["round", "Round"],
     ["draw", "Draw Order"],
     ["teamNumber", "Team #"],
-    ["headerHorse", "Horse"],
     ["header", "Header"],
-    ["heelerHorse", "Horse"],
+    ["headerHorse", "Horse"],
     ["heeler", "Heeler"],
+    ["heelerHorse", "Horse"],
     ["teamHandicap", "Team HC"],
     ["slideAdjustment", "Slide Adjustment"],
     ["arenaPosition", "Arena Position"],
@@ -1100,10 +1105,10 @@ const columns = {
     ["competition", "Competition"],
     ["round", "Round"],
     ["draw", "Draw"],
-    ["headerHorse", "Horse"],
     ["header", "Header"],
-    ["heelerHorse", "Horse"],
+    ["headerHorse", "Horse"],
     ["heeler", "Heeler"],
+    ["heelerHorse", "Horse"],
     ["teamHandicap", "Team HC"],
     ["slideAdjustment", "Slide Adjustment"],
     ["rawTime", "Raw Time"],
@@ -1117,10 +1122,10 @@ const columns = {
   standings: [
     ["competition", "Competition"],
     ["rank", "Rank"],
-    ["headerHorse", "Horse"],
     ["header", "Header"],
-    ["heelerHorse", "Horse"],
+    ["headerHorse", "Horse"],
     ["heeler", "Heeler"],
+    ["heelerHorse", "Horse"],
     ["teamHandicap", "Team HC"],
     ["slideAdjustment", "Slide Adjustment"],
     ["rounds", "Rounds"],
@@ -1132,8 +1137,8 @@ const columns = {
   payout: [
     ["competition", "Competition"],
     ["place", "Place"],
-    ["horses", "Horse"],
     ["team", "Team"],
+    ["horses", "Horse"],
     ["time", "Time"],
     ["prize", "Prize"],
     ["bonus", "Bonus"],
