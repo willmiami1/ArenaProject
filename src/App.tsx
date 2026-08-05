@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronLeft,
   CircleDollarSign,
+  ClipboardPen,
   Clock3,
   Cloud,
   CloudOff,
@@ -293,6 +294,12 @@ function StaffApp() {
     url.searchParams.set("portal", "contestant");
     window.location.assign(url.toString());
   };
+  const openRegistrationDesk = () => {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("app", "registration");
+    window.location.assign(url.toString());
+  };
   const openPublicWebsite = () => {
     window.localStorage.setItem("arena-command-data-v1", JSON.stringify(data));
     const url = new URL(window.location.href);
@@ -388,6 +395,10 @@ function StaffApp() {
           <button onClick={openContestantPortal}>
             <LogIn size={19} />
             Contestant Login
+          </button>
+          <button onClick={openRegistrationDesk}>
+            <ClipboardPen size={19} />
+            Registration Desk
           </button>
           <button onClick={openPublicWebsite}>
             <Eye size={19} />

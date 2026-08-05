@@ -3,7 +3,6 @@ import {
   ArrowRight,
   CalendarDays,
   CheckCircle2,
-  ClipboardPen,
   Clock3,
   Facebook,
   Instagram,
@@ -158,7 +157,6 @@ function PublicHeader() {
       </button>
       <nav id="public-navigation" className={open ? "open" : ""} aria-label="Public navigation">
         <a href={href("home")} onClick={() => setOpen(false)}>Home</a>
-        <a href={operationalHref("registration")} onClick={() => setOpen(false)}><ClipboardPen size={16} /> Registration Desk</a>
         <a href={operationalHref("command")} onClick={() => setOpen(false)}><ShieldCheck size={16} /> Admin login</a>
         <SocialLinks />
       </nav>
@@ -175,7 +173,6 @@ function PublicFooter() {
       </div>
       <nav aria-label="Footer navigation">
         <a href={href("home")}>Home</a>
-        <a href={operationalHref("registration")}>Registration Desk</a>
         <a href={operationalHref("command")}>Admin login</a>
       </nav>
       <div className="public-footer-connect">
