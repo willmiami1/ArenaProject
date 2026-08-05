@@ -44,6 +44,18 @@ const assertOnlineRegistrationOpen = (event, now = Date.now()) => {
     throw new Error("Online registration closes one hour before the competition starts.");
   }
 };
+const registrationDeskIsOpen = (event) =>
+  event.status === "Live" &&
+  event.registrationOpen === true &&
+  event.drawLocked !== true;
+
+const assertRegistrationDeskOpen = (event) => {
+  if (event.status !== "Live") {
+    throw new Error("Registration Desk entries are limited to live competitions.");
+  }
+  if (!event.registrationOpen) throw new Error("Registration is closed.");
+  if (event.drawLocked) throw new Error("The draw is locked.");
+};
 
 async function resolveAdminAccess() {
   let member;
@@ -598,10 +610,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
 });
 
 function registrationDeskProjection(workspace) {
-  const events = workspace.events.filter(
-    (event) =>
-      event.status === "Live" && onlineRegistrationIsOpen(event),
-  );
+  const events = workspace.events.filter(registrationDeskIsOpen);
   const eventIds = new Set(events.map((event) => event.id));
   return {
     events: events.map(
@@ -1276,10 +1285,8 @@ async function createSignupRecords(request, authenticatedId, source) {
       (item) => item.id === authenticatedId,
     );
     if (!event || !contestant) throw new Error("Competition or contestant not found.");
-    if (source === "staff" && event.status !== "Live") {
-      throw new Error("Registration Desk entries are limited to live competitions.");
-    }
-    assertOnlineRegistrationOpen(event);
+    if (source === "staff") assertRegistrationDeskOpen(event);
+    else assertOnlineRegistrationOpen(event);
 
     const priorTeams = workspace.teams.filter(
       (team) =>

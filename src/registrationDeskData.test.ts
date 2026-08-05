@@ -89,7 +89,7 @@ describe("registration desk boundary", () => {
   it("includes only live open competitions and strips run results", () => {
     const projected = registrationDeskProjection(
       data,
-      new Date("2026-08-05T15:00:00"),
+      new Date("2026-08-05T21:00:00"),
     );
 
     expect(projected.events.map((event) => event.id)).toEqual(["open-event"]);
@@ -150,12 +150,12 @@ describe("registration desk boundary", () => {
     const first = submitLocalRegistrationDeskSignup(
       data,
       request,
-      new Date("2026-08-05T15:00:00"),
+      new Date("2026-08-05T21:00:00"),
     );
     const retry = submitLocalRegistrationDeskSignup(
       first.data,
       request,
-      new Date("2026-08-05T15:01:00"),
+      new Date("2026-08-05T21:01:00"),
     );
 
     expect(first.data.registrations).toHaveLength(1);

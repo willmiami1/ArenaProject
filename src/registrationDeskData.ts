@@ -1,6 +1,6 @@
 import { seedData } from "./data";
 import { createOnlineSignup, type SignupRequest } from "./onlineSignup";
-import { onlineRegistrationIsOpen } from "./registrationWindow";
+import { registrationDeskIsOpen } from "./registrationWindow";
 import type {
   ArenaData,
   ArenaEvent,
@@ -53,10 +53,7 @@ export function registrationDeskProjection(
   data: ArenaData,
   now = new Date(),
 ): RegistrationDeskData {
-  const events = data.events.filter(
-    (event) =>
-      event.status === "Live" && onlineRegistrationIsOpen(event, now),
-  );
+  const events = data.events.filter(registrationDeskIsOpen);
   const eventIds = new Set(events.map((event) => event.id));
   return {
     events: events.map(
@@ -194,7 +191,7 @@ export function submitLocalRegistrationDeskSignup(
   request: SignupRequest,
   now = new Date(),
 ) {
-  const result = createOnlineSignup(data, request, now);
+  const result = createOnlineSignup(data, request, now, "staff");
   if (result.existing) {
     return { result, data };
   }

@@ -9,7 +9,10 @@ import type {
   EventRegistration,
   Team,
 } from "./types";
-import { assertOnlineRegistrationOpen } from "./registrationWindow";
+import {
+  assertOnlineRegistrationOpen,
+  assertRegistrationDeskOpen,
+} from "./registrationWindow";
 
 export interface SignupRequest {
   submissionId: string;
@@ -31,6 +34,7 @@ export function createOnlineSignup(
   data: ArenaData,
   request: SignupRequest,
   now = new Date(),
+  registrationMode: "online" | "staff" = "online",
 ): { teams: Team[]; registrations: EventRegistration[]; existing: boolean } {
   if (
     !safeId(request.submissionId) ||
@@ -42,7 +46,8 @@ export function createOnlineSignup(
   const event = data.events.find((item) => item.id === request.eventId);
   const contestant = data.contestants.find((item) => item.id === request.contestantId);
   if (!event || !contestant) throw new Error("Competition or contestant not found.");
-  assertOnlineRegistrationOpen(event, now);
+  if (registrationMode === "staff") assertRegistrationDeskOpen(event);
+  else assertOnlineRegistrationOpen(event, now);
   const existingTeams = data.teams.filter(
     (team) => team.submissionId === request.submissionId,
   );

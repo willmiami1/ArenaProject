@@ -43,3 +43,23 @@ export function assertOnlineRegistrationOpen(
     throw new Error("Online registration closes one hour before the competition starts.");
   }
 }
+
+export function registrationDeskIsOpen(
+  event: Pick<ArenaEvent, "registrationOpen" | "drawLocked" | "status">,
+) {
+  return (
+    event.status === "Live" &&
+    event.registrationOpen &&
+    !event.drawLocked
+  );
+}
+
+export function assertRegistrationDeskOpen(
+  event: Pick<ArenaEvent, "registrationOpen" | "drawLocked" | "status">,
+) {
+  if (event.status !== "Live") {
+    throw new Error("Registration Desk entries are limited to live competitions.");
+  }
+  if (!event.registrationOpen) throw new Error("Registration is closed.");
+  if (event.drawLocked) throw new Error("The draw is locked.");
+}
