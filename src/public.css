@@ -101,7 +101,7 @@
 .public-contact-details svg { color: var(--public-tan); }
 .public-contact-details span { overflow-wrap: anywhere; font-size: clamp(14px,1.5vw,18px); line-height: 1.45; }
 .public-contact-details strong { display: block; margin-bottom: 4px; color: var(--public-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .14em; }
-.public-contact-map { position: relative; grid-column: 1/-1; min-height: clamp(320px,42vw,520px); margin-top: 8px; overflow: hidden; border: 1px solid rgba(234,220,198,.3); }
+.public-contact-map { position: relative; grid-column: 1/-1; width: min(860px,100%); min-height: clamp(240px,28vw,340px); justify-self: center; margin-top: 8px; overflow: hidden; border: 1px solid rgba(234,220,198,.3); }
 .public-contact-map iframe { width: 100%; height: 100%; min-height: inherit; display: block; border: 0; }
 .public-contact-map .public-button { position: absolute; right: 18px; bottom: 18px; box-shadow: 0 5px 18px rgba(0,0,0,.35); }
 .public-index-head,.public-page-head { padding: 80px 0 65px; }
@@ -266,7 +266,7 @@
   .public-pick-card .public-cowboy-rider>strong { font-size: 15px; }
   .public-contact { padding: 30px 22px; }
   .public-contact-details a { min-height: 90px; grid-template-columns: 34px 1fr; }
-  .public-contact-map { min-height: 330px; }
+  .public-contact-map { min-height: 260px; }
   .public-contact-map .public-button { right: 10px; bottom: 10px; left: 10px; }
   .public-footer { grid-template-columns: 1fr; padding: 42px 22px; }
   .public-footer-connect { grid-column: auto; }
