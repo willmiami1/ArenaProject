@@ -64,6 +64,10 @@ export interface PublicCompetition {
   timeLimit: number;
   rounds: number;
   shortGoTeams: number;
+  incentivePayouts: boolean;
+  incentiveHandicapTotal: number;
+  incentiveTeams: number;
+  incentiveAmountPerTeam: number;
   entryCount: number;
   results: PublicStandingRow[];
   predictionRuns: PublicPredictionRun[];
@@ -196,6 +200,10 @@ export function projectPublicArenaData(
       timeLimit: event.timeLimit,
       rounds: event.rounds,
       shortGoTeams: event.shortGoTeams,
+      incentivePayouts: event.incentivePayouts,
+      incentiveHandicapTotal: event.incentiveHandicapTotal ?? 7,
+      incentiveTeams: event.incentiveTeams ?? 1,
+      incentiveAmountPerTeam: event.incentiveAmountPerTeam ?? 0,
       entryCount: fixedEntries + individualEntries,
       results: publicStandingRows(event, data.teams, data.contestants),
       predictionRuns: data.teams

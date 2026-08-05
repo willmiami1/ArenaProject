@@ -38,33 +38,42 @@ export function normalizeData(parsed: ArenaData): ArenaData {
     ...meet,
     producer: meet.producer ?? "",
   }));
-  const events = parsed.events.map((event) => ({
-    ...defaultCompetitionSettings,
-    ...event,
-    description: event.description ?? "",
-    parentEventId: event.parentEventId ?? `meet-${event.id}`,
-    allowRepeatPartners: event.allowRepeatPartners ?? false,
-    producerFeePercent:
-      event.producerFeePercent ??
-      (event as typeof event & { producerFee?: number }).producerFee ??
-      0,
-    handicapTotal: applyHandicapDefaults
-      ? 20
-      : event.handicapTotal ??
-        (Number(
-          (event as typeof event & { handicapCategory?: string })
-            .handicapCategory,
-        ) || 20),
-    maxContestantHandicap: applyHandicapDefaults
-      ? 10
-      : event.maxContestantHandicap ?? 10,
-    minDrawsAllowed: event.minDrawsAllowed ?? 0,
-    slideNumber: event.slideNumber ?? 10,
-    shortGoTeams: event.shortGoTeams ?? 0,
-    drawHistory: event.drawHistory ?? [],
-    drawApproved:
-      event.drawApproved ?? Boolean(event.drawHistory?.length),
-  }));
+  const events = parsed.events.map((event) => {
+    const legacyEvent = event as typeof event & {
+      producerFee?: number;
+      handicapCategory?: string;
+      incentiveAddedMoney?: number;
+      incentivePayoutPercentages?: number[];
+    };
+    return {
+      ...defaultCompetitionSettings,
+      ...event,
+      description: event.description ?? "",
+      parentEventId: event.parentEventId ?? `meet-${event.id}`,
+      allowRepeatPartners: event.allowRepeatPartners ?? false,
+      producerFeePercent:
+        event.producerFeePercent ?? legacyEvent.producerFee ?? 0,
+      handicapTotal: applyHandicapDefaults
+        ? 20
+        : event.handicapTotal ??
+          (Number(legacyEvent.handicapCategory) || 20),
+      maxContestantHandicap: applyHandicapDefaults
+        ? 10
+        : event.maxContestantHandicap ?? 10,
+      minDrawsAllowed: event.minDrawsAllowed ?? 0,
+      slideNumber: event.slideNumber ?? 10,
+      shortGoTeams: event.shortGoTeams ?? 0,
+      incentiveHandicapTotal: event.incentiveHandicapTotal ?? 7,
+      incentiveTeams:
+        event.incentiveTeams ??
+        Math.max(1, legacyEvent.incentivePayoutPercentages?.length ?? 1),
+      incentiveAmountPerTeam:
+        event.incentiveAmountPerTeam ?? legacyEvent.incentiveAddedMoney ?? 0,
+      drawHistory: event.drawHistory ?? [],
+      drawApproved:
+        event.drawApproved ?? Boolean(event.drawHistory?.length),
+    };
+  });
   const teams = (parsed.teams ?? []).map((team) => ({
     ...team,
     round: team.round ?? 1,

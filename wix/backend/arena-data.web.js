@@ -420,6 +420,17 @@ function publicProjection(workspace) {
       timeLimit: event.timeLimit,
       rounds: event.rounds,
       shortGoTeams: event.shortGoTeams,
+      incentivePayouts: event.incentivePayouts === true,
+      incentiveHandicapTotal: Number(event.incentiveHandicapTotal ?? 7),
+      incentiveTeams: Number(
+        event.incentiveTeams ??
+          (Array.isArray(event.incentivePayoutPercentages)
+            ? Math.max(1, event.incentivePayoutPercentages.length)
+            : 1),
+      ),
+      incentiveAmountPerTeam: Number(
+        event.incentiveAmountPerTeam ?? event.incentiveAddedMoney ?? 0,
+      ),
       entryCount:
         workspace.teams.filter(
           (team) =>

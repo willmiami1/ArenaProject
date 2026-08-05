@@ -147,37 +147,156 @@ describe("event summary", () => {
       key: "freeRuns",
       label: "Free Runs",
     });
+  });
+});
 
-    describe("Slide reports", () => {
-      it("shows rider handicaps, combined handicap, and adjustment", () => {
-        const slide = {
-          ...event,
-          competitionType: "slide" as const,
-          slideNumber: 10,
-          rounds: 2,
-        };
-        const workspace = data([
-          team(),
-          team({ id: "round-2", round: 2, rawTime: 8 }),
-        ]);
-        workspace.events = [slide];
-        const definition = reportDefinitions.find(
-          (report) => report.id === "competition-final",
-        )!;
-        const filters = {
-          ...emptyReportFilters(workspace),
-          competitionId: slide.id,
-        };
+describe("Slide reports", () => {
+  it("shows rider handicaps, combined handicap, and adjustment", () => {
+    const slide = {
+      ...event,
+      competitionType: "slide" as const,
+      slideNumber: 10,
+      rounds: 2,
+    };
+    const workspace = data([
+      team(),
+      team({ id: "round-2", round: 2, rawTime: 8 }),
+    ]);
+    workspace.events = [slide];
+    const definition = reportDefinitions.find(
+      (report) => report.id === "competition-final",
+    )!;
+    const filters = {
+      ...emptyReportFilters(workspace),
+      competitionId: slide.id,
+    };
 
-        const report = generateReport(workspace, definition, filters);
+    const report = generateReport(workspace, definition, filters);
 
-        expect(report.rows[0]).toMatchObject({
-          header: "Ada Header (HC 4)",
-          heeler: "Bo Heeler (HC 4)",
-          teamHandicap: 8,
-          slideAdjustment: "2.0s deducted",
-        });
-      });
+    expect(report.rows[0]).toMatchObject({
+      header: "Ada Header (HC 4)",
+      heeler: "Bo Heeler (HC 4)",
+      teamHandicap: 8,
+      slideAdjustment: "2.0s deducted",
+    });
+  });
+});
+
+describe("incentive rules", () => {
+  it("ranks Round 1 teams and awards the fixed amount per team", () => {
+    const incentiveEvent = {
+      ...event,
+      incentivePayouts: true,
+      incentiveHandicapTotal: 8,
+      incentiveTeams: 1,
+      incentiveAmountPerTeam: 100,
+    };
+    const workspace = data([
+      team({ rawTime: 6, headerEntryNumber: 1, heelerEntryNumber: 1 }),
+      team({
+        id: "entry-1-round-2",
+        round: 2,
+        status: "no-time",
+        rawTime: null,
+        headerEntryNumber: 1,
+        heelerEntryNumber: 1,
+      }),
+      team({
+        id: "entry-2-round-1",
+        drawPosition: 2,
+        rawTime: 7,
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+      }),
+      team({
+        id: "entry-2-round-2",
+        drawPosition: 2,
+        round: 2,
+        rawTime: 6,
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+      }),
+    ]);
+    workspace.events = [incentiveEvent];
+    const definition = reportDefinitions.find(
+      (report) => report.id === "competition-incentive",
+    )!;
+
+    const report = generateReport(workspace, definition, {
+      ...emptyReportFilters(workspace),
+      competitionId: incentiveEvent.id,
+    });
+
+    expect(report.rows[0]).toMatchObject({
+      place: 1,
+      bonus: "$100.00",
+      totalPaid: "$100.00",
+      time: 6,
+    });
+    expect(String(report.rows[0].incentives)).toContain("Team HC 8 / 8");
+    expect(
+      contestantFinancials(workspace, [incentiveEvent]).map(
+        (summary) => summary.earnings,
+      ),
+    ).toEqual([150, 150]);
+  });
+
+  it("requires an exact combined handicap", () => {
+    const incentiveEvent = {
+      ...event,
+      incentivePayouts: true,
+      incentiveHandicapTotal: 8,
+      incentiveTeams: 3,
+      incentiveAmountPerTeam: 75,
+    };
+    const workspace = data([
+      team(),
+      team({
+        id: "low-team",
+        headerId: "low-header",
+        drawPosition: 2,
+        rawTime: 5,
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+      }),
+      team({
+        id: "high-team",
+        headerId: "high-header",
+        drawPosition: 3,
+        rawTime: 4,
+        headerEntryNumber: 3,
+        heelerEntryNumber: 3,
+      }),
+    ]);
+    workspace.events = [incentiveEvent];
+    workspace.contestants = [
+      ...contestants,
+      {
+        ...contestants[0],
+        id: "low-header",
+        name: "Low Header",
+        headerHandicap: 3.5,
+      },
+      {
+        ...contestants[0],
+        id: "high-header",
+        name: "High Header",
+        headerHandicap: 4.5,
+      },
+    ];
+    const definition = reportDefinitions.find(
+      (report) => report.id === "competition-incentive",
+    )!;
+
+    const report = generateReport(workspace, definition, {
+      ...emptyReportFilters(workspace),
+      competitionId: incentiveEvent.id,
+    });
+
+    expect(report.rows).toHaveLength(1);
+    expect(report.rows[0]).toMatchObject({
+      team: "Ada Header / Bo Heeler",
+      bonus: "$75.00",
     });
   });
 });

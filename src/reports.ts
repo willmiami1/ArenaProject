@@ -6,7 +6,11 @@ import {
   slideTimeAdjustment,
   teamHandicapTotal,
 } from "./competition";
-import { aggregateStandings, teamEntryKey } from "./standings";
+import {
+  aggregateStandings,
+  teamEntryKey,
+  type AggregateStanding,
+} from "./standings";
 import type {
   ArenaData,
   ArenaEvent,
@@ -194,6 +198,7 @@ function slideReportDetails(
       slideAdjustment: "—",
     };
   }
+
   const header = contestants.find((contestant) => contestant.id === headerId);
   const heeler = contestants.find((contestant) => contestant.id === heelerId);
   const adjustment = slideTimeAdjustment(
@@ -211,6 +216,91 @@ function slideReportDetails(
         : adjustment < 0
           ? `${Math.abs(adjustment).toFixed(1)}s deducted`
           : "0.0s",
+  };
+}
+
+function incentiveAwards(
+  event: ArenaEvent,
+  standings: AggregateStanding[],
+  contestants: Contestant[],
+  teams: Team[],
+) {
+  if (!event.incentivePayouts) {
+    return {
+      eligible: [] as AggregateStanding[],
+      awards: new Map<string, { place: number; amount: number }>(),
+    };
+  }
+  const standingsByKey = new Map(
+    standings.map((standing) => [standing.key, standing]),
+  );
+  const roundOneByEntry = new Map<string, Team>();
+  teams
+    .filter(
+      (team) =>
+        team.eventId === event.id &&
+        team.round === 1 &&
+        team.status === "complete" &&
+        team.rawTime !== null &&
+        !team.scratched &&
+        teamHandicapTotal(team.headerId, team.heelerId, contestants) ===
+          (event.incentiveHandicapTotal ?? 7),
+    )
+    .forEach((team) => {
+      const key = teamEntryKey(team);
+      const current = roundOneByEntry.get(key);
+      if (
+        !current ||
+        (officialRunTime(event, team, contestants) ?? Infinity) <
+          (officialRunTime(event, current, contestants) ?? Infinity)
+      ) {
+        roundOneByEntry.set(key, team);
+      }
+    });
+  const eligible = [...roundOneByEntry.entries()]
+    .map(([key, roundOne]) => ({
+      roundOne,
+      standing: standingsByKey.get(key),
+      time: officialRunTime(event, roundOne, contestants),
+    }))
+    .filter(
+      (
+        item,
+      ): item is {
+        roundOne: Team;
+        standing: AggregateStanding;
+        time: number;
+      } => Boolean(item.standing) && item.time !== null,
+    )
+    .sort(
+      (left, right) =>
+        left.time - right.time ||
+        left.roundOne.drawPosition - right.roundOne.drawPosition,
+    )
+    .map((item, index) => ({
+      ...item.standing,
+      rounds: 1,
+      total: item.time,
+      average: item.time,
+      qualified: true,
+      status: "qualified" as const,
+      rank: index + 1,
+    }));
+  const winners = eligible.slice(
+    0,
+    Math.max(0, Math.floor(event.incentiveTeams ?? 1)),
+  );
+  return {
+    eligible,
+    awards: new Map(
+      winners.map((standing, index) => [
+        standing.key,
+        {
+          place: index + 1,
+          amount: Math.max(0, event.incentiveAmountPerTeam ?? 0),
+        },
+      ]),
+    ),
   };
 }
 
@@ -255,7 +345,8 @@ function eventFinancials(
   const feeBase = Math.max(0, event.entryFee - event.officeCharge - event.stockCharge);
   const producer = entries * feeBase * (event.producerFeePercent / 100);
   const purse = calculatePurse(event, entries);
-  const qualified = aggregateStandings(event, teams, contestants).filter(
+  const standings = aggregateStandings(event, teams, contestants);
+  const qualified = standings.filter(
     (standing) => standing.qualified,
   );
   const payouts = calculatePayouts(
@@ -264,8 +355,19 @@ function eventFinancials(
     event.payoutPercentages,
   );
   const totalPayouts = payouts.reduce((sum, payout) => sum + payout.amount, 0);
+  const incentives = incentiveAwards(event, standings, contestants, teams);
+  const totalIncentivePayouts = [...incentives.awards.values()].reduce(
+    (sum, payout) => sum + payout.amount,
+    0,
+  );
   const remaining =
-    collected + event.addedMoney - office - stock - producer - totalPayouts;
+    collected +
+    event.addedMoney -
+    office -
+    stock -
+    producer -
+    totalPayouts -
+    totalIncentivePayouts;
   return {
     entries,
     collected,
@@ -275,6 +377,7 @@ function eventFinancials(
     added: event.addedMoney,
     purse,
     totalPayouts,
+    totalIncentivePayouts,
     remaining,
   };
 }
@@ -556,7 +659,12 @@ export function contestantFinancials(
         });
       });
 
-    const standings = aggregateStandings(event, data.teams, data.contestants).filter(
+    const allStandings = aggregateStandings(
+      event,
+      data.teams,
+      data.contestants,
+    );
+    const standings = allStandings.filter(
       (standing) => standing.qualified,
     );
     const financials = eventFinancials(event, data.teams, data.registrations, data.contestants);
@@ -569,7 +677,8 @@ export function contestantFinancials(
       const standing = standings[payout.place - 1];
       if (!standing) return;
       const sourceTeam = eventTeams.find(
-        (team) => teamEntryKey(team) === standing.key,
+        (team) =>
+          team.round === 1 && teamEntryKey(team) === standing.key,
       );
       const recipients = sourceTeam?.headerFreeRun
         ? [standing.heelerId]
@@ -581,6 +690,32 @@ export function contestantFinancials(
         const summary = ensureSummary(contestantId);
         summary.earnings += share;
         summary.places.push(`${event.name}: #${payout.place}`);
+      });
+    });
+    const incentives = incentiveAwards(
+      event,
+      allStandings,
+      data.contestants,
+      eventTeams,
+    );
+    incentives.awards.forEach((award, standingKey) => {
+      const standing = incentives.eligible.find(
+        (item) => item.key === standingKey,
+      );
+      if (!standing) return;
+      const sourceTeam = eventTeams.find(
+        (team) => teamEntryKey(team) === standing.key,
+      );
+      const recipients = sourceTeam?.headerFreeRun
+        ? [standing.heelerId]
+        : sourceTeam?.heelerFreeRun
+          ? [standing.headerId]
+          : [...new Set([standing.headerId, standing.heelerId])];
+      const share = award.amount / Math.max(recipients.length, 1);
+      recipients.forEach((contestantId) => {
+        const summary = ensureSummary(contestantId);
+        summary.earnings += share;
+        summary.places.push(`${event.name} incentive: #${award.place}`);
       });
     });
   });
@@ -674,9 +809,19 @@ function statusRows(
   return [...registrationRows, ...teamRows];
 }
 
-function payoutRows(data: ArenaData, events: ArenaEvent[], teams: Team[]) {
+function payoutRows(
+  data: ArenaData,
+  events: ArenaEvent[],
+  teams: Team[],
+  incentiveOnly = false,
+) {
   return events.flatMap((event) => {
-    const standings = aggregateStandings(event, teams, data.contestants).filter(
+    const allStandings = aggregateStandings(
+      event,
+      teams,
+      data.contestants,
+    );
+    const standings = allStandings.filter(
       (standing) => standing.qualified,
     );
     const financials = eventFinancials(event, data.teams, data.registrations, data.contestants);
@@ -685,8 +830,30 @@ function payoutRows(data: ArenaData, events: ArenaEvent[], teams: Team[]) {
       standings.length,
       event.payoutPercentages,
     );
-    return payouts.map((payout) => {
-      const standing = standings[payout.place - 1];
+    const mainAwards = new Map(
+      payouts.map((payout) => [
+        standings[payout.place - 1].key,
+        payout.amount,
+      ]),
+    );
+    const incentives = incentiveAwards(
+      event,
+      allStandings,
+      data.contestants,
+      teams,
+    );
+    const displayedStandings = incentiveOnly
+      ? incentives.eligible.filter((standing) =>
+          incentives.awards.has(standing.key),
+        )
+      : standings.filter(
+          (standing) =>
+            mainAwards.has(standing.key) ||
+            incentives.awards.has(standing.key),
+        );
+    return displayedStandings.map((standing) => {
+      const mainPrize = mainAwards.get(standing.key) ?? 0;
+      const incentive = incentives.awards.get(standing.key);
       const slideDetails = standing
         ? slideReportDetails(
             event,
@@ -697,17 +864,25 @@ function payoutRows(data: ArenaData, events: ArenaEvent[], teams: Team[]) {
         : null;
       return {
         competition: event.name,
-        place: payout.place,
+        place: incentiveOnly ? (incentive?.place ?? "—") : standing.rank,
         team: standing && slideDetails
           ? event.competitionType === "slide"
             ? `${slideDetails.header} / ${slideDetails.heeler} · Team HC ${slideDetails.teamHandicap} · ${slideDetails.slideAdjustment}`
             : `${slideDetails.header} / ${slideDetails.heeler}`
           : "TBD",
         time: standing?.total ?? "—",
-        prize: money(payout.amount),
-        bonus: money(0),
-        incentives: event.incentivePayouts ? "Eligible" : "—",
-        totalPaid: money(payout.amount),
+        prize: money(mainPrize),
+        bonus: money(incentive?.amount ?? 0),
+        incentives: incentive
+          ? `#${incentive.place} · Team HC ${teamHandicapTotal(
+              standing.headerId,
+              standing.heelerId,
+              data.contestants,
+            )} / ${event.incentiveHandicapTotal ?? 7} · Fastest Round 1`
+          : event.incentivePayouts
+            ? "Not eligible"
+            : "—",
+        totalPaid: money(mainPrize + (incentive?.amount ?? 0)),
       };
     });
   });
@@ -978,8 +1153,10 @@ export function generateReport(
       stock: result.stock + item.stock,
       producer: result.producer + item.producer,
       added: result.added + item.added,
+      incentive: result.incentive + item.totalIncentivePayouts,
       purse: result.purse + item.purse,
-      payouts: result.payouts + item.totalPayouts,
+      payouts:
+        result.payouts + item.totalPayouts + item.totalIncentivePayouts,
       remaining: result.remaining + item.remaining,
     }),
     {
@@ -989,6 +1166,7 @@ export function generateReport(
       stock: 0,
       producer: 0,
       added: 0,
+      incentive: 0,
       purse: 0,
       payouts: 0,
       remaining: 0,
@@ -1049,7 +1227,9 @@ export function generateReport(
         added: money(eventFinance.added),
         office: money(eventFinance.office),
         stock: money(eventFinance.stock),
-        payouts: money(eventFinance.totalPayouts),
+        payouts: money(
+          eventFinance.totalPayouts + eventFinance.totalIncentivePayouts,
+        ),
         balance: money(eventFinance.remaining),
       };
     });
@@ -1067,8 +1247,8 @@ export function generateReport(
         producer: money(item.producer),
         added: money(item.added),
         jackpot: money(item.purse),
-        incentive: money(0),
-        payouts: money(item.totalPayouts),
+        incentive: money(item.totalIncentivePayouts),
+        payouts: money(item.totalPayouts + item.totalIncentivePayouts),
         remaining: money(item.remaining),
         refunds: money(0),
         scratches:
@@ -1093,7 +1273,7 @@ export function generateReport(
       producer: money(totals.producer),
       added: money(totals.added),
       jackpot: money(totals.purse),
-      incentive: money(0),
+      incentive: money(totals.incentive),
       payouts: money(totals.payouts),
       remaining: money(totals.remaining),
       refunds: money(0),
@@ -1139,7 +1319,12 @@ export function generateReport(
   } else if (definition.kind === "standings") {
     rows = standingRows(data, events, teams);
   } else if (definition.kind === "payout") {
-    rows = payoutRows(data, events, teams);
+    rows = payoutRows(
+      data,
+      events,
+      teams,
+      definition.id === "competition-incentive",
+    );
   } else if (definition.kind === "stock") {
     rows = stockRows(data, events, teams);
   } else {

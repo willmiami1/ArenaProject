@@ -47,6 +47,9 @@ export interface ArenaEvent {
   progressiveAfterRound: number;
   addedMoney: number;
   incentivePayouts: boolean;
+  incentiveHandicapTotal: number;
+  incentiveTeams: number;
+  incentiveAmountPerTeam: number;
   officeCharge: number;
   stockCharge: number;
   producerFeePercent: number;

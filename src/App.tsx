@@ -1439,6 +1439,9 @@ function EventForm({
     progressiveAfterRound: (event?.progressiveAfterRound ?? 0).toString(),
     addedMoney: (event?.addedMoney ?? 0).toString(),
     incentivePayouts: event?.incentivePayouts ?? false,
+    incentiveHandicapTotal: (event?.incentiveHandicapTotal ?? 7).toString(),
+    incentiveTeams: (event?.incentiveTeams ?? 1).toString(),
+    incentiveAmountPerTeam: (event?.incentiveAmountPerTeam ?? 0).toString(),
     officeCharge: (event?.officeCharge ?? 0).toString(),
     stockCharge: (event?.stockCharge ?? 0).toString(),
     producerFeePercent: (event?.producerFeePercent ?? 0).toString(),
@@ -1472,6 +1475,13 @@ function EventForm({
       shortGoTeams: Math.max(0, Math.floor(Number(form.shortGoTeams) || 0)),
       progressiveAfterRound: Number(form.progressiveAfterRound) || 0,
       addedMoney: Number(form.addedMoney) || 0,
+      incentiveHandicapTotal:
+        Number(form.incentiveHandicapTotal) || 7,
+      incentiveTeams: Math.max(
+        1,
+        Math.floor(Number(form.incentiveTeams) || 1),
+      ),
+      incentiveAmountPerTeam: Number(form.incentiveAmountPerTeam) || 0,
       officeCharge: Number(form.officeCharge) || 0,
       stockCharge: Number(form.stockCharge) || 0,
       producerFeePercent: Number(form.producerFeePercent) || 0,
@@ -1522,11 +1532,18 @@ function EventForm({
         <Field label="Stock charge / entry"><input type="number" min="0" value={form.stockCharge} onChange={(e) => setForm({ ...form, stockCharge: e.target.value })} /></Field>
         <Field label="Producer fee (%)"><input type="number" min="0" max="100" step="0.1" value={form.producerFeePercent} onChange={(e) => setForm({ ...form, producerFeePercent: e.target.value })} /></Field>
         <Field label="Payout split (%)"><input required value={form.payoutPercentages} onChange={(e) => setForm({ ...form, payoutPercentages: e.target.value })} placeholder="50, 30, 20" /></Field>
+        <label className="toggle-row"><input type="checkbox" checked={form.incentivePayouts} onChange={(e) => setForm({ ...form, incentivePayouts: e.target.checked })} /><span><strong>Incentive payout</strong><small>Award the fastest qualifying team or teams from Round 1.</small></span></label>
+        {form.incentivePayouts && (
+          <>
+            <Field label="Incentive team handicap"><input required type="number" min="0" max={form.handicapTotal} step="0.5" value={form.incentiveHandicapTotal} onChange={(e) => setForm({ ...form, incentiveHandicapTotal: e.target.value })} /><small>Only teams with this exact combined handicap qualify.</small></Field>
+            <Field label="Number of incentive teams"><input required type="number" min="1" step="1" value={form.incentiveTeams} onChange={(e) => setForm({ ...form, incentiveTeams: e.target.value })} /><small>The fastest qualifying Round 1 teams receive the award.</small></Field>
+            <Field label="Amount per incentive team"><input required type="number" min="0" step="0.01" value={form.incentiveAmountPerTeam} onChange={(e) => setForm({ ...form, incentiveAmountPerTeam: e.target.value })} /></Field>
+          </>
+        )}
       </div>
       <div className="toggle-grid">
         <label className="toggle-row"><input type="checkbox" checked={form.registrationOpen} onChange={(e) => setForm({ ...form, registrationOpen: e.target.checked })} /><span><strong>Registration open</strong><small>Allow new contestants and teams to enter.</small></span></label>
         <label className="toggle-row"><input type="checkbox" checked={form.allowRepeatPartners} onChange={(e) => setForm({ ...form, allowRepeatPartners: e.target.checked })} /><span><strong>Allow repeat partner runs</strong><small>Permit the same header and heeler pairing to run more than once in Round 1.</small></span></label>
-        <label className="toggle-row"><input type="checkbox" checked={form.incentivePayouts} onChange={(e) => setForm({ ...form, incentivePayouts: e.target.checked })} /><span><strong>Incentive payouts</strong><small>Track an additional incentive payout class.</small></span></label>
       </div>
       <FormActions onCancel={onCancel} submitLabel={event ? "Save roping" : "Add roping"} />
     </form>
