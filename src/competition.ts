@@ -290,6 +290,32 @@ export const entryClearedForDraw = (
   entry: Pick<Team | EventRegistration, "paid" | "paymentMethod">,
 ) => entry.paid !== false || entry.paymentMethod === "tab";
 
+export function contestantHasDrawRegistration(
+  registrations: EventRegistration[],
+  eventId: string,
+  contestantId: string,
+) {
+  return registrations.some(
+    (registration) =>
+      registration.eventId === eventId &&
+      registration.contestantId === contestantId &&
+      !registration.sourceTeamId &&
+      registration.status === "entered" &&
+      registration.entries > 0,
+  );
+}
+
+export function pickedTeamRidersMissingFromDraw(
+  registrations: EventRegistration[],
+  eventId: string,
+  team: Pick<Team, "headerId" | "heelerId">,
+) {
+  return [team.headerId, team.heelerId].filter(
+    (contestantId) =>
+      !contestantHasDrawRegistration(registrations, eventId, contestantId),
+  );
+}
+
 function pickAndDrawTeams(
   event: ArenaEvent,
   fixedTeams: Team[],
@@ -302,6 +328,11 @@ function pickAndDrawTeams(
       !team.generated &&
       !team.scratched &&
       entryClearedForDraw(team) &&
+      pickedTeamRidersMissingFromDraw(
+        registrations,
+        event.id,
+        team,
+      ).length === 0 &&
       teamEligibleForCompetition(event, team, contestants),
   );
   const activeDrawEntries = registrations.filter(

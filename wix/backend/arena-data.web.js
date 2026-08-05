@@ -1242,6 +1242,19 @@ function availablePartners(workspace, event, contestant) {
   return workspace.contestants
     .filter((partner) => {
       if (partner.id === contestant.id) return false;
+      if (
+        event.competitionType === "pick-and-draw" &&
+        !workspace.registrations.some(
+          (registration) =>
+            registration.eventId === event.id &&
+            registration.contestantId === partner.id &&
+            !registration.sourceTeamId &&
+            registration.status === "entered" &&
+            Number(registration.entries) > 0,
+        )
+      ) {
+        return false;
+      }
       const canHeeler =
         contestantCanRole(contestant, "Header") &&
         contestantWithinHandicap(event, contestant, "Header") &&
@@ -1474,7 +1487,10 @@ async function createSignupRecords(request, authenticatedId, source) {
       }
       if (event.competitionType === "pick-and-draw") {
         const entries = Number(request.entries ?? 0);
-        const minimumDraws = Number(event.minDrawsAllowed ?? 0);
+        const minimumDraws = Math.max(
+          1,
+          Number(event.minDrawsAllowed ?? 0),
+        );
         const drawRole = request.drawRole || request.role;
         const allowedRoles =
           event.pickDrawRole === "both"
@@ -1492,9 +1508,6 @@ async function createSignupRecords(request, authenticatedId, source) {
           throw new Error(
             `This competition requires at least ${minimumDraws} draw entr${minimumDraws === 1 ? "y" : "ies"}.`,
           );
-        }
-        if (!requestedPartnerIds.length && entries === 0) {
-          throw new Error("Enter at least one draw or choose a picked partner.");
         }
         const standaloneEntries = workspace.registrations
           .filter(
@@ -1576,6 +1589,24 @@ async function createSignupRecords(request, authenticatedId, source) {
           );
           if (!partner || partner.id === contestant.id) {
             throw new Error("Choose an eligible partner.");
+          }
+          const hasDrawRegistration = (contestantId) =>
+            [...workspace.registrations, ...registrations].some(
+              (registration) =>
+                registration.eventId === event.id &&
+                registration.contestantId === contestantId &&
+                !registration.sourceTeamId &&
+                registration.status === "entered" &&
+                Number(registration.entries) > 0,
+            );
+          if (
+            event.competitionType === "pick-and-draw" &&
+            (!hasDrawRegistration(contestant.id) ||
+              !hasDrawRegistration(partner.id))
+          ) {
+            throw new Error(
+              "Every rider on a picked team must already be entered in the draw.",
+            );
           }
           const header = request.role === "Header" ? contestant : partner;
           const heeler = request.role === "Heeler" ? contestant : partner;

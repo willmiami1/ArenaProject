@@ -224,14 +224,38 @@ describe("online signup", () => {
   it.each(["pick-only", "pick-and-draw"] as const)(
     "supports %s fixed teams",
     (competitionType) => {
+      const data = workspace(
+        event({
+          competitionType,
+          handicapTotal: 8,
+          entriesAllowed: 3,
+          pickDrawRole: "both",
+        }),
+      );
+      if (competitionType === "pick-and-draw") {
+        data.registrations = [
+          {
+            id: "heeler-draw",
+            eventId: "competition-1",
+            contestantId: "heeler",
+            role: "Heeler",
+            entries: 1,
+            checkedIn: false,
+            status: "entered",
+            notes: "",
+            paid: true,
+          },
+        ];
+      }
       const created = createOnlineSignup(
-        workspace(event({ competitionType, handicapTotal: 8 })),
+        data,
         {
           submissionId: `${competitionType}-team`,
           contestantId: "header",
           eventId: "competition-1",
           role: "Header",
           partnerId: "heeler",
+          entries: competitionType === "pick-and-draw" ? 1 : undefined,
         },
       );
       expect(created.teams).toHaveLength(1);
@@ -247,19 +271,56 @@ describe("online signup", () => {
     expect(repeated.existing).toBe(true);
   });
 
-  it("keeps picked teams separate from Draw Pot registrations", () => {
-    const data = workspace(event({ competitionType: "pick-and-draw", pickDrawRole: "both", handicapTotal: 8 }));
-    const created = createOnlineSignup(data, { submissionId: "fixed-1", contestantId: "header", eventId: "competition-1", role: "Header", partnerId: "heeler" });
-    expect(created.teams[0].paid).toBe(false);
-    expect(created.registrations).toHaveLength(0);
+  it("requires every picked-team rider to be entered in the draw", () => {
+    const data = workspace(
+      event({
+        competitionType: "pick-and-draw",
+        pickDrawRole: "both",
+        handicapTotal: 8,
+        entriesAllowed: 3,
+      }),
+    );
+    expect(() =>
+      createOnlineSignup(data, {
+        submissionId: "missing-draw",
+        contestantId: "header",
+        eventId: "competition-1",
+        role: "Header",
+        partnerId: "heeler",
+        entries: 1,
+      }),
+    ).toThrow("Every rider on a picked team");
     expect(
       generateCompetitionDraw(
         data.events[0],
-        created.registrations,
-        created.teams,
+        [],
+        [run({ id: "legacy-pick-without-draw" })],
         data.contestants,
       ),
     ).toEqual([]);
+    data.registrations = [
+      {
+        id: "heeler-draw",
+        eventId: "competition-1",
+        contestantId: "heeler",
+        role: "Heeler",
+        entries: 1,
+        checkedIn: false,
+        status: "entered",
+        notes: "",
+        paid: true,
+      },
+    ];
+    const created = createOnlineSignup(data, {
+      submissionId: "fixed-1",
+      contestantId: "header",
+      eventId: "competition-1",
+      role: "Header",
+      partnerId: "heeler",
+      entries: 1,
+    });
+    expect(created.teams[0].paid).toBe(false);
+    expect(created.registrations).toHaveLength(1);
   });
 
   it("places picked teams after every generated Pick and Draw team", () => {

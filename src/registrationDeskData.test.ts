@@ -206,7 +206,30 @@ describe("registration desk boundary", () => {
         },
       ],
       teams: [],
-      registrations: [],
+      registrations: [
+        {
+          id: "heeler-draw",
+          eventId: "pick-draw-event",
+          contestantId: "heeler",
+          role: "Heeler",
+          entries: 1,
+          checkedIn: false,
+          status: "entered",
+          notes: "",
+          paid: true,
+        },
+        {
+          id: "heeler-two-draw",
+          eventId: "pick-draw-event",
+          contestantId: "heeler-two",
+          role: "Heeler",
+          entries: 1,
+          checkedIn: false,
+          status: "entered",
+          notes: "",
+          paid: true,
+        },
+      ],
     };
 
     const result = submitLocalRegistrationDeskSignup(
@@ -225,13 +248,12 @@ describe("registration desk boundary", () => {
     );
 
     expect(result.data.teams).toHaveLength(2);
-    expect(result.data.registrations).toEqual([
-      expect.objectContaining({
-        contestantId: "rider",
-        entries: 2,
-      }),
-    ]);
-    expect(result.data.registrations[0].sourceTeamId).toBeUndefined();
+    expect(result.data.registrations).toHaveLength(3);
+    expect(result.result.registrations[0]).toMatchObject({
+      contestantId: "rider",
+      entries: 2,
+    });
+    expect(result.result.registrations[0].sourceTeamId).toBeUndefined();
     expect(() =>
       submitLocalRegistrationDeskSignup(
         pickAndDrawData,
@@ -248,6 +270,55 @@ describe("registration desk boundary", () => {
         new Date("2026-08-05T21:00:00"),
       ),
     ).toThrow("at least 2 draw entries");
+  });
+
+  it("rejects a picked partner who is not entered in the draw", () => {
+    const pickAndDrawData: ArenaData = {
+      ...data,
+      events: [
+        {
+          ...data.events[0],
+          id: "pick-draw-event",
+          competitionType: "pick-and-draw",
+          pickDrawRole: "header",
+          entriesAllowed: 4,
+          minDrawsAllowed: 1,
+        },
+      ],
+      contestants: [
+        ...data.contestants,
+        {
+          id: "heeler",
+          name: "Picked Heeler",
+          role: "Heeler",
+          headerHandicap: 0,
+          heelerHandicap: 4,
+          photo: "",
+          phone: "",
+          email: "",
+          hometown: "",
+        },
+      ],
+      teams: [],
+      registrations: [],
+    };
+
+    expect(() =>
+      submitLocalRegistrationDeskSignup(
+        pickAndDrawData,
+        {
+          submissionId: "missing-partner-draw",
+          contestantId: "rider",
+          eventId: "pick-draw-event",
+          role: "Header",
+          entries: 1,
+          partnerIds: ["heeler"],
+          paymentConfirmed: true,
+          paymentMethod: "cash",
+        },
+        new Date("2026-08-05T21:00:00"),
+      ),
+    ).toThrow("Every rider on a picked team");
   });
 
   it("does not create draw records before cashier payment confirmation", () => {

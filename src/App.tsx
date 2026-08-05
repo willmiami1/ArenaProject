@@ -69,6 +69,7 @@ import {
   defaultCompetitionSettings,
   entryClearedForDraw,
   generateCompetitionDraw,
+  pickedTeamRidersMissingFromDraw,
   teamEligibleForCompetition,
   teamHandicapTotal,
 } from "./competition";
@@ -2147,6 +2148,19 @@ function Teams({
     );
     if (duplicate && !event?.allowRepeatPartners) {
       setMessage("That header and heeler are already entered as a team.");
+      return;
+    }
+    if (
+      event?.competitionType === "pick-and-draw" &&
+      pickedTeamRidersMissingFromDraw(
+        eventRegistrations,
+        event.id,
+        team,
+      ).length
+    ) {
+      setMessage(
+        "Every rider on a picked team must already be entered in the Draw Pot.",
+      );
       return;
     }
     const handicap = teamHandicapTotal(team.headerId, team.heelerId, contestants);

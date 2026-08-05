@@ -132,7 +132,9 @@ export function RegistrationDesk() {
     event?.competitionType === "draw-pot" ||
     event?.competitionType === "round-robin";
   const pickAndDraw = event?.competitionType === "pick-and-draw";
-  const minimumDraws = event?.minDrawsAllowed ?? 0;
+  const minimumDraws = pickAndDraw
+    ? Math.max(1, event?.minDrawsAllowed ?? 0)
+    : event?.minDrawsAllowed ?? 0;
   const drawRole =
     event?.pickDrawRole === "header"
       ? "Header"
@@ -539,7 +541,7 @@ export function RegistrationDesk() {
                       </p>
                       {!drawEligible && (
                         <p className="registration-entry-hint">
-                          This contestant is not eligible for {drawRole.toLowerCase()} draws. Enter 0 to continue with picked teams only.
+                          This contestant is not eligible for {drawRole.toLowerCase()} draws and cannot enter a picked team.
                         </p>
                       )}
                       <button
@@ -574,7 +576,7 @@ export function RegistrationDesk() {
                       </label>
                       {addPick && (
                         <fieldset className="registration-partner-picks">
-                          <legend>Choose all picked partners</legend>
+                          <legend>Choose picked partners already entered in the draw</legend>
                           {partners.map((partner) => (
                             <label key={partner.id}>
                               <input
@@ -595,6 +597,9 @@ export function RegistrationDesk() {
                               <span>{partner.name}</span>
                             </label>
                           ))}
+                          {!partners.length && (
+                            <p>No eligible partners are currently entered in the draw.</p>
+                          )}
                         </fieldset>
                       )}
                       <section

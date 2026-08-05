@@ -1,4 +1,5 @@
 import {
+  contestantHasDrawRegistration,
   contestantEligibleForRole,
   teamHandicapTotal,
 } from "./competition";
@@ -131,7 +132,7 @@ export function createOnlineSignup(
   const drawRegistrations: EventRegistration[] = [];
   if (event.competitionType === "pick-and-draw") {
     const entries = Number(request.entries ?? 0);
-    const minimumDraws = Number(event.minDrawsAllowed ?? 0);
+    const minimumDraws = Math.max(1, Number(event.minDrawsAllowed ?? 0));
     const drawRole = request.drawRole ?? request.role;
     const allowedRoles =
       event.pickDrawRole === "both"
@@ -149,9 +150,6 @@ export function createOnlineSignup(
       throw new Error(
         `This competition requires at least ${minimumDraws} draw entr${minimumDraws === 1 ? "y" : "ies"}.`,
       );
-    }
-    if (!requestedPartnerIds.length && entries === 0) {
-      throw new Error("Enter at least one draw or choose a picked partner.");
     }
     const standaloneEntries = data.registrations
       .filter(
@@ -216,6 +214,27 @@ export function createOnlineSignup(
     const partner = data.contestants.find((item) => item.id === partnerId);
     if (!partner || partner.id === contestant.id) {
       throw new Error("Choose an eligible partner.");
+    }
+    const availableDrawRegistrations = [
+      ...data.registrations,
+      ...drawRegistrations,
+    ];
+    if (
+      event.competitionType === "pick-and-draw" &&
+      (!contestantHasDrawRegistration(
+        availableDrawRegistrations,
+        event.id,
+        contestant.id,
+      ) ||
+        !contestantHasDrawRegistration(
+          availableDrawRegistrations,
+          event.id,
+          partner.id,
+        ))
+    ) {
+      throw new Error(
+        "Every rider on a picked team must already be entered in the draw.",
+      );
     }
     const headerId = request.role === "Header" ? contestant.id : partner.id;
     const heelerId = request.role === "Heeler" ? contestant.id : partner.id;
@@ -326,6 +345,12 @@ export function eligibleSignupPartners(
     const heelerId = role === "Heeler" ? contestantId : partner.id;
     return (
       partner.role !== (role === "Header" ? "Header" : "Heeler") &&
+      (event.competitionType !== "pick-and-draw" ||
+        contestantHasDrawRegistration(
+          data.registrations,
+          event.id,
+          partner.id,
+        )) &&
       contestantEligibleForRole(
         event,
         data.contestants.find((contestant) => contestant.id === headerId),
