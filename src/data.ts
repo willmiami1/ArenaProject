@@ -2,7 +2,7 @@ import type { ArenaData } from "./types";
 import { defaultCompetitionSettings } from "./competition";
 
 export const seedData: ArenaData = {
-  participantDatabaseVersion: 3,
+  participantDatabaseVersion: 4,
   meets: [
     {
       id: "meet-summer-series",

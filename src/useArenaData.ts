@@ -9,7 +9,7 @@ import type { ArenaData, ArenaMeet } from "./types";
 import { isWixEmbed, requestWixData } from "./wixBridge";
 
 const STORAGE_KEY = "arena-command-data-v1";
-const PARTICIPANT_DATABASE_VERSION = 3;
+const PARTICIPANT_DATABASE_VERSION = 4;
 const LEGACY_SAMPLE_MEETS = new Set([
   "Summer Buckle Series",
   "Friday Night Jackpot",
@@ -87,8 +87,16 @@ export function normalizeData(parsed: ArenaData): ArenaData {
     ...contestant,
     role:
       (contestant.role as string) === "Either" ? "Both" : contestant.role,
-    headerHandicap: contestant.headerHandicap ?? 0,
-    heelerHandicap: contestant.heelerHandicap ?? 0,
+    headerHandicap:
+      Number.isFinite(Number(contestant.headerHandicap)) &&
+      Number(contestant.headerHandicap) > 0
+        ? Number(contestant.headerHandicap)
+        : 3,
+    heelerHandicap:
+      Number.isFinite(Number(contestant.heelerHandicap)) &&
+      Number(contestant.heelerHandicap) > 0
+        ? Number(contestant.heelerHandicap)
+        : 3,
     photo: contestant.photo ?? "",
   }));
 

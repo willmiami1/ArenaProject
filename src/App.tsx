@@ -1703,10 +1703,12 @@ function validateContestantBackup(value: unknown): Contestant[] {
       typeof contestant.name !== "string" ||
       !contestant.name.trim() ||
       !["Header", "Heeler", "Both"].includes(contestant.role ?? "") ||
-      typeof contestant.headerHandicap !== "number" ||
-      !Number.isFinite(contestant.headerHandicap) ||
-      typeof contestant.heelerHandicap !== "number" ||
-      !Number.isFinite(contestant.heelerHandicap)
+      (contestant.headerHandicap !== undefined &&
+        (typeof contestant.headerHandicap !== "number" ||
+          !Number.isFinite(contestant.headerHandicap))) ||
+      (contestant.heelerHandicap !== undefined &&
+        (typeof contestant.heelerHandicap !== "number" ||
+          !Number.isFinite(contestant.heelerHandicap)))
     ) {
       throw new Error(`Contestant ${index + 1} is not valid.`);
     }
@@ -1714,8 +1716,14 @@ function validateContestantBackup(value: unknown): Contestant[] {
       id: contestant.id,
       name: contestant.name.trim(),
       role: contestant.role as Contestant["role"],
-      headerHandicap: contestant.headerHandicap,
-      heelerHandicap: contestant.heelerHandicap,
+      headerHandicap:
+        contestant.headerHandicap && contestant.headerHandicap > 0
+          ? contestant.headerHandicap
+          : 3,
+      heelerHandicap:
+        contestant.heelerHandicap && contestant.heelerHandicap > 0
+          ? contestant.heelerHandicap
+          : 3,
       photo: typeof contestant.photo === "string" ? contestant.photo : "",
       phone: typeof contestant.phone === "string" ? contestant.phone : "",
       hometown:
@@ -1883,10 +1891,10 @@ function textContestant(
   }
   const headerHandicap = record.headerHandicap?.trim()
     ? Number(record.headerHandicap)
-    : 0;
+    : 3;
   const heelerHandicap = record.heelerHandicap?.trim()
     ? Number(record.heelerHandicap)
-    : 0;
+    : 3;
   if (!Number.isFinite(headerHandicap) || !Number.isFinite(heelerHandicap)) {
     throw new Error(`Contestant ${index + 1} has an invalid handicap.`);
   }
@@ -1939,8 +1947,8 @@ function ContestantForm({
   const [form, setForm] = useState({
     firstName: nameParts.slice(0, -1).join(" ") || nameParts[0] || "",
     lastName: nameParts.length > 1 ? nameParts[nameParts.length - 1] : "",
-    headerHandicap: contestant?.headerHandicap.toString() ?? "",
-    heelerHandicap: contestant?.heelerHandicap.toString() ?? "",
+    headerHandicap: contestant?.headerHandicap.toString() ?? "3",
+    heelerHandicap: contestant?.heelerHandicap.toString() ?? "3",
     photo: contestant?.photo ?? "",
     phone: contestant?.phone ?? "",
     hometown: contestant?.hometown ?? "",
@@ -2029,8 +2037,8 @@ function ContestantForm({
       <div className="form-grid">
         <Field label="First Name"><input required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} placeholder="First name" /></Field>
         <Field label="Last Name"><input required value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} placeholder="Last name" /></Field>
-        <Field label="Header Handicap"><input required type="number" min="0" step="0.5" value={form.headerHandicap} onChange={(e) => setForm({ ...form, headerHandicap: e.target.value })} placeholder="0" /></Field>
-        <Field label="Heeler Handicap"><input required type="number" min="0" step="0.5" value={form.heelerHandicap} onChange={(e) => setForm({ ...form, heelerHandicap: e.target.value })} placeholder="0" /></Field>
+        <Field label="Header Handicap"><input required type="number" min="0" step="0.5" value={form.headerHandicap} onChange={(e) => setForm({ ...form, headerHandicap: e.target.value })} placeholder="3" /></Field>
+        <Field label="Heeler Handicap"><input required type="number" min="0" step="0.5" value={form.heelerHandicap} onChange={(e) => setForm({ ...form, heelerHandicap: e.target.value })} placeholder="3" /></Field>
         <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555-0123" /></Field>
         <Field label="Hometown"><input value={form.hometown} onChange={(e) => setForm({ ...form, hometown: e.target.value })} placeholder="City, State" /></Field>
       </div>

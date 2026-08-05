@@ -244,7 +244,17 @@ async function readWorkspace() {
     loadedAt: new Date().toISOString(),
     meets,
     events,
-    contestants,
+    contestants: contestants.map((contestant) => ({
+      ...contestant,
+      headerHandicap:
+        Number(contestant.headerHandicap) > 0
+          ? Number(contestant.headerHandicap)
+          : 3,
+      heelerHandicap:
+        Number(contestant.heelerHandicap) > 0
+          ? Number(contestant.heelerHandicap)
+          : 3,
+    })),
     teams,
     registrations,
     spectators,
@@ -259,7 +269,7 @@ const teamEntryKey = (team) =>
 const teamHandicap = (team, contestants) => {
   const header = contestants.find((contestant) => contestant.id === team.headerId);
   const heeler = contestants.find((contestant) => contestant.id === team.heelerId);
-  return Number(header?.headerHandicap || 0) + Number(heeler?.heelerHandicap || 0);
+  return Number(header?.headerHandicap || 3) + Number(heeler?.heelerHandicap || 3);
 };
 
 const officialRunTime = (event, team, contestants) => {
@@ -964,8 +974,8 @@ export const createContestantAccount = webMethod(
     const phone = String(request.phone || "").replace(/\D/g, "");
     const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ");
     const role = String(request.role || "");
-    const headerHandicap = role === "Heeler" ? 0 : Number(request.headerHandicap);
-    const heelerHandicap = role === "Header" ? 0 : Number(request.heelerHandicap);
+    const headerHandicap = Number(request.headerHandicap || 3);
+    const heelerHandicap = Number(request.heelerHandicap || 3);
     if (name.length < 2 || name.length > 100) {
       throw new Error("Enter your full name.");
     }
@@ -1261,9 +1271,9 @@ const validAppId = (value) => /^[a-zA-Z0-9_-]{1,100}$/.test(String(value || ""))
 const contestantCanRole = (contestant, role) =>
   contestant.role === "Both" || contestant.role === role;
 const handicapTotal = (header, heeler) =>
-  Number(header?.headerHandicap || 0) + Number(heeler?.heelerHandicap || 0);
+  Number(header?.headerHandicap || 3) + Number(heeler?.heelerHandicap || 3);
 const contestantWithinHandicap = (event, contestant, role) =>
-  Number(role === "Header" ? contestant?.headerHandicap || 0 : contestant?.heelerHandicap || 0) <=
+  Number(role === "Header" ? contestant?.headerHandicap || 3 : contestant?.heelerHandicap || 3) <=
   Number(event.maxContestantHandicap ?? 10);
 
 function availablePartners(workspace, event, contestant) {

@@ -721,8 +721,8 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     phone: "",
     hometown: "",
     role: "Both",
-    headerHandicap: 0,
-    heelerHandicap: 0,
+    headerHandicap: 3,
+    heelerHandicap: 3,
     pin: "",
     confirmPin: "",
   });

@@ -38,8 +38,8 @@ import {
 const emptyContestant = (): RegistrationDeskContestantInput => ({
   name: "",
   role: "Both",
-  headerHandicap: 0,
-  heelerHandicap: 0,
+  headerHandicap: 3,
+  heelerHandicap: 3,
   phone: "",
   email: "",
   hometown: "",

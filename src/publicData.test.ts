@@ -739,10 +739,16 @@ describe("workspace compatibility", () => {
     const legacy = workspace();
     delete (legacy.events[0] as Partial<ArenaEvent>).maxContestantHandicap;
     delete (legacy.events[0] as Partial<ArenaEvent>).minDrawsAllowed;
+    delete (legacy.contestants[0] as Partial<Contestant>).headerHandicap;
+    legacy.contestants[0].heelerHandicap = 0;
 
     expect(normalizeData(legacy).events[0].handicapTotal).toBe(20);
     expect(normalizeData(legacy).events[0].maxContestantHandicap).toBe(10);
     expect(normalizeData(legacy).events[0].minDrawsAllowed).toBe(0);
+    expect(normalizeData(legacy).contestants[0]).toMatchObject({
+      headerHandicap: 3,
+      heelerHandicap: 3,
+    });
   });
 
   describe("spectator predictions", () => {
