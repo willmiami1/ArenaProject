@@ -2130,7 +2130,6 @@ function Teams({
     event?.competitionType === "draw-pot" || event?.competitionType === "round-robin";
   const usesDrawPool =
     individualRegistration || event?.competitionType === "pick-and-draw";
-  const entryButton = individualRegistration ? "Register rider" : "Add team";
   const canEdit = Boolean(event?.registrationOpen && !event?.drawLocked);
   const format = competitionTypes.find((type) => type.id === event?.competitionType);
 
@@ -2269,16 +2268,23 @@ function Teams({
 
   return (
     <>
-      <PageIntro title="Teams & draw" text={event ? `${competitionName(event.competitionType)} workflow for ${event.name}.` : "Create an event before adding teams."} button={entryButton} onClick={() => { setEditingTeam(null); setEntryMode(individualRegistration ? "registration" : "team"); setShowForm((open) => !open); }} disabled={!event || !canEdit} />
+      <PageIntro title="Teams & draw" text={event ? `${competitionName(event.competitionType)} workflow for ${event.name}.` : "Create an event before adding teams."} />
       {event && (
         <div className="format-banner">
           <span className="competition-icon">{event.competitionType === "draw-pot" ? <Dices size={21} /> : event.competitionType === "pick-only" ? <Handshake size={21} /> : event.competitionType === "pick-and-draw" ? <GitFork size={21} /> : <Repeat2 size={21} />}</span>
-          <div><strong>{format?.name}</strong><p>{format?.description}</p></div>
-          {event.competitionType === "pick-and-draw" && (
-            <button className="secondary" disabled={!canEdit} onClick={() => { setEditingTeam(null); setEntryMode("registration"); setShowForm(true); }}>
-              <Dices size={15} /> Add to Draw Pot
-            </button>
-          )}
+          <div className="format-copy"><strong>{format?.name}</strong><p>{format?.description}</p></div>
+          <div className="format-entry-actions">
+            {usesDrawPool && (
+              <button className="secondary" disabled={!canEdit} onClick={() => { setEditingTeam(null); setEntryMode("registration"); setShowForm(true); }}>
+                <Dices size={15} /> Enter Draw
+              </button>
+            )}
+            {!individualRegistration && (
+              <button className="primary" disabled={!canEdit} onClick={() => { setEditingTeam(null); setEntryMode("team"); setShowForm(true); }}>
+                <Handshake size={15} /> Enter Picked Team
+              </button>
+            )}
+          </div>
           <span className={`tag ${event.registrationOpen ? "complete" : "no-time"}`}>{event.registrationOpen ? "Registration open" : "Registration closed"}</span>
           <span className={`tag ${event.drawLocked ? "no-time" : "neutral"}`}>{event.drawLocked ? "Draw locked" : "Draw editable"}</span>
         </div>
