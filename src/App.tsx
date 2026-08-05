@@ -1177,10 +1177,6 @@ function Events({
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [editing, setEditing] = useState<ArenaEvent | null>(null);
   const [selectedType, setSelectedType] = useState<CompetitionType | null>(null);
-  const selectedParent =
-    meets.find((meet) => meet.id === selectedParentId) ??
-    meets.find((meet) => meet.id === editing?.parentEventId);
-
   return (
     <>
       <PageIntro
@@ -1207,25 +1203,6 @@ function Events({
           onCancel={() => {
             setEditingMeet(null);
             setShowMeetForm(false);
-          }}
-        />
-      )}
-      {((selectedParentId && selectedType) || editing) && selectedParent && (
-        <EventForm
-          event={editing ?? undefined}
-          parent={selectedParent}
-          competitionType={selectedType ?? editing?.competitionType}
-          onSubmit={(event) => {
-            if (editing) onUpdate(event);
-            else onAdd(event);
-            setEditing(null);
-            setSelectedType(null);
-            setSelectedParentId(null);
-          }}
-          onCancel={() => {
-            setEditing(null);
-            setSelectedType(null);
-            setSelectedParentId(null);
           }}
         />
       )}
@@ -1260,6 +1237,26 @@ function Events({
                   teams={teams}
                   onSelect={setSelectedType}
                   onCancel={() => setSelectedParentId(null)}
+                />
+              )}
+              {((selectedParentId === meet.id && selectedType) ||
+                editing?.parentEventId === meet.id) && (
+                <EventForm
+                  event={editing ?? undefined}
+                  parent={meet}
+                  competitionType={selectedType ?? editing?.competitionType}
+                  onSubmit={(event) => {
+                    if (editing) onUpdate(event);
+                    else onAdd(event);
+                    setEditing(null);
+                    setSelectedType(null);
+                    setSelectedParentId(null);
+                  }}
+                  onCancel={() => {
+                    setEditing(null);
+                    setSelectedType(null);
+                    setSelectedParentId(null);
+                  }}
                 />
               )}
               <div className="competition-list">
