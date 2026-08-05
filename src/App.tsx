@@ -70,9 +70,11 @@ import {
   entryClearedForDraw,
   generateCompetitionDraw,
   minimumDrawEntries,
+  officialRunTime,
   pickedTeamRidersMissingFromDraw,
   repeatedTeamPairKeys,
   reorderDraftDrawTeams,
+  slideTimeAdjustment,
   teamEligibleForCompetition,
   teamHandicapTotal,
 } from "./competition";
@@ -115,6 +117,8 @@ const teamQualifiedTotal = (
   team: Team,
   teams: Team[],
   beforeRound = team.round + 1,
+  event?: ArenaEvent,
+  contestants: Contestant[] = [],
 ) =>
   teams
     .filter(
@@ -125,7 +129,14 @@ const teamQualifiedTotal = (
         run.rawTime !== null &&
         !run.scratched,
     )
-    .reduce((total, run) => total + run.rawTime! + run.penalties, 0);
+    .reduce(
+      (total, run) =>
+        total +
+        (event
+          ? (officialRunTime(event, run, contestants) ?? 0)
+          : run.rawTime! + run.penalties),
+      0,
+    );
 
 function StaffApp() {
   const [data, setData, persistenceStatus] = useArenaData();
@@ -624,6 +635,8 @@ function StaffApp() {
                       update,
                       activeEvent?.rounds ?? 1,
                       activeEvent?.shortGoTeams ?? 0,
+                      activeEvent,
+                      current.contestants,
                     ),
                   };
                 })
@@ -863,17 +876,13 @@ function LedLeaderboard({
   );
   const roundTeams = eventTeams
     .filter((team) => team.round === round)
-    .sort(
-      (a, b) =>
-        Number(Boolean(a.rolled)) - Number(Boolean(b.rolled)) ||
-        a.drawPosition - b.drawPosition,
-    );
+    .sort((a, b) => a.drawPosition - b.drawPosition);
   const standings = roundTeams
     .filter((team) => team.status === "complete" && team.rawTime !== null)
     .sort(
       (a, b) =>
-        teamQualifiedTotal(a, eventTeams) -
-          teamQualifiedTotal(b, eventTeams) ||
+        teamQualifiedTotal(a, eventTeams, undefined, event, data.contestants) -
+          teamQualifiedTotal(b, eventTeams, undefined, event, data.contestants) ||
         a.drawPosition - b.drawPosition,
     )
     .slice(0, 10);
@@ -899,11 +908,13 @@ function LedLeaderboard({
   const finalRoundLeaderTotal = isFinalRound
     ? roundTeams
         .filter((team) => team.status === "complete" && team.rawTime !== null)
-        .map((team) => teamQualifiedTotal(team, eventTeams))
+        .map((team) =>
+          teamQualifiedTotal(team, eventTeams, undefined, event, data.contestants),
+        )
         .sort((a, b) => a - b)[0]
     : undefined;
   const currentTeamPriorTotal = currentTeam
-    ? teamQualifiedTotal(currentTeam, eventTeams, round)
+    ? teamQualifiedTotal(currentTeam, eventTeams, round, event, data.contestants)
     : 0;
   const currentTeamTimeToFirst =
     finalRoundLeaderTotal === undefined
@@ -1001,7 +1012,7 @@ function LedLeaderboard({
                 <span className="led-place">{index + 1}</span>
                 <span className="led-team">{ledRider(team.headerId)}<i>&</i>{ledRider(team.heelerId)}</span>
                 <span className="led-rounds">{completedRounds} / {event.rounds}</span>
-                <span className="led-total">{teamQualifiedTotal(team, eventTeams).toFixed(2)}</span>
+                <span className="led-total">{teamQualifiedTotal(team, eventTeams, undefined, event, data.contestants).toFixed(2)}</span>
               </div>
             );
           })}
@@ -1050,7 +1061,12 @@ function Overview({
   const upcoming = eventTeams.filter((team) => team.status === "ready").slice(0, 4);
   const standings = eventTeams
     .filter((team) => team.status === "complete" && team.rawTime !== null)
-    .sort((a, b) => (a.rawTime! + a.penalties) - (b.rawTime! + b.penalties))
+    .sort((a, b) =>
+      event
+        ? (officialRunTime(event, a, contestants) ?? 0) -
+          (officialRunTime(event, b, contestants) ?? 0)
+        : 0,
+    )
     .slice(0, 3);
   const rider = (id: string) => contestants.find((item) => item.id === id)?.name ?? "Unknown";
 
@@ -1072,7 +1088,7 @@ function Overview({
       <section className="stat-grid">
         <Stat icon={UsersRound} label="Teams entered" value={eventTeams.length} detail={`${contestants.length} riders on file`} />
         <Stat icon={Check} label="Runs completed" value={completed.length} detail={`${Math.max(eventTeams.length - completed.length, 0)} still to rope`} />
-        <Stat icon={Clock3} label="Fast time" value={standings[0] ? `${(standings[0].rawTime! + standings[0].penalties).toFixed(2)}s` : "--"} detail={standings[0] ? `${rider(standings[0].headerId)} / ${rider(standings[0].heelerId)}` : "Waiting on results"} />
+        <Stat icon={Clock3} label="Fast time" value={standings[0] && event ? `${(officialRunTime(event, standings[0], contestants) ?? 0).toFixed(2)}s` : "--"} detail={standings[0] ? `${rider(standings[0].headerId)} / ${rider(standings[0].heelerId)}` : "Waiting on results"} />
         <Stat icon={CircleDollarSign} label="Entry pot" value={`$${(paidEntries * (event?.entryFee ?? 0)).toLocaleString()}`} detail={`$${event?.entryFee ?? 0} per paid entry`} />
       </section>
 
@@ -1108,7 +1124,7 @@ function Overview({
                   <strong>{rider(team.headerId)} <em>&</em> {rider(team.heelerId)}</strong>
                   <small>Draw #{team.drawPosition}{team.penalties ? ` · +${team.penalties}s penalty` : " · Clean run"}</small>
                 </div>
-                <b>{(team.rawTime! + team.penalties).toFixed(2)}</b>
+                <b>{event ? (officialRunTime(event, team, contestants) ?? 0).toFixed(2) : "—"}</b>
               </div>
             ))}
             {!standings.length && <EmptyState text="Completed runs will appear here." />}
@@ -1248,7 +1264,7 @@ function Events({
               <div className="competition-list">
                 {competitions.map((event) => (
                   <article className={`competition-row ${event.id === activeEventId ? "selected" : ""}`} key={event.id}>
-                    <span className="competition-icon">{event.competitionType === "draw-pot" ? <Dices size={20} /> : event.competitionType === "pick-only" ? <Handshake size={20} /> : event.competitionType === "pick-and-draw" ? <GitFork size={20} /> : <Repeat2 size={20} />}</span>
+                    <span className="competition-icon">{event.competitionType === "draw-pot" ? <Dices size={20} /> : event.competitionType === "pick-only" ? <Handshake size={20} /> : event.competitionType === "pick-and-draw" ? <GitFork size={20} /> : event.competitionType === "slide" ? <Gauge size={20} /> : <Repeat2 size={20} />}</span>
                     <div className="competition-row-main">
                       <div className="event-card-tags"><span className={`tag ${event.status.toLowerCase()}`}>{eventStatusLabel(event.status)}</span><span className="tag neutral">{competitionName(event.competitionType)}</span></div>
                       <div className="competition-name-actions">
@@ -1360,6 +1376,7 @@ function CompetitionTypeSelector({
     "pick-only": Handshake,
     "pick-and-draw": GitFork,
     "round-robin": Repeat2,
+    slide: Gauge,
   };
   return (
     <section className="competition-chooser">
@@ -1413,6 +1430,7 @@ function EventForm({
     minDrawsAllowed: (event?.minDrawsAllowed ?? 0).toString(),
     allowRepeatPartners: event?.allowRepeatPartners ?? false,
     handicapTotal: (event?.handicapTotal ?? 99).toString(),
+    slideNumber: (event?.slideNumber ?? 10).toString(),
     maxContestantHandicap: (event?.maxContestantHandicap ?? 99).toString(),
     timeLimit: (event?.timeLimit ?? 30).toString(),
     rounds: (event?.rounds ?? 1).toString(),
@@ -1446,6 +1464,7 @@ function EventForm({
       ),
       allowRepeatPartners: form.allowRepeatPartners,
       handicapTotal: Number(form.handicapTotal) || 0,
+      slideNumber: Number(form.slideNumber) || 10,
       maxContestantHandicap: Number(form.maxContestantHandicap) || 0,
       timeLimit: Number(form.timeLimit) || 0,
       rounds: Number(form.rounds) || 1,
@@ -1486,6 +1505,9 @@ function EventForm({
           <Field label="Minimum draws required"><input required type="number" min="0" max={form.entriesAllowed} value={form.minDrawsAllowed} onChange={(e) => setForm({ ...form, minDrawsAllowed: e.target.value })} /><small>Minimum draw entries required before picked teams may be added.</small></Field>
         )}
         <Field label="Handicap Total"><input required type="number" min="0" step="0.5" value={form.handicapTotal} onChange={(e) => setForm({ ...form, handicapTotal: e.target.value })} placeholder="10.5" /></Field>
+        {form.competitionType === "slide" && (
+          <Field label="Slide number"><input required type="number" min="0" max="40" step="0.5" value={form.slideNumber} onChange={(e) => setForm({ ...form, slideNumber: e.target.value })} /><small>In Round 2, each 0.5 handicap above or below this number adds or subtracts 0.5 seconds, capped at 4 seconds.</small></Field>
+        )}
         <Field label="Highest contestant handicap"><input required type="number" min="0" step="0.5" value={form.maxContestantHandicap} onChange={(e) => setForm({ ...form, maxContestantHandicap: e.target.value })} /><small>Contestants above this handicap in their entered position cannot participate.</small></Field>
         <Field label="Time limit (seconds)"><input required type="number" min="1" value={form.timeLimit} onChange={(e) => setForm({ ...form, timeLimit: e.target.value })} /></Field>
         <Field label="Number of rounds"><input required type="number" min="1" value={form.rounds} onChange={(e) => setForm({ ...form, rounds: e.target.value })} /></Field>
@@ -2251,7 +2273,7 @@ function Teams({
       <PageIntro title="Teams & draw" text={event ? `${competitionName(event.competitionType)} workflow for ${event.name}.` : "Create an event before adding teams."} />
       {event && (
         <div className="format-banner">
-          <span className="competition-icon">{event.competitionType === "draw-pot" ? <Dices size={21} /> : event.competitionType === "pick-only" ? <Handshake size={21} /> : event.competitionType === "pick-and-draw" ? <GitFork size={21} /> : <Repeat2 size={21} />}</span>
+          <span className="competition-icon">{event.competitionType === "draw-pot" ? <Dices size={21} /> : event.competitionType === "pick-only" ? <Handshake size={21} /> : event.competitionType === "pick-and-draw" ? <GitFork size={21} /> : event.competitionType === "slide" ? <Gauge size={21} /> : <Repeat2 size={21} />}</span>
           <div className="format-copy"><strong>{format?.name}</strong><p>{format?.description}</p></div>
           <div className="format-entry-actions">
             {usesDrawPool && (
@@ -2364,7 +2386,9 @@ function Teams({
               disabled={
                 !event ||
                 event.drawLocked ||
-                (event.competitionType === "pick-only" && !eventTeams.length)
+                ((event.competitionType === "pick-only" ||
+                  event.competitionType === "slide") &&
+                  !eventTeams.length)
               }
               onClick={generateDraw}
             >
@@ -2630,11 +2654,7 @@ function RunDesk({
     .sort((a, b) => a.drawPosition - b.drawPosition);
   const eventTeams = allEventTeams
     .filter((team) => team.round === activeRound)
-    .sort(
-      (a, b) =>
-        Number(Boolean(a.rolled)) - Number(Boolean(b.rolled)) ||
-        a.drawPosition - b.drawPosition,
-    );
+    .sort((a, b) => a.drawPosition - b.drawPosition);
   const repeatedRunDeskTeamKeys = repeatedTeamPairKeys(allEventTeams);
   const nextTeam =
     eventTeams.find((team) => team.status === "ready" && !team.rolled) ??
@@ -2659,7 +2679,7 @@ function RunDesk({
       )
       .sort((a, b) => a.round - b.round);
   const qualifiedTotal = (team: Team, beforeRound?: number) =>
-    teamQualifiedTotal(team, allEventTeams, beforeRound);
+    teamQualifiedTotal(team, allEventTeams, beforeRound, event, contestants);
   const cumulativeRunLabel = (team: Team) => {
     const runs = entryRuns(team);
     const parts = Array.from({ length: team.round }, (_, index) => {
@@ -2667,7 +2687,7 @@ function RunDesk({
       const run = runs.find((item) => item.round === round);
       const time =
         run?.status === "complete" && run.rawTime !== null
-          ? (run.rawTime + run.penalties).toFixed(2)
+          ? (officialRunTime(event!, run, contestants) ?? 0).toFixed(2)
           : run?.status === "no-time"
             ? "NT"
             : "--";
@@ -2768,7 +2788,9 @@ function RunDesk({
         current.runs += 1;
         if (team.status === "complete" && team.rawTime !== null) {
           current.qualified += 1;
-          current.totalTime += team.rawTime + team.penalties;
+          current.totalTime += event
+            ? (officialRunTime(event, team, contestants) ?? 0)
+            : team.rawTime + team.penalties;
           current.points += team.points || 1;
         } else {
           current.noTimes += 1;
@@ -2777,7 +2799,7 @@ function RunDesk({
       });
     });
     return [...stats.values()].sort((a, b) => b.points - a.points || (a.totalTime / Math.max(a.qualified, 1)) - (b.totalTime / Math.max(b.qualified, 1)));
-  }, [eventTeams]);
+  }, [eventTeams, event, contestants]);
 
   const chooseTeam = (team: Team) => {
     setSelectedId(team.id);
@@ -2797,7 +2819,14 @@ function RunDesk({
   };
   const saveRun = (status: Team["status"]) => {
     if (!selected) return;
-    const total = Number(rawTime) + Number(penalties);
+    const previewTeam = {
+      ...selected,
+      rawTime: Number(rawTime),
+      penalties: Number(penalties),
+    };
+    const total = event
+      ? (officialRunTime(event, previewTeam, contestants) ?? 0)
+      : Number(rawTime) + Number(penalties);
     const exceededLimit = status === "complete" && event && total > event.timeLimit;
     onSave(selected.id, {
       status: exceededLimit ? "no-time" : status,
@@ -3016,6 +3045,9 @@ function RunDesk({
                 {repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}
               </div>
               <div className="run-handicap"><span>Team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
+              {event?.competitionType === "slide" && selected.round === 2 && (
+                <div className="run-handicap"><span>Round 2 slide adjustment</span><strong>{slideTimeAdjustment(event, selected, contestants) >= 0 ? "+" : ""}{slideTimeAdjustment(event, selected, contestants).toFixed(1)}s · Slide #{event.slideNumber ?? 10}</strong></div>
+              )}
               {selected.status === "ready" && (
                 <button
                   className={`prediction-close-button${spectatorPicksClosed ? " closed" : ""}`}
@@ -3045,7 +3077,7 @@ function RunDesk({
                 {["0", "5", "10", "15"].map((value) => <button className={penalties === value ? "active" : ""} key={value} onClick={() => setPenalties(value)}>{value === "0" ? "Clean" : `+${value}s`}</button>)}
               </div>
               <Field label="Run notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional note" /></Field>
-              <div className={`result-preview ${rawTime && event && Number(rawTime) + Number(penalties) > event.timeLimit ? "over-limit" : ""}`}><span>Official time {event ? `· ${event.timeLimit}s limit` : ""}</span><strong>{rawTime ? (Number(rawTime) + Number(penalties)).toFixed(2) : "—"}</strong></div>
+              <div className={`result-preview ${rawTime && event && (officialRunTime(event, { ...selected, rawTime: Number(rawTime), penalties: Number(penalties) }, contestants) ?? 0) > event.timeLimit ? "over-limit" : ""}`}><span>Official time {event ? `· ${event.timeLimit}s limit` : ""}</span><strong>{rawTime && event ? (officialRunTime(event, { ...selected, rawTime: Number(rawTime), penalties: Number(penalties) }, contestants) ?? 0).toFixed(2) : "—"}</strong></div>
               <div className={`desk-actions${isEditingResult ? " editing" : ""}`}>
                 {isEditingResult && <button className="clear-result-button" onClick={clearRunResult}>Clear result / Not run yet</button>}
                 <button className="no-time-button" onClick={() => saveRun("no-time")}>Mark no time</button>
@@ -3062,7 +3094,7 @@ function RunDesk({
               <div className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""}`} key={team.id}>
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" ? `${(team.rawTime! + team.penalties).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>
@@ -3216,7 +3248,7 @@ function exportResultsCsv(
     ? teams.filter((team) => team.round === round)
     : teams;
   const rows = [
-    ["Draw", "Round", "Rounds Completed", "Header", "Heeler", "Current Round Raw Time", "Penalty", "Run Total", "Total Time", "Status", "Notes"],
+    ["Draw", "Round", "Rounds Completed", "Header", "Heeler", "Current Round Raw Time", "Penalty", "Slide Adjustment", "Run Total", "Total Time", "Status", "Notes"],
     ...displayedTeams.map((team) => {
       const completedRuns = teams.filter(
         (run) =>
@@ -3233,9 +3265,11 @@ function exportResultsCsv(
         name(team.heelerId),
         team.rawTime ?? "",
         team.penalties,
-        team.rawTime === null ? "" : team.rawTime + team.penalties,
+        slideTimeAdjustment(event, team, contestants),
+        officialRunTime(event, team, contestants) ?? "",
         completedRuns.reduce(
-          (total, run) => total + run.rawTime! + run.penalties,
+          (total, run) =>
+            total + (officialRunTime(event, run, contestants) ?? 0),
           0,
         ),
         team.status,

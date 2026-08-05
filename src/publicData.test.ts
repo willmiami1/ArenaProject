@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   defaultCompetitionSettings,
   generateCompetitionDraw,
+  officialRunTime,
   repeatedTeamPairKeys,
   reorderDraftDrawTeams,
   spaceDrawTeamsApart,
+  slideTimeAdjustment,
 } from "./competition";
 import {
   competitionGroup,
@@ -179,6 +181,58 @@ describe("aggregate public standings", () => {
     expect(rows).toHaveLength(3);
     expect(rows[0]).toMatchObject({ rounds: 2, officialTotal: 20, status: "qualified" });
     expect(rows[2]).toMatchObject({ officialTotal: null, status: "no-time" });
+  });
+
+  it("applies the Slide adjustment only in Round 2 and caps it at four seconds", () => {
+    const slide = event({
+      competitionType: "slide",
+      slideNumber: 10,
+      resultsPublished: true,
+    });
+    const handicapNine = [
+      { ...contestants[0], headerHandicap: 4.5 },
+      { ...contestants[1], heelerHandicap: 4.5 },
+    ];
+    const roundOne = run({ round: 1, rawTime: 8, penalties: 0 });
+    const roundTwo = run({ id: "round-2", round: 2, rawTime: 8, penalties: 0 });
+
+    expect(slideTimeAdjustment(slide, roundOne, handicapNine)).toBe(0);
+    expect(slideTimeAdjustment(slide, roundTwo, handicapNine)).toBe(-1);
+    expect(officialRunTime(slide, roundTwo, handicapNine)).toBe(7);
+    expect(
+      slideTimeAdjustment(
+        slide,
+        roundTwo,
+        [
+          { ...contestants[0], headerHandicap: 7.25 },
+          { ...contestants[1], heelerHandicap: 3.25 },
+        ],
+      ),
+    ).toBe(0.5);
+    expect(
+      slideTimeAdjustment(
+        slide,
+        roundTwo,
+        [
+          { ...contestants[0], headerHandicap: 10 },
+          { ...contestants[1], heelerHandicap: 10 },
+        ],
+      ),
+    ).toBe(4);
+    expect(
+      slideTimeAdjustment(
+        slide,
+        roundTwo,
+        [
+          { ...contestants[0], headerHandicap: 1 },
+          { ...contestants[1], heelerHandicap: 1 },
+        ],
+      ),
+    ).toBe(-4);
+    expect(
+      publicStandingRows(slide, [roundOne, roundTwo], handicapNine)[0]
+        .officialTotal,
+    ).toBe(15);
   });
 });
 

@@ -42,6 +42,14 @@ export const competitionTypes: {
     description: "Automatically rotate eligible contestants through every unique matchup.",
     features: ["Full rotation", "Cumulative points", "Automatic schedule"],
   },
+  {
+    id: "slide",
+    name: "Slide",
+    setupTime: "3-5 min",
+    description:
+      "Fixed teams receive a handicap-based time adjustment in Round 2.",
+    features: ["Fixed teams", "Round 2 adjustment", "Four-second cap"],
+  },
 ];
 
 export const competitionName = (type: CompetitionType) =>
@@ -78,6 +86,7 @@ export const defaultCompetitionSettings = {
   minDrawsAllowed: 0,
   allowRepeatPartners: false,
   handicapTotal: 99,
+  slideNumber: 10,
   maxContestantHandicap: 99,
   timeLimit: 30,
   rounds: 1,
@@ -91,6 +100,34 @@ export const defaultCompetitionSettings = {
   payoutPercentages: [50, 30, 20],
   drawHistory: [],
 };
+
+export function slideTimeAdjustment(
+  event: Pick<ArenaEvent, "competitionType" | "slideNumber">,
+  team: Pick<Team, "round" | "headerId" | "heelerId">,
+  contestants: Contestant[],
+) {
+  if (event.competitionType !== "slide" || team.round !== 2) return 0;
+  const difference =
+    teamHandicapTotal(team.headerId, team.heelerId, contestants) -
+    Number(event.slideNumber ?? 10);
+  return Math.max(-4, Math.min(4, Math.round(difference * 2) / 2));
+}
+
+export function officialRunTime(
+  event: Pick<ArenaEvent, "competitionType" | "slideNumber">,
+  team: Pick<
+    Team,
+    "round" | "headerId" | "heelerId" | "rawTime" | "penalties"
+  >,
+  contestants: Contestant[],
+) {
+  if (team.rawTime === null) return null;
+  return (
+    team.rawTime +
+    team.penalties +
+    slideTimeAdjustment(event, team, contestants)
+  );
+}
 
 const shuffle = <T,>(items: T[]) =>
   items
@@ -808,6 +845,8 @@ export function applyRunResult(
   update: Partial<Team>,
   maxRounds: number,
   shortGoTeams = 0,
+  event?: ArenaEvent,
+  contestants: Contestant[] = [],
 ) {
   const source = teams.find((team) => team.id === teamId);
   if (!source) return teams;
@@ -832,6 +871,8 @@ export function applyRunResult(
       source.eventId,
       maxRounds,
       shortGoTeams,
+      event,
+      contestants,
     );
   }
 
@@ -843,6 +884,8 @@ export function applyRunResult(
       source.eventId,
       maxRounds,
       shortGoTeams,
+      event,
+      contestants,
     );
   }
   if (
@@ -888,6 +931,8 @@ function syncShortGoFinalists(
   eventId: string,
   maxRounds: number,
   shortGoTeams: number,
+  event?: ArenaEvent,
+  contestants: Contestant[] = [],
 ) {
   if (maxRounds < 2) return teams;
 
@@ -924,7 +969,11 @@ function syncShortGoFinalists(
       return {
         qualifier,
         total: completedRounds.reduce(
-          (sum, team) => sum + (team.rawTime ?? 0) + team.penalties,
+          (sum, team) =>
+            sum +
+            (event
+              ? (officialRunTime(event, team, contestants) ?? 0)
+              : (team.rawTime ?? 0) + team.penalties),
           0,
         ),
       };
@@ -970,6 +1019,7 @@ function syncShortGoFinalists(
 export function reconcileQualifiedAdvancements(
   teams: Team[],
   events: ArenaEvent[],
+  contestants: Contestant[] = [],
 ) {
   return events.reduce((currentTeams, event) => {
     const completed = currentTeams
@@ -994,6 +1044,8 @@ export function reconcileQualifiedAdvancements(
           },
           event.rounds,
           event.shortGoTeams,
+          event,
+          contestants,
         ),
       currentTeams,
     );

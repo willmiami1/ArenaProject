@@ -256,6 +256,31 @@ async function readWorkspace() {
 const teamEntryKey = (team) =>
   `${team.headerId}|${team.heelerId}|${team.headerEntryNumber || 1}|${team.heelerEntryNumber || 1}`;
 
+const teamHandicap = (team, contestants) => {
+  const header = contestants.find((contestant) => contestant.id === team.headerId);
+  const heeler = contestants.find((contestant) => contestant.id === team.heelerId);
+  return Number(header?.headerHandicap || 0) + Number(heeler?.heelerHandicap || 0);
+};
+
+const officialRunTime = (event, team, contestants) => {
+  if (team.rawTime === null) return null;
+  const adjustment =
+    event.competitionType === "slide" && Number(team.round || 1) === 2
+      ? Math.max(
+          -4,
+          Math.min(
+            4,
+            Math.round(
+              (teamHandicap(team, contestants) -
+                Number(event.slideNumber ?? 10)) *
+                2,
+            ) / 2,
+          ),
+        )
+      : 0;
+  return Number(team.rawTime || 0) + Number(team.penalties || 0) + adjustment;
+};
+
 function publishedResults(event, teams, contestants) {
     if (event.resultsPublished !== true) return [];
     const grouped = new Map();
@@ -272,7 +297,7 @@ function publishedResults(event, teams, contestants) {
           (run) => run.status === "complete" && run.rawTime !== null,
         );
         const total = completed.reduce(
-          (sum, run) => sum + Number(run.rawTime || 0) + Number(run.penalties || 0),
+          (sum, run) => sum + Number(officialRunTime(event, run, contestants) || 0),
           0,
         );
         const qualified =
@@ -369,6 +394,7 @@ function publicProjection(workspace) {
         "pick-only": "Pick Only",
         "pick-and-draw": "Pick and Draw",
         "round-robin": "Round Robin",
+        slide: "Slide",
       }[event.competitionType] || "Competition",
       pickDrawRole: event.pickDrawRole,
       registrationOpen: onlineRegistrationIsOpen(event),
@@ -379,6 +405,7 @@ function publicProjection(workspace) {
       minDrawsAllowed: Number(event.minDrawsAllowed ?? 0),
       allowRepeatPartners: event.allowRepeatPartners === true,
       handicapTotal: event.handicapTotal,
+      slideNumber: Number(event.slideNumber ?? 10),
       maxContestantHandicap: Number(event.maxContestantHandicap ?? 99),
       timeLimit: event.timeLimit,
       rounds: event.rounds,
@@ -1072,6 +1099,7 @@ export const createContestantAccount = webMethod(
       },
       partners:
         event.competitionType === "pick-only" ||
+        event.competitionType === "slide" ||
         event.competitionType === "pick-and-draw"
           ? availablePartners(updatedWorkspace, event, contestant)
           : [],
@@ -1299,6 +1327,7 @@ export const loadSignupOptions = webMethod(
       contestant: privateContestant(contestant),
       partners:
         event.competitionType === "pick-only" ||
+        event.competitionType === "slide" ||
         event.competitionType === "pick-and-draw"
           ? availablePartners(workspace, event, contestant)
           : [],

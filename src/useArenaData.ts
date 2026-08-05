@@ -53,6 +53,7 @@ export function normalizeData(parsed: ArenaData): ArenaData {
       ) || 99),
     maxContestantHandicap: event.maxContestantHandicap ?? 99,
     minDrawsAllowed: event.minDrawsAllowed ?? 0,
+    slideNumber: event.slideNumber ?? 10,
     shortGoTeams: event.shortGoTeams ?? 0,
     drawHistory: event.drawHistory ?? [],
     drawApproved:
@@ -76,6 +77,14 @@ export function normalizeData(parsed: ArenaData): ArenaData {
       paid: registration.paid ?? true,
     }),
   );
+  const contestants = (parsed.contestants ?? []).map((contestant) => ({
+    ...contestant,
+    role:
+      (contestant.role as string) === "Either" ? "Both" : contestant.role,
+    headerHandicap: contestant.headerHandicap ?? 0,
+    heelerHandicap: contestant.heelerHandicap ?? 0,
+    photo: contestant.photo ?? "",
+  }));
 
   return {
     ...parsed,
@@ -83,17 +92,8 @@ export function normalizeData(parsed: ArenaData): ArenaData {
     participantDatabaseVersion: PARTICIPANT_DATABASE_VERSION,
     meets,
     events,
-    contestants: (parsed.contestants ?? []).map(
-      (contestant) => ({
-        ...contestant,
-        role:
-          (contestant.role as string) === "Either" ? "Both" : contestant.role,
-        headerHandicap: contestant.headerHandicap ?? 0,
-        heelerHandicap: contestant.heelerHandicap ?? 0,
-        photo: contestant.photo ?? "",
-      }),
-    ),
-    teams: reconcileQualifiedAdvancements(teams, events),
+    contestants,
+    teams: reconcileQualifiedAdvancements(teams, events, contestants),
     registrations: reconcilePickDrawRegistrations(
       registrations,
       teams,

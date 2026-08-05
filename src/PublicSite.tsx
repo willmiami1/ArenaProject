@@ -688,6 +688,9 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
             <div><dt>Entry fee</dt><dd>${competition.entryFee}</dd></div>
             <div><dt>Rounds</dt><dd>{competition.rounds}</dd></div>
             <div><dt>Time limit</dt><dd>{competition.timeLimit} seconds</dd></div>
+            {competition.competitionType === "slide" && (
+              <div><dt>Slide rule</dt><dd>#{competition.slideNumber} · Round 2 adjusts 0.5 seconds per 0.5 handicap, up to ±4 seconds</dd></div>
+            )}
             <div><dt>Handicap cap</dt><dd>#{competition.handicapTotal}</dd></div>
             <div><dt>Highest contestant handicap</dt><dd>#{competition.maxContestantHandicap}</dd></div>
             <div><dt>Entry limit</dt><dd>{competition.entriesAllowed} per contestant</dd></div>

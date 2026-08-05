@@ -1,7 +1,12 @@
 export type View = "overview" | "events" | "contestants" | "teams" | "run-desk" | "reports";
 export type EventStatus = "Upcoming" | "Live" | "Complete";
 export type RunStatus = "ready" | "complete" | "no-time";
-export type CompetitionType = "draw-pot" | "pick-only" | "pick-and-draw" | "round-robin";
+export type CompetitionType =
+  | "draw-pot"
+  | "pick-only"
+  | "pick-and-draw"
+  | "round-robin"
+  | "slide";
 export type PickDrawRole = "header" | "heeler" | "both";
 export type EntryStatus = "entered" | "waitlist" | "scratched";
 
@@ -34,6 +39,7 @@ export interface ArenaEvent {
   minDrawsAllowed: number;
   allowRepeatPartners: boolean;
   handicapTotal: number;
+  slideNumber?: number;
   maxContestantHandicap: number;
   timeLimit: number;
   rounds: number;

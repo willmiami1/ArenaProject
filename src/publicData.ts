@@ -59,6 +59,7 @@ export interface PublicCompetition {
   minDrawsAllowed: number;
   allowRepeatPartners: boolean;
   handicapTotal: number;
+  slideNumber: number;
   maxContestantHandicap: number;
   timeLimit: number;
   rounds: number;
@@ -190,6 +191,7 @@ export function projectPublicArenaData(
       minDrawsAllowed: event.minDrawsAllowed ?? 0,
       allowRepeatPartners: event.allowRepeatPartners,
       handicapTotal: event.handicapTotal,
+      slideNumber: event.slideNumber ?? 10,
       maxContestantHandicap: event.maxContestantHandicap ?? 99,
       timeLimit: event.timeLimit,
       rounds: event.rounds,

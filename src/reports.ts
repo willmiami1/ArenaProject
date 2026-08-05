@@ -1,4 +1,9 @@
-import { calculatePayouts, calculatePurse, competitionName } from "./competition";
+import {
+  calculatePayouts,
+  calculatePurse,
+  competitionName,
+  officialRunTime,
+} from "./competition";
 import { aggregateStandings, teamEntryKey } from "./standings";
 import type {
   ArenaData,
@@ -159,8 +164,16 @@ export const emptyReportFilters = (data: ArenaData): ReportFilters => ({
 const money = (value: number) =>
   value.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
-const finalTime = (team: Team) =>
-  team.rawTime === null ? null : team.rawTime + team.penalties;
+const finalTime = (
+  event: ArenaEvent | undefined,
+  team: Team,
+  contestants: Contestant[],
+) =>
+  event
+    ? officialRunTime(event, team, contestants)
+    : team.rawTime === null
+      ? null
+      : team.rawTime + team.penalties;
 
 const contestantName = (contestants: Contestant[], id: string) =>
   contestants.find((contestant) => contestant.id === id)?.name ?? "Unknown";
@@ -197,6 +210,7 @@ function eventFinancials(
   event: ArenaEvent,
   teams: Team[],
   registrations: EventRegistration[],
+  contestants: Contestant[] = [],
 ) {
   const entries = eventEntries(event, teams, registrations);
   const collected = entries * event.entryFee;
@@ -205,7 +219,7 @@ function eventFinancials(
   const feeBase = Math.max(0, event.entryFee - event.officeCharge - event.stockCharge);
   const producer = entries * feeBase * (event.producerFeePercent / 100);
   const purse = calculatePurse(event, entries);
-  const qualified = aggregateStandings(event, teams).filter(
+  const qualified = aggregateStandings(event, teams, contestants).filter(
     (standing) => standing.qualified,
   );
   const payouts = calculatePayouts(
@@ -307,8 +321,8 @@ function teamRows(
   const eventMap = new Map(events.map((event) => [event.id, event]));
   const payouts = new Map<string, { rank: number; amount: number }>();
   events.forEach((event) => {
-    const standings = aggregateStandings(event, teams);
-    const financials = eventFinancials(event, data.teams, data.registrations);
+    const standings = aggregateStandings(event, teams, data.contestants);
+    const financials = eventFinancials(event, data.teams, data.registrations, data.contestants);
     const projected = calculatePayouts(
       financials.purse,
       standings.filter((standing) => standing.qualified).length,
@@ -339,7 +353,7 @@ function teamRows(
         steer: team.steerNumber ?? "—",
         rawTime: team.rawTime ?? "—",
         penalties: team.penalties,
-        time: finalTime(team) ?? "—",
+        time: finalTime(event, team, data.contestants) ?? "—",
         status: team.scratched
           ? "Scratched"
           : team.status === "no-time"
@@ -498,10 +512,10 @@ export function contestantFinancials(
         });
       });
 
-    const standings = aggregateStandings(event, data.teams).filter(
+    const standings = aggregateStandings(event, data.teams, data.contestants).filter(
       (standing) => standing.qualified,
     );
-    const financials = eventFinancials(event, data.teams, data.registrations);
+    const financials = eventFinancials(event, data.teams, data.registrations, data.contestants);
     const payouts = calculatePayouts(
       financials.purse,
       standings.length,
@@ -618,10 +632,10 @@ function statusRows(
 
 function payoutRows(data: ArenaData, events: ArenaEvent[], teams: Team[]) {
   return events.flatMap((event) => {
-    const standings = aggregateStandings(event, teams).filter(
+    const standings = aggregateStandings(event, teams, data.contestants).filter(
       (standing) => standing.qualified,
     );
-    const financials = eventFinancials(event, data.teams, data.registrations);
+    const financials = eventFinancials(event, data.teams, data.registrations, data.contestants);
     const payouts = calculatePayouts(
       financials.purse,
       standings.length,
@@ -650,8 +664,8 @@ function payoutRows(data: ArenaData, events: ArenaEvent[], teams: Team[]) {
 
 function standingRows(data: ArenaData, events: ArenaEvent[], teams: Team[]) {
   return events.flatMap((event) => {
-    const standings = aggregateStandings(event, teams);
-    const financials = eventFinancials(event, data.teams, data.registrations);
+    const standings = aggregateStandings(event, teams, data.contestants);
+    const financials = eventFinancials(event, data.teams, data.registrations, data.contestants);
     const payouts = calculatePayouts(
       financials.purse,
       standings.filter((standing) => standing.qualified).length,
@@ -684,7 +698,9 @@ function stockRows(
   });
   return [...grouped.entries()].map(([steer, steerTeams]) => {
     const times = steerTeams
-      .map(finalTime)
+      .map((team) =>
+        finalTime(eventMap.get(team.eventId), team, data.contestants),
+      )
       .filter((time): time is number => time !== null);
     return {
       steer,
@@ -875,13 +891,15 @@ export function generateReport(
     data.meets.find((item) => item.id === events[0]?.parentEventId);
   const eventMap = new Map(events.map((event) => [event.id, event]));
   const completeTeams = teams.filter(
-    (team) => team.status === "complete" && finalTime(team) !== null,
+    (team) =>
+      team.status === "complete" &&
+      finalTime(eventMap.get(team.eventId), team, data.contestants) !== null,
   );
   const times = completeTeams
-    .map(finalTime)
+    .map((team) => finalTime(eventMap.get(team.eventId), team, data.contestants))
     .filter((time): time is number => time !== null);
   const financials = events.map((event) =>
-    eventFinancials(event, data.teams, data.registrations),
+    eventFinancials(event, data.teams, data.registrations, data.contestants),
   );
   const totals = financials.reduce(
     (result, item) => ({
@@ -913,12 +931,13 @@ export function generateReport(
     rows = events.map((event) => {
       const eventTeams = data.teams.filter((team) => team.eventId === event.id);
       const eventTimes = eventTeams
-        .map(finalTime)
+        .map((team) => finalTime(event, team, data.contestants))
         .filter((time): time is number => time !== null);
       const eventFinance = eventFinancials(
         event,
         data.teams,
         data.registrations,
+        data.contestants,
       );
       const eventContestants = new Set(
         eventTeams.flatMap((team) => [team.headerId, team.heelerId]),
@@ -967,7 +986,7 @@ export function generateReport(
     });
   } else if (definition.kind === "financial") {
     rows = events.map((event) => {
-      const item = eventFinancials(event, data.teams, data.registrations);
+      const item = eventFinancials(event, data.teams, data.registrations, data.contestants);
       const eventRegistrations = data.registrations.filter(
         (registration) => registration.eventId === event.id,
       );

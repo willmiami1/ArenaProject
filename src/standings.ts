@@ -1,4 +1,5 @@
 import type { ArenaEvent, Contestant, Team } from "./types";
+import { officialRunTime } from "./competition";
 
 export interface AggregateStanding {
   key: string;
@@ -18,6 +19,7 @@ export const teamEntryKey = (team: Team) =>
 export function aggregateStandings(
   event: ArenaEvent,
   allTeams: Team[],
+  contestants: Contestant[] = [],
 ): AggregateStanding[] {
   const grouped = new Map<string, Team[]>();
   allTeams
@@ -33,7 +35,7 @@ export function aggregateStandings(
         (team) => team.status === "complete" && team.rawTime !== null,
       );
       const total = completed.reduce(
-        (sum, team) => sum + (team.rawTime ?? 0) + team.penalties,
+        (sum, team) => sum + (officialRunTime(event, team, contestants) ?? 0),
         0,
       );
       const qualified =
@@ -65,7 +67,7 @@ export function publicStandingRows(
 ) {
   if (!event.resultsPublished) return [];
   const names = new Map(contestants.map((contestant) => [contestant.id, contestant.name]));
-  return aggregateStandings(event, teams).map((standing) => ({
+  return aggregateStandings(event, teams, contestants).map((standing) => ({
     place: standing.rank,
     headerName: names.get(standing.headerId) ?? "Unknown contestant",
     heelerName: names.get(standing.heelerId) ?? "Unknown contestant",
