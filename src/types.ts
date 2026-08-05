@@ -66,6 +66,7 @@ export interface Contestant {
   photo: string;
   phone: string;
   hometown: string;
+  horses?: string[];
   membershipNumber?: string;
   email?: string;
   categoryNumber?: string;

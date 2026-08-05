@@ -114,11 +114,13 @@ describe("registration desk boundary", () => {
       phone: "555-0200",
       email: "NEW@example.com",
       hometown: "Bushnell",
+      horses: ["  Lucky  Star ", "lucky star", "Blue"],
     });
 
     expect(result.contestant).toMatchObject({
       name: "New Rider",
       email: "new@example.com",
+      horses: ["Lucky Star", "Blue"],
     });
     expect(result.data.events).toBe(data.events);
     expect(result.data.teams).toBe(data.teams);

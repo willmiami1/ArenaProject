@@ -5,6 +5,7 @@ import {
   reconcilePickDrawRegistrations,
   reconcileQualifiedAdvancements,
 } from "./competition";
+import { normalizeHorseNames } from "./contestantHorses";
 import type { ArenaData, ArenaMeet } from "./types";
 import { isWixEmbed, requestWixData } from "./wixBridge";
 
@@ -107,6 +108,7 @@ export function normalizeData(parsed: ArenaData): ArenaData {
         ? Number(contestant.heelerHandicap)
         : 3,
     photo: contestant.photo ?? "",
+    horses: normalizeHorseNames(contestant.horses).slice(0, 20),
   }));
 
   return {

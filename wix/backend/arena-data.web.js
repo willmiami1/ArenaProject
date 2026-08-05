@@ -246,6 +246,11 @@ async function readWorkspace() {
     events,
     contestants: contestants.map((contestant) => ({
       ...contestant,
+      horses: Array.isArray(contestant.horses)
+        ? contestant.horses
+            .map((horse) => String(horse).trim().replace(/\s+/g, " "))
+            .filter(Boolean)
+        : [],
       headerHandicap:
         Number(contestant.headerHandicap) > 0
           ? Number(contestant.headerHandicap)
@@ -752,6 +757,14 @@ export const saveRegistrationDeskContestant = webMethod(
     const id = input.id || `desk-contestant-${Date.now()}-${randomBytes(4).toString("hex")}`;
     const headerHandicap = Number(input.headerHandicap);
     const heelerHandicap = Number(input.heelerHandicap);
+    const horsesByName = new Map();
+    (Array.isArray(input.horses) ? input.horses : []).forEach((value) => {
+      if (typeof value !== "string") return;
+      const horse = value.trim().replace(/\s+/g, " ");
+      const key = horse.toLowerCase();
+      if (horse && !horsesByName.has(key)) horsesByName.set(key, horse);
+    });
+    const horses = [...horsesByName.values()];
     if (
       !validAppId(id) ||
       name.length < 2 ||
@@ -763,6 +776,8 @@ export const saveRegistrationDeskContestant = webMethod(
       heelerHandicap < 0 ||
       headerHandicap > 20 ||
       heelerHandicap > 20 ||
+      horses.length > 20 ||
+      horses.some((horse) => horse.length > 100) ||
       (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     ) {
       throw new Error("Enter valid contestant profile information.");
@@ -817,6 +832,7 @@ export const saveRegistrationDeskContestant = webMethod(
       phone,
       email,
       hometown: String(input.hometown || "").trim(),
+      horses,
       membershipNumber: previous?.membershipNumber || "",
       categoryNumber: previous?.categoryNumber || "",
     };

@@ -1,6 +1,7 @@
 import { seedData } from "./data";
 import { createOnlineSignup, type SignupRequest } from "./onlineSignup";
 import { registrationDeskIsOpen } from "./registrationWindow";
+import { normalizeHorseNames } from "./contestantHorses";
 import type {
   ArenaData,
   ArenaEvent,
@@ -46,6 +47,7 @@ export interface RegistrationDeskContestantInput {
   phone: string;
   email: string;
   hometown: string;
+  horses?: string[];
 }
 
 const registrationWorkspaceKey = "arena-command-data-v1";
@@ -138,10 +140,14 @@ export function upsertRegistrationDeskContestant(
   const name = input.name.trim().replace(/\s+/g, " ");
   const email = input.email.trim().toLowerCase();
   const phone = input.phone.trim();
+  const horses = normalizeHorseNames(input.horses);
   if (name.length < 2 || name.length > 100) {
     throw new Error("Enter the contestant's full name.");
   }
   if (!validEmail(email)) throw new Error("Enter a valid email address.");
+  if (horses.length > 20 || horses.some((horse) => horse.length > 100)) {
+    throw new Error("Enter no more than 20 horse names of 100 characters each.");
+  }
   if (
     !Number.isFinite(input.headerHandicap) ||
     !Number.isFinite(input.heelerHandicap) ||
@@ -174,6 +180,7 @@ export function upsertRegistrationDeskContestant(
     phone,
     email,
     hometown: input.hometown.trim(),
+    horses,
   };
   const exists = data.contestants.some((item) => item.id === contestant.id);
   return {

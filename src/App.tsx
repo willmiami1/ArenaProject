@@ -79,6 +79,7 @@ import {
   teamHandicapTotal,
 } from "./competition";
 import { spectatorLeaderboard } from "./spectatorPredictions";
+import { normalizeHorseNames } from "./contestantHorses";
 import type {
   ArenaData,
   ArenaEvent,
@@ -1565,7 +1566,7 @@ function Contestants({
   const [search, setSearch] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
   const filtered = contestants.filter((contestant) =>
-    `${contestant.name} ${contestant.hometown} ${contestant.headerHandicap} ${contestant.heelerHandicap}`.toLowerCase().includes(search.toLowerCase()),
+    `${contestant.name} ${contestant.hometown} ${(contestant.horses ?? []).join(" ")} ${contestant.headerHandicap} ${contestant.heelerHandicap}`.toLowerCase().includes(search.toLowerCase()),
   );
   const downloadBackup = () => {
     const backup = {
@@ -1711,6 +1712,7 @@ function validateContestantBackup(value: unknown): Contestant[] {
       throw new Error(`Contestant ${index + 1} is not valid.`);
     }
     const contestant = record as Partial<Contestant>;
+    const horses = normalizeHorseNames(contestant.horses);
     if (
       typeof contestant.id !== "string" ||
       !contestant.id ||
@@ -1725,6 +1727,9 @@ function validateContestantBackup(value: unknown): Contestant[] {
           !Number.isFinite(contestant.heelerHandicap)))
     ) {
       throw new Error(`Contestant ${index + 1} is not valid.`);
+    }
+    if (horses.length > 20 || horses.some((horse) => horse.length > 100)) {
+      throw new Error(`Contestant ${index + 1} has invalid horse names.`);
     }
     return {
       id: contestant.id,
@@ -1742,6 +1747,7 @@ function validateContestantBackup(value: unknown): Contestant[] {
       phone: typeof contestant.phone === "string" ? contestant.phone : "",
       hometown:
         typeof contestant.hometown === "string" ? contestant.hometown : "",
+      horses,
       membershipNumber:
         typeof contestant.membershipNumber === "string"
           ? contestant.membershipNumber
@@ -1967,7 +1973,9 @@ function ContestantForm({
     phone: contestant?.phone ?? "",
     hometown: contestant?.hometown ?? "",
     email: contestant?.email ?? "",
+    horses: contestant?.horses ?? [],
   });
+  const [horseName, setHorseName] = useState("");
   const [photoError, setPhotoError] = useState("");
   const [loginPin, setLoginPin] = useState("");
   const [confirmLoginPin, setConfirmLoginPin] = useState("");
@@ -2001,6 +2009,7 @@ function ContestantForm({
       membershipNumber: contestant?.membershipNumber ?? "",
       categoryNumber: contestant?.categoryNumber ?? "",
       photo: form.photo,
+      horses: normalizeHorseNames(form.horses),
     };
     if (loginPin || confirmLoginPin) {
       if (!form.email.trim()) {
@@ -2055,6 +2064,54 @@ function ContestantForm({
         <Field label="Heeler Handicap"><input required type="number" min="0" step="0.5" value={form.heelerHandicap} onChange={(e) => setForm({ ...form, heelerHandicap: e.target.value })} placeholder="3" /></Field>
         <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555-0123" /></Field>
         <Field label="Hometown"><input value={form.hometown} onChange={(e) => setForm({ ...form, hometown: e.target.value })} placeholder="City, State" /></Field>
+      </div>
+      <div className="horse-editor">
+        <h4>Horses</h4>
+        <p>Add every horse associated with this contestant.</p>
+        <div className="horse-entry">
+          <input
+            maxLength={100}
+            value={horseName}
+            onChange={(event) => setHorseName(event.target.value)}
+            placeholder="Horse name"
+          />
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              const name = horseName.trim().replace(/\s+/g, " ");
+              if (
+                !name ||
+                form.horses.length >= 20 ||
+                form.horses.some((horse) => horse.toLowerCase() === name.toLowerCase())
+              ) return;
+              setForm({ ...form, horses: [...form.horses, name] });
+              setHorseName("");
+            }}
+          >
+            <Plus size={16} /> Add horse
+          </button>
+        </div>
+        <div className="horse-list">
+          {form.horses.map((horse) => (
+            <span key={horse}>
+              <strong>{horse}</strong>
+              <button
+                type="button"
+                title={`Delete ${horse}`}
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    horses: form.horses.filter((name) => name !== horse),
+                  })
+                }
+              >
+                <Trash2 size={14} />
+              </button>
+            </span>
+          ))}
+          {!form.horses.length && <small>No horses added.</small>}
+        </div>
       </div>
       <h4 className="form-section-title">Contestant account</h4>
       <p className="contestant-account-help">

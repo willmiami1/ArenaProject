@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Trash2,
   UserRoundPlus,
 } from "lucide-react";
 import {
@@ -43,6 +44,7 @@ const emptyContestant = (): RegistrationDeskContestantInput => ({
   phone: "",
   email: "",
   hometown: "",
+  horses: [],
 });
 
 const formatMoney = (value: number) =>
@@ -108,6 +110,7 @@ export function RegistrationDesk() {
   const [pinConfirmation, setPinConfirmation] = useState("");
   const [profile, setProfile] =
     useState<RegistrationDeskContestantInput>(emptyContestant);
+  const [horseName, setHorseName] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -194,6 +197,7 @@ export function RegistrationDesk() {
   }, [eligibleRoles, role]);
 
   const editProfile = (item?: Contestant) => {
+    setHorseName("");
     setProfile(
       item
         ? {
@@ -205,6 +209,7 @@ export function RegistrationDesk() {
             phone: item.phone,
             email: item.email ?? "",
             hometown: item.hometown,
+            horses: item.horses ?? [],
           }
         : emptyContestant(),
     );
@@ -262,6 +267,52 @@ export function RegistrationDesk() {
         <label>Email<input type="email" value={profile.email} onChange={(change) => setProfile({ ...profile, email: change.target.value })} /></label>
         <label>Phone<input type="tel" value={profile.phone} onChange={(change) => setProfile({ ...profile, phone: change.target.value })} /></label>
         <label>Hometown<input value={profile.hometown} onChange={(change) => setProfile({ ...profile, hometown: change.target.value })} /></label>
+        <div className="registration-horse-editor">
+          <span>Horses</span>
+          <div className="horse-entry">
+            <input
+              maxLength={100}
+              value={horseName}
+              onChange={(change) => setHorseName(change.target.value)}
+              placeholder="Horse name"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const name = horseName.trim().replace(/\s+/g, " ");
+                if (
+                  !name ||
+                  (profile.horses ?? []).length >= 20 ||
+                  (profile.horses ?? []).some((horse) => horse.toLowerCase() === name.toLowerCase())
+                ) return;
+                setProfile({ ...profile, horses: [...(profile.horses ?? []), name] });
+                setHorseName("");
+              }}
+            >
+              <Plus size={15} /> Add horse
+            </button>
+          </div>
+          <div className="horse-list">
+            {(profile.horses ?? []).map((horse) => (
+              <span key={horse}>
+                <strong>{horse}</strong>
+                <button
+                  type="button"
+                  title={`Delete ${horse}`}
+                  onClick={() =>
+                    setProfile({
+                      ...profile,
+                      horses: (profile.horses ?? []).filter((name) => name !== horse),
+                    })
+                  }
+                >
+                  <Trash2 size={14} />
+                </button>
+              </span>
+            ))}
+            {!(profile.horses ?? []).length && <small>No horses added.</small>}
+          </div>
+        </div>
         <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save contestant"}</button>
       </form>
     </>

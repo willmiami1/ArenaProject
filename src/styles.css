@@ -137,6 +137,15 @@ main { grid-column: 2; min-width: 0; }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: #76a289; box-shadow: 0 0 0 3px rgba(40,95,70,.08); }
 .roping-description { grid-column: 1 / -1; }
 .form-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; padding-top: 18px; border-top: 1px solid #eee; }
+.horse-editor { margin-top: 18px; padding: 18px; background: #f7f5f1; border: 1px solid var(--line); border-radius: 9px; }
+.horse-editor h4 { margin: 0; }
+.horse-editor > p { margin: 5px 0 14px; color: var(--muted); font-size: 11px; }
+.horse-entry { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 9px; }
+.horse-entry input { min-height: 41px; padding: 9px 11px; color: var(--ink); background: #fff; border: 1px solid #dfe3df; border-radius: 7px; }
+.horse-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.horse-list > span { display: inline-flex; align-items: center; gap: 8px; padding: 7px 8px 7px 11px; background: #fff; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; }
+.horse-list button { display: grid; place-items: center; padding: 2px; color: #a4453d; background: transparent; border: 0; }
+.horse-list small { color: var(--muted); }
 .handicap-preview { display: flex; align-items: baseline; gap: 8px; width: max-content; margin-top: 14px; padding: 8px 11px; color: var(--green); background: #edf4ef; border: 1px solid #d4e4d9; border-radius: 7px; }
 .handicap-preview span { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .handicap-preview strong { font-family: "Manrope", sans-serif; font-size: 17px; }
@@ -790,6 +799,10 @@ main { grid-column: 2; min-width: 0; }
 .registration-desk-empty { min-height: 290px; display: grid; place-items: center; align-content: center; gap: 12px; color: #796a5b; text-align: center; }
 .registration-profile-panel { margin-top: 22px; }
 .registration-profile-form { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; padding: 22px; }
+.registration-horse-editor { grid-column: 1 / -1; padding: 15px; background: #120d0a; border: 1px solid #5a4434; border-radius: 7px; }
+.registration-horse-editor > span { display: block; margin-bottom: 8px; color: #cdb9a3; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.registration-horse-editor .horse-entry button { min-width: 125px; color: #eadcc6; background: #49301f; border: 1px solid #765036; border-radius: 6px; }
+.registration-horse-editor .horse-list > span { color: #eadcc6; background: #211810; border-color: #5a4434; }
 .registration-profile-form .primary { align-self: end; }
 .registration-desk-message { position: sticky; bottom: 16px; margin: 20px auto 0; padding: 14px 18px; color: #2a1b0f; background: #e2bc83; border: 1px solid #b47b44; border-radius: 7px; font-size: 12px; font-weight: 800; box-shadow: 0 10px 28px rgba(0,0,0,.28); }
 
