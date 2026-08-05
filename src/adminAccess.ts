@@ -28,14 +28,11 @@ export function canMountArenaCommand(state: AdminAccessState) {
 
 export function isBrowserStoragePreview(
   hostname = window.location.hostname,
-  pathname = window.location.pathname,
+  _pathname = window.location.pathname,
 ) {
-  const localHost =
+  return (
     hostname === "localhost" ||
     hostname === "127.0.0.1" ||
-    hostname === "[::1]";
-  const githubPagesPreview =
-    hostname === "willmiami1.github.io" &&
-    (pathname === "/ArenaProject" || pathname.startsWith("/ArenaProject/"));
-  return localHost || githubPagesPreview;
+    hostname === "[::1]"
+  );
 }

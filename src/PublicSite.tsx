@@ -63,12 +63,16 @@ function loadLocalPublicData() {
   }
 }
 
+const relayParameter = () => {
+  const origin = new URL(window.location.href).searchParams.get("wixHostOrigin");
+  return origin ? `&wixHostOrigin=${encodeURIComponent(origin)}` : "";
+};
 const href = (page: string, id?: string) =>
-  `?page=${encodeURIComponent(page)}${id ? `&id=${encodeURIComponent(id)}` : ""}`;
+  `?page=${encodeURIComponent(page)}${id ? `&id=${encodeURIComponent(id)}` : ""}${relayParameter()}`;
 const eventsHref = `${href("home")}#events`;
 const operationalHref = (app: "command" | "registration") => {
   if (isWixEmbed() || import.meta.env.DEV || isBrowserStoragePreview()) {
-    return `?app=${app}`;
+    return `?app=${app}${relayParameter()}`;
   }
   const wixOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
   return wixOrigin

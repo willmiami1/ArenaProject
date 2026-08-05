@@ -290,21 +290,27 @@ function StaffApp() {
   };
   const openContestantPortal = () => {
     const url = new URL(window.location.href);
+    const wixHostOrigin = url.searchParams.get("wixHostOrigin");
     url.search = "";
     url.searchParams.set("portal", "contestant");
+    if (wixHostOrigin) url.searchParams.set("wixHostOrigin", wixHostOrigin);
     window.location.assign(url.toString());
   };
   const openRegistrationDesk = () => {
     const url = new URL(window.location.href);
+    const wixHostOrigin = url.searchParams.get("wixHostOrigin");
     url.search = "";
     url.searchParams.set("app", "registration");
+    if (wixHostOrigin) url.searchParams.set("wixHostOrigin", wixHostOrigin);
     window.location.assign(url.toString());
   };
   const openPublicWebsite = () => {
     window.localStorage.setItem("arena-command-data-v1", JSON.stringify(data));
     const url = new URL(window.location.href);
+    const wixHostOrigin = url.searchParams.get("wixHostOrigin");
     url.search = "";
     url.searchParams.set("page", "home");
+    if (wixHostOrigin) url.searchParams.set("wixHostOrigin", wixHostOrigin);
     url.hash = "events";
     window.location.assign(url.toString());
   };

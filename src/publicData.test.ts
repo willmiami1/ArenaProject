@@ -92,7 +92,7 @@ describe("public routing", () => {
   });
 
   describe("admin access boundary", () => {
-    it("allows development and local-storage preview access", () => {
+    it("allows development and localhost preview access only", () => {
       expect(localAdminAccess(false, true)).toBe("local-development");
       expect(canMountArenaCommand(localAdminAccess(false, true))).toBe(true);
       expect(localAdminAccess(false, false, true)).toBe("local-development");
@@ -101,7 +101,7 @@ describe("public routing", () => {
       expect(isBrowserStoragePreview("127.0.0.1", "/")).toBe(true);
       expect(
         isBrowserStoragePreview("willmiami1.github.io", "/ArenaProject/"),
-      ).toBe(true);
+      ).toBe(false);
       expect(isBrowserStoragePreview("example.com", "/ArenaProject/")).toBe(false);
     });
 
