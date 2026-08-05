@@ -237,12 +237,11 @@ describe("online signup", () => {
     expect(repeated.existing).toBe(true);
   });
 
-  it("validates fixed partners and adds unpaid Pick and Draw registrations", () => {
+  it("keeps picked teams separate from Draw Pot registrations", () => {
     const data = workspace(event({ competitionType: "pick-and-draw", pickDrawRole: "both", handicapTotal: 8 }));
     const created = createOnlineSignup(data, { submissionId: "fixed-1", contestantId: "header", eventId: "competition-1", role: "Header", partnerId: "heeler" });
     expect(created.teams[0].paid).toBe(false);
-    expect(created.registrations).toHaveLength(2);
-    expect(created.registrations.every((registration) => registration.paid === false)).toBe(true);
+    expect(created.registrations).toHaveLength(0);
     expect(
       generateCompetitionDraw(
         data.events[0],
@@ -251,6 +250,78 @@ describe("online signup", () => {
         data.contestants,
       ),
     ).toEqual([]);
+  });
+
+  it("places picked teams after every generated Pick and Draw team", () => {
+    const competition = event({
+      competitionType: "pick-and-draw",
+      pickDrawRole: "both",
+      allowRepeatPartners: true,
+    });
+    const fixedTeam = run({
+      id: "picked-team",
+      status: "ready",
+      rawTime: null,
+      drawPosition: 0,
+    });
+    const registrations = [
+      {
+        id: "header-draw",
+        eventId: competition.id,
+        contestantId: "header",
+        role: "Header" as const,
+        entries: 1,
+        checkedIn: false,
+        status: "entered" as const,
+        notes: "",
+        paid: true,
+      },
+      {
+        id: "heeler-draw",
+        eventId: competition.id,
+        contestantId: "heeler",
+        role: "Heeler" as const,
+        entries: 1,
+        checkedIn: false,
+        status: "entered" as const,
+        notes: "",
+        paid: true,
+      },
+    ];
+
+    const draw = generateCompetitionDraw(
+      competition,
+      registrations,
+      [fixedTeam],
+      contestants,
+    );
+
+    expect(draw.map((team) => team.generated)).toEqual([true, false]);
+    expect(draw.map((team) => team.drawPosition)).toEqual([1, 2]);
+    expect(draw[draw.length - 1]?.id).toBe("picked-team");
+  });
+
+  it("removes legacy picked-team registrations from the Draw Pot pool", () => {
+    const data = workspace(
+      event({ competitionType: "pick-and-draw" }),
+      [run({ id: "picked-team" })],
+    );
+    data.registrations = [
+      {
+        id: "legacy-picked-registration",
+        eventId: "competition-1",
+        contestantId: "header",
+        sourceTeamId: "picked-team",
+        role: "Header",
+        entries: 1,
+        checkedIn: false,
+        status: "entered",
+        notes: "Automatically added from picked team.",
+        paid: true,
+      },
+    ];
+
+    expect(normalizeData(data).registrations).toEqual([]);
   });
 
   it("rejects closed, locked, duplicate, self-paired, and over-limit entries", () => {

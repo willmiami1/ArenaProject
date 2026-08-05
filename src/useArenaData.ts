@@ -55,6 +55,8 @@ export function normalizeData(parsed: ArenaData): ArenaData {
     minDrawsAllowed: event.minDrawsAllowed ?? 0,
     shortGoTeams: event.shortGoTeams ?? 0,
     drawHistory: event.drawHistory ?? [],
+    drawApproved:
+      event.drawApproved ?? Boolean(event.drawHistory?.length),
   }));
   const teams = (parsed.teams ?? []).map((team) => ({
     ...team,

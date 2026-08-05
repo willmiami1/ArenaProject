@@ -1642,27 +1642,6 @@ async function createSignupRecords(request, authenticatedId, source) {
             points: 0,
             ...metadata,
           });
-          if (event.competitionType === "pick-and-draw") {
-            const roles =
-              event.pickDrawRole === "both"
-                ? ["Header", "Heeler"]
-                : [event.pickDrawRole === "header" ? "Header" : "Heeler"];
-            roles.forEach((pickRole, roleIndex) => {
-              registrations.push({
-                id: `${idPrefix}-registration-${request.submissionId}-pick-${partnerIndex + 1}-${roleIndex + 1}`,
-                eventId: event.id,
-                contestantId:
-                  pickRole === "Header" ? header.id : heeler.id,
-                sourceTeamId: teamId,
-                role: pickRole,
-                entries: 1,
-                checkedIn: false,
-                status: "entered",
-                notes: "",
-                ...metadata,
-              });
-            });
-          }
         });
       }
     }

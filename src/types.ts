@@ -28,6 +28,7 @@ export interface ArenaEvent {
   pickDrawRole: PickDrawRole;
   registrationOpen: boolean;
   drawLocked: boolean;
+  drawApproved?: boolean;
   resultsPublished: boolean;
   entriesAllowed: number;
   minDrawsAllowed: number;

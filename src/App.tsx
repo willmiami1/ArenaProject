@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   Camera,
@@ -69,7 +69,6 @@ import {
   defaultCompetitionSettings,
   entryClearedForDraw,
   generateCompetitionDraw,
-  registrationsForPickedTeam,
   teamEligibleForCompetition,
   teamHandicapTotal,
 } from "./competition";
@@ -502,12 +501,6 @@ function StaffApp() {
                 setData((current) => ({
                   ...current,
                   teams: [...current.teams, team],
-                  registrations: activeEvent
-                    ? [
-                        ...current.registrations,
-                        ...registrationsForPickedTeam(activeEvent, team),
-                      ]
-                    : current.registrations,
                 }))
               }
               onUpdateTeam={(updatedTeam) =>
@@ -518,16 +511,10 @@ function StaffApp() {
                   ),
                   registrations:
                     activeEvent && !updatedTeam.generated
-                      ? [
-                          ...current.registrations.filter(
-                            (registration) =>
-                              registration.sourceTeamId !== updatedTeam.id,
-                          ),
-                          ...registrationsForPickedTeam(
-                            activeEvent,
-                            updatedTeam,
-                          ),
-                        ]
+                      ? current.registrations.filter(
+                          (registration) =>
+                            registration.sourceTeamId !== updatedTeam.id,
+                        )
                       : current.registrations,
                 }))
               }
@@ -583,6 +570,8 @@ function StaffApp() {
                     event.id === eventId
                       ? {
                           ...event,
+                          drawApproved: true,
+                          drawLocked: true,
                           drawHistory: [
                             ...event.drawHistory,
                             {
@@ -1223,6 +1212,7 @@ function Events({
               status: "Upcoming",
               registrationOpen: true,
               drawLocked: false,
+              drawApproved: false,
               resultsPublished: false,
               drawHistory: [],
             });
@@ -2117,8 +2107,11 @@ function Teams({
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [message, setMessage] = useState("");
   const [teamSearch, setTeamSearch] = useState("");
+  const [draftDraw, setDraftDraw] = useState<Team[] | null>(null);
   const eventTeams = teams.filter((team) => team.eventId === event?.id).sort((a, b) => a.drawPosition - b.drawPosition);
-  const eventRegistrations = registrations.filter((entry) => entry.eventId === event?.id);
+  const eventRegistrations = registrations.filter(
+    (entry) => entry.eventId === event?.id && !entry.sourceTeamId,
+  );
   const headerEntryCount = eventRegistrations
     .filter((entry) => entry.role === "Header" && entry.status === "entered" && entryClearedForDraw(entry))
     .reduce((total, entry) => total + entry.entries, 0);
@@ -2126,7 +2119,8 @@ function Teams({
     .filter((entry) => entry.role === "Heeler" && entry.status === "entered" && entryClearedForDraw(entry))
     .reduce((total, entry) => total + entry.entries, 0);
   const rider = (id: string) => contestants.find((item) => item.id === id);
-  const displayedTeams = eventTeams.filter((team) =>
+  const visibleDrawTeams = draftDraw ?? eventTeams;
+  const displayedTeams = visibleDrawTeams.filter((team) =>
     `${rider(team.headerId)?.name ?? ""} ${rider(team.heelerId)?.name ?? ""}`
       .toLowerCase()
       .includes(teamSearch.toLowerCase()),
@@ -2138,6 +2132,11 @@ function Teams({
   const entryButton = individualRegistration ? "Register rider" : "Add team";
   const canEdit = Boolean(event?.registrationOpen && !event?.drawLocked);
   const format = competitionTypes.find((type) => type.id === event?.competitionType);
+
+  useEffect(() => {
+    setDraftDraw(null);
+    setMessage("");
+  }, [event?.id]);
 
   const saveTeam = (team: Team) => {
     const duplicate = eventTeams.some(
@@ -2219,30 +2218,38 @@ function Teams({
         return;
       }
     }
-    onCommitDraw(event.id, generated);
-    setMessage(`Draw version ${event.drawHistory.length + 1} generated with ${generated.length} teams.`);
+    setDraftDraw(generated);
+    setMessage(
+      `Draft draw created with ${generated.length} teams. Review the order, then approve it before opening Run Desk.`,
+    );
+  };
+  const approveDraw = () => {
+    if (!event || !draftDraw?.length) return;
+    onCommitDraw(event.id, draftDraw);
+    setDraftDraw(null);
+    setMessage(
+      `Draw approved and locked. ${draftDraw.length} teams were sent to Run Desk.`,
+    );
   };
   const restoreDraw = (teams: Team[]) => {
     if (!event) return;
     const eligibleTeams = teams.filter((team) =>
       teamEligibleForCompetition(event, team, contestants),
     );
-    onCommitDraw(
-      event.id,
-      eligibleTeams.map((team) => ({
+    const restored: Team[] = eligibleTeams.map((team) => ({
         ...team,
         id: uid("team"),
         status: "ready",
         rawTime: null,
         penalties: 0,
         rolled: false,
-      })),
-    );
+      }));
+    setDraftDraw(restored);
     const excluded = teams.length - eligibleTeams.length;
     setMessage(
       excluded
-        ? `Draw restored without ${excluded} team${excluded === 1 ? "" : "s"} that exceed current handicap limits.`
-        : `Draw restored with ${eligibleTeams.length} teams.`,
+        ? `Draft restored without ${excluded} team${excluded === 1 ? "" : "s"} that exceed current handicap limits. Review and approve it.`
+        : `Draft restored with ${eligibleTeams.length} teams. Review and approve it.`,
     );
   };
 
@@ -2338,20 +2345,54 @@ function Teams({
       )}
       <div className="panel draw-sheet">
         <div className="table-toolbar">
-          <div><h3>Draw order</h3><p>{eventTeams.length} teams · {event?.drawHistory.length ?? 0} draw version{event?.drawHistory.length === 1 ? "" : "s"}</p></div>
+          <div>
+            <h3>{draftDraw ? "Draft draw — review before approval" : "Approved draw order"}</h3>
+            <p>{visibleDrawTeams.length} teams · {event?.drawHistory.length ?? 0} approved version{event?.drawHistory.length === 1 ? "" : "s"}</p>
+          </div>
           <div className="toolbar-actions">
             <label className="search draw-search"><Search size={15} /><input value={teamSearch} onChange={(e) => setTeamSearch(e.target.value)} placeholder="Search teams" /></label>
-            <button className="secondary" disabled={!eventTeams.length} onClick={() => event && exportDrawCsv(event, eventTeams, contestants)}><Download size={16} /> CSV</button>
-            <button className="secondary" disabled={!eventTeams.length} onClick={() => window.print()}><Printer size={16} /> Print / PDF</button>
+            <button className="secondary" disabled={!visibleDrawTeams.length} onClick={() => event && exportDrawCsv(event, visibleDrawTeams, contestants)}><Download size={16} /> CSV</button>
+            <button className="secondary" disabled={!visibleDrawTeams.length} onClick={() => window.print()}><Printer size={16} /> Print / PDF</button>
             {event && <button className="secondary" onClick={() => onUpdateEvent({ ...event, drawLocked: !event.drawLocked })}>{event.drawLocked ? <><Unlock size={16} /> Unlock</> : <><Lock size={16} /> Lock draw</>}</button>}
-            {event?.competitionType === "pick-only" && event.rounds === 1
-              ? <button className="primary" disabled={!eventTeams.length || event.drawLocked} onClick={generateDraw}><RefreshCw size={16} /> Randomize order</button>
-              : <button className="primary" disabled={!event || event.drawLocked} onClick={generateDraw}><Dices size={16} /> {eventTeams.length ? "Redraw" : "Generate draw"}</button>}
+            {draftDraw && (
+              <button className="secondary" onClick={() => setDraftDraw(null)}>
+                <X size={16} /> Discard draft
+              </button>
+            )}
+            <button
+              className={draftDraw ? "secondary" : "primary"}
+              disabled={
+                !event ||
+                event.drawLocked ||
+                (event.competitionType === "pick-only" && !eventTeams.length)
+              }
+              onClick={generateDraw}
+            >
+              {draftDraw ? <RefreshCw size={16} /> : <Dices size={16} />}
+              {draftDraw ? "Regenerate draft" : "Generate draft"}
+            </button>
+            {draftDraw && (
+              <button className="primary" onClick={approveDraw}>
+                <Check size={16} /> Approve and send to Run Desk
+              </button>
+            )}
           </div>
         </div>
         <div className="draw-list">
-          {displayedTeams.map((team) => (
-            <div className={`draw-row ${team.scratched ? "scratched-row" : ""}`} key={team.id}>
+          {event?.competitionType === "pick-and-draw" &&
+            displayedTeams.some((team) => team.generated) && (
+              <div className="draw-section-label">Draw Pot Teams</div>
+            )}
+          {displayedTeams.map((team, index) => (
+            <Fragment key={team.id}>
+              {event?.competitionType === "pick-and-draw" &&
+                !team.generated &&
+                (index === 0 || displayedTeams[index - 1]?.generated) && (
+                  <div className="draw-section-label picked">
+                    Picked Teams — run after the final draw team
+                  </div>
+                )}
+            <div className={`draw-row ${team.scratched ? "scratched-row" : ""}`}>
               <span className="draw-number large">{team.drawPosition}</span>
               <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}</small></span></div>
               <span className="pair-mark">&</span>
@@ -2373,8 +2414,9 @@ function Teams({
                 <button className="delete-action" title="Delete team" disabled={!canEdit} onClick={() => onDeleteTeam(team.id)}><Trash2 size={15} /></button>
               </span>
             </div>
+            </Fragment>
           ))}
-          {!displayedTeams.length && <EmptyState text={eventTeams.length ? "No teams match this search." : "No teams entered for this event yet."} />}
+          {!displayedTeams.length && <EmptyState text={visibleDrawTeams.length ? "No teams match this search." : "No teams entered for this event yet."} />}
         </div>
       </div>
       {event && event.drawHistory.length > 0 && (
@@ -2546,7 +2588,12 @@ function RunDesk({
   const roundCount = Math.max(event?.rounds ?? 1, 1);
   const activeRound = Math.min(selectedRound, roundCount);
   const allEventTeams = teams
-    .filter((team) => team.eventId === event?.id && !team.scratched)
+    .filter(
+      (team) =>
+        event?.drawApproved === true &&
+        team.eventId === event.id &&
+        !team.scratched,
+    )
     .sort((a, b) => a.drawPosition - b.drawPosition);
   const eventTeams = allEventTeams
     .filter((team) => team.round === activeRound)
@@ -2814,7 +2861,15 @@ function RunDesk({
   return (
     <>
       <PageIntro title="Run desk" text={event ? `Record times and publish standings for ${event.name}.` : "Select an event to open the run desk."} />
-      {event && (
+      {event && event.drawApproved !== true && (
+        <div className="notice">
+          <span>
+            No approved draw has been sent to Run Desk. Generate and approve the
+            draw in Teams & Draw first.
+          </span>
+        </div>
+      )}
+      {event && event.drawApproved === true && (
         <div className="run-desk-round-controls">
           <div className="round-tabs" role="tablist" aria-label="Competition rounds">
             {Array.from({ length: roundCount }, (_, index) => {
@@ -2855,7 +2910,7 @@ function RunDesk({
         </div>
       )}
       {rideInMessage && <div className="notice"><span>{rideInMessage}</span><button onClick={() => setRideInMessage("")}><X size={16} /></button></div>}
-      {event && activeRound === 1 && showRideInForm && (
+      {event && event.drawApproved === true && activeRound === 1 && showRideInForm && (
         <TeamForm
           event={event}
           contestants={contestants}

@@ -1,6 +1,5 @@
 import {
   contestantEligibleForRole,
-  registrationsForPickedTeam,
   teamHandicapTotal,
 } from "./competition";
 import type {
@@ -284,26 +283,9 @@ export function createOnlineSignup(
     points: 0,
     ...metadata,
   }));
-  const registrations =
-    event.competitionType === "pick-and-draw"
-      ? teams.flatMap((team, teamIndex) =>
-          registrationsForPickedTeam(event, team).map(
-            (registration, roleIndex) => ({
-              ...registration,
-              id: deterministicSignupId(
-                "registration",
-                request.submissionId,
-                `pick-${teamIndex + 1}-${roleIndex + 1}`,
-              ),
-              ...metadata,
-              notes: "",
-            }),
-          ),
-        )
-      : [];
   return {
     teams,
-    registrations: [...drawRegistrations, ...registrations],
+    registrations: drawRegistrations,
     existing: false,
   };
 }

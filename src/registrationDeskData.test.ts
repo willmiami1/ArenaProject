@@ -225,14 +225,13 @@ describe("registration desk boundary", () => {
     );
 
     expect(result.data.teams).toHaveLength(2);
-    expect(result.data.registrations).toHaveLength(3);
-    expect(result.data.registrations).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ contestantId: "rider", entries: 2 }),
-        expect.objectContaining({ sourceTeamId: result.data.teams[0].id }),
-        expect.objectContaining({ sourceTeamId: result.data.teams[1].id }),
-      ]),
-    );
+    expect(result.data.registrations).toEqual([
+      expect.objectContaining({
+        contestantId: "rider",
+        entries: 2,
+      }),
+    ]);
+    expect(result.data.registrations[0].sourceTeamId).toBeUndefined();
     expect(() =>
       submitLocalRegistrationDeskSignup(
         pickAndDrawData,
