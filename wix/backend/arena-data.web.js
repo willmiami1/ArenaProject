@@ -30,6 +30,11 @@ const registrationClosesAt = (event) =>
   new Date(`${event.date}T${event.startTime}:00`).getTime() -
   ONLINE_REGISTRATION_LEAD_MS;
 
+const publicRegistrationClosesAt = (event) => {
+  const timestamp = registrationClosesAt(event);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : "";
+};
+
 const onlineRegistrationIsOpen = (event, now = Date.now()) =>
   event.registrationOpen === true &&
   event.status !== "Complete" &&
@@ -451,7 +456,7 @@ function publicProjection(workspace) {
       }[event.competitionType] || "Competition",
       pickDrawRole: event.pickDrawRole,
       registrationOpen: onlineRegistrationIsOpen(event),
-      registrationClosesAt: new Date(registrationClosesAt(event)).toISOString(),
+      registrationClosesAt: publicRegistrationClosesAt(event),
       drawLocked: event.drawLocked === true,
       resultsPublished: event.resultsPublished === true,
       entriesAllowed: event.entriesAllowed,
