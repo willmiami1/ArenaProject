@@ -158,6 +158,7 @@
 .public-spectator-grid { display: grid; grid-template-columns: 1fr; gap: 34px; align-items: start; }
 .public-spectator-grid>form,.public-spectator-leaders { display: grid; gap: 18px; padding: clamp(24px,4vw,42px); background: #17130f; border: 1px solid rgba(234,220,198,.22); box-shadow: 8px 9px 0 rgba(166,108,67,.32); }
 .public-spectator-grid h2 { margin: 0 0 10px; font-family: "Manrope",sans-serif; font-size: clamp(34px,4vw,52px); }
+.public-round-announcement { padding: 14px 16px; color: #1a120b; background: var(--public-gold); border: 2px solid #f7d494; font-family: "Manrope",sans-serif; font-size: clamp(15px,2vw,22px); font-weight: 900; text-align: center; text-transform: uppercase; letter-spacing: .06em; }
 .public-play-title span,.public-play-title strong { display: block; }
 .public-play-title span { color: var(--public-tan); font-size: .38em; font-weight: 800; text-transform: uppercase; letter-spacing: .2em; }
 .public-play-title strong { margin-top: 5px; color: var(--public-cream); font-size: 1em; line-height: .95; }

@@ -225,6 +225,16 @@ function SpectatorPage({
   const [choice, setChoice] = useState<SpectatorChoice>("cowboys");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [roundAnnouncement, setRoundAnnouncement] = useState("");
+  const selectedRun =
+    competition?.predictionRuns.find((run) => run.open) ??
+    competition?.predictionRuns[0];
+  const activeRound =
+    selectedRun?.round ??
+    Math.max(
+      1,
+      ...(competition?.spectatorLeaderboards.map((row) => row.round) ?? []),
+    );
   useEffect(() => {
     window.sessionStorage.removeItem("arena-spectator-phone");
   }, []);
@@ -236,12 +246,22 @@ function SpectatorPage({
       window.sessionStorage.removeItem("arena-spectator-name");
     }
   }, [name]);
+  useEffect(() => {
+    if (!competition?.id || !activeRound) return;
+    const storageKey = `arena-spectator-round-${competition.id}`;
+    const previousRound = Number(window.sessionStorage.getItem(storageKey) || 0);
+    if (activeRound > previousRound) {
+      setChoice("cowboys");
+      setMessage("");
+      setRoundAnnouncement(
+        activeRound > 1 ? `A new round is starting — Round ${activeRound}` : "",
+      );
+    }
+    window.sessionStorage.setItem(storageKey, String(activeRound));
+  }, [activeRound, competition?.id]);
   if (!competition || competition.status !== "Live") {
     return <NotFound />;
   }
-  const selectedRun =
-    competition.predictionRuns.find((run) => run.open) ??
-    competition.predictionRuns[0];
   const teamId = selectedRun?.id ?? "";
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -298,9 +318,6 @@ function SpectatorPage({
       setBusy(false);
     }
   };
-  const rounds = Array.from(
-    new Set(competition.spectatorLeaderboards.map((row) => row.round)),
-  );
   return (
     <section className="public-spectator">
       <ReturnToEventsLink />
@@ -311,6 +328,11 @@ function SpectatorPage({
       </div>
       <div className="public-spectator-grid">
         <form onSubmit={submit}>
+          {roundAnnouncement && (
+            <div className="public-round-announcement" role="status">
+              {roundAnnouncement}
+            </div>
+          )}
           <h2 className="public-play-title">
             <span>Play</span>
             <strong>Cowboys × Steer</strong>
@@ -389,11 +411,24 @@ function SpectatorPage({
           {message && <p className="public-form-message" role="status">{message}</p>}
         </form>
         <div className="public-spectator-leaders">
-          <h2>Round leaderboards</h2>
-          {(rounds.length ? rounds : [1]).map((round) => {
-            const rows = competition.spectatorLeaderboards.filter((row) => row.round === round);
-            return <section key={round}><h3>Round {round}</h3>{rows.length ? rows.map((row, index) => <div className="public-spectator-row" key={`${round}-${index}-${row.name}`}><strong>{index + 1}</strong><span>{row.name}</span><b>{row.correct} pts</b></div>) : <p>No scored picks yet.</p>}</section>;
-          })}
+          <h2>Round {activeRound} leaderboard</h2>
+          <section>
+            {competition.spectatorLeaderboards
+              .filter((row) => row.round === activeRound)
+              .map((row, index) => (
+                <div
+                  className="public-spectator-row"
+                  key={`${activeRound}-${index}-${row.name}`}
+                >
+                  <strong>{index + 1}</strong>
+                  <span>{row.name}</span>
+                  <b>{row.correct} pts</b>
+                </div>
+              ))}
+            {!competition.spectatorLeaderboards.some(
+              (row) => row.round === activeRound,
+            ) && <p>No scored picks yet.</p>}
+          </section>
         </div>
       </div>
     </section>
