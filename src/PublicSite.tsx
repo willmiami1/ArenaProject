@@ -151,15 +151,16 @@ function PublicHeader() {
         className="public-menu"
         aria-label={open ? "Close navigation" : "Open navigation"}
         aria-expanded={open}
+        aria-controls="public-navigation"
         onClick={() => setOpen((value) => !value)}
       >
         {open ? <X /> : <Menu />}
       </button>
-      <nav className={open ? "open" : ""} aria-label="Public navigation">
-        <a href={href("home")}>Home</a>
-        <a href={eventsHref}>Events</a>
-        <a href={operationalHref("registration")}><ClipboardPen size={16} /> Registration Desk</a>
-        <a href={operationalHref("command")}><ShieldCheck size={16} /> Admin login</a>
+      <nav id="public-navigation" className={open ? "open" : ""} aria-label="Public navigation">
+        <a href={href("home")} onClick={() => setOpen(false)}>Home</a>
+        <a href={eventsHref} onClick={() => setOpen(false)}>Events</a>
+        <a href={operationalHref("registration")} onClick={() => setOpen(false)}><ClipboardPen size={16} /> Registration Desk</a>
+        <a href={operationalHref("command")} onClick={() => setOpen(false)}><ShieldCheck size={16} /> Admin login</a>
         <SocialLinks />
       </nav>
     </header>
