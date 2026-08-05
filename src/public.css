@@ -169,7 +169,7 @@
 .public-steer-picture img { width: 100%; height: 276px; padding: 8px; background: #2b1b12; object-fit: contain; object-position: center; }
 .public-cowboy-roster { min-height: 340px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1px; background: #806047; }
 .public-cowboy-rider { min-width: 0; display: grid; justify-items: center; align-content: center; gap: 11px; padding: 18px 10px; color: var(--public-cream); background: #59371f; text-align: center; }
-.public-cowboy-rider>small { color: #fff; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .12em; }
+.public-cowboy-rider>small { color: #fff; font-size: clamp(18px,2.3vw,28px); font-weight: 900; text-transform: uppercase; letter-spacing: .12em; }
 .public-pick-card .public-cowboy-rider>strong { max-width: 100%; overflow: hidden; color: #fff; font-family: "Manrope",sans-serif; font-size: clamp(17px,2vw,24px); text-overflow: ellipsis; white-space: nowrap; }
 .public-cowboy-avatar { width: clamp(105px,13vw,150px); height: clamp(105px,13vw,150px); display: grid; place-items: center; overflow: hidden; color: #fff3d7; background: #17130f; border: 3px solid #e2b65f; border-radius: 50%; font-family: "Manrope",sans-serif; font-size: clamp(25px,3vw,38px); font-weight: 900; }
 .public-cowboy-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; }
@@ -180,6 +180,7 @@
 .public-pick-card strong { overflow-wrap: anywhere; font-family: "Manrope",sans-serif; font-size: 14px; line-height: 1.25; }
 .public-pick-card small { color: var(--public-muted); font-size: 10px; }
 .public-pick-card.selected small { color: #674a33; }
+.public-pick-card.selected .public-cowboy-rider>small { color: #fff; }
 .public-pick-buttons { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .public-pick-buttons .public-button:last-child { color: var(--public-cream); background: #59371f; }
 .public-pick-buttons .public-button:last-child:hover { color: #17130f; background: var(--public-cream); }
