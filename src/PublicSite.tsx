@@ -6,8 +6,10 @@ import {
   Clock3,
   Facebook,
   Instagram,
+  Mail,
   MapPin,
   Menu,
+  Phone,
   ShieldCheck,
   Smile,
   Trophy,
@@ -462,6 +464,31 @@ function HomePage({ data }: { data: PublicArenaData }) {
             </a>
           ))}
         </div>
+      </section>
+      <section className="public-contact" aria-labelledby="arena-contact-title">
+        <div className="public-contact-heading">
+          <span>Visit the ranch</span>
+          <h2 id="arena-contact-title">Destiny Ranch Arena</h2>
+          <p>Questions about an event or online entry? Contact our arena team.</p>
+        </div>
+        <address className="public-contact-details">
+          <a
+            href="https://www.google.com/maps/search/?api=1&query=2549+E+C+476+Bushnell+FL+33513"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <MapPin />
+            <span><strong>Address</strong>2549 E C 476<br />Bushnell, FL 33513</span>
+          </a>
+          <a href="tel:+19545202631">
+            <Phone />
+            <span><strong>Phone</strong>954-520-2631</span>
+          </a>
+          <a href="mailto:admin@destinyranchevents.com">
+            <Mail />
+            <span><strong>Email</strong>admin@destinyranchevents.com</span>
+          </a>
+        </address>
       </section>
     </>
   );

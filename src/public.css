@@ -90,6 +90,17 @@
 .public-flyer-grid a { display: block; padding: 8px; background: #17130f; border: 1px solid rgba(234,220,198,.24); box-shadow: 8px 9px 0 rgba(166,108,67,.34); transition: transform .2s ease,box-shadow .2s ease; }
 .public-flyer-grid a:hover { transform: translateY(-5px); box-shadow: 11px 14px 0 rgba(166,108,67,.48); }
 .public-flyer-grid img { width: 100%; height: auto; display: block; }
+.public-contact { display: grid; grid-template-columns: minmax(260px,.8fr) minmax(0,1.2fr); gap: clamp(32px,6vw,90px); margin-top: clamp(85px,11vw,150px); padding: clamp(38px,6vw,72px); background: #17130f; border: 1px solid rgba(234,220,198,.24); box-shadow: 9px 10px 0 rgba(166,108,67,.4); }
+.public-contact-heading { align-self: center; }
+.public-contact-heading>span { color: var(--public-tan); font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .18em; }
+.public-contact-heading h2 { margin: 10px 0 16px; font-family: "Manrope",sans-serif; font-size: clamp(32px,4.4vw,60px); line-height: 1; letter-spacing: -.04em; }
+.public-contact-heading p { max-width: 43ch; margin: 0; color: var(--public-muted); line-height: 1.6; }
+.public-contact-details { display: grid; margin: 0; font-style: normal; border-top: 1px solid rgba(234,220,198,.2); }
+.public-contact-details a { min-height: 104px; display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 18px; padding: 20px 8px; border-bottom: 1px solid rgba(234,220,198,.2); }
+.public-contact-details a:hover { color: var(--public-tan); }
+.public-contact-details svg { color: var(--public-tan); }
+.public-contact-details span { overflow-wrap: anywhere; font-size: clamp(14px,1.5vw,18px); line-height: 1.45; }
+.public-contact-details strong { display: block; margin-bottom: 4px; color: var(--public-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .14em; }
 .public-index-head,.public-page-head { padding: 80px 0 65px; }
 .public-index-head h1,.public-page-head h1 { max-width: 17ch; font-size: clamp(48px,7vw,86px); }
 .public-index-head p,.public-page-head>p { max-width: 65ch; margin: 22px 0; color: var(--public-muted); font-size: 16px; line-height: 1.6; }
@@ -206,6 +217,7 @@
   .public-trust-strip { grid-template-columns: 1fr; }
   .public-trust-strip>div { min-height: 130px; }
   .public-flyer-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .public-contact { grid-template-columns: 1fr; }
   .public-rules dl { grid-template-columns: repeat(2,1fr); }
   .public-spectator-grid { grid-template-columns: 1fr; }
   .public-footer { grid-template-columns: 1fr 1fr; }
@@ -245,6 +257,8 @@
   .public-account-form .public-button { grid-column: auto; }
   .public-spectator-grid .public-pick-choices { grid-template-columns: 1fr; }
   .public-pick-buttons { grid-template-columns: 1fr; }
+  .public-contact { padding: 30px 22px; }
+  .public-contact-details a { min-height: 90px; grid-template-columns: 34px 1fr; }
   .public-footer { grid-template-columns: 1fr; padding: 42px 22px; }
   .public-footer-connect { grid-column: auto; }
 }
