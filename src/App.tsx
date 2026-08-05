@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import {
   ArrowRight,
   Camera,
@@ -17,6 +17,7 @@ import {
   FileBarChart,
   Gauge,
   GitFork,
+  GripVertical,
   Handshake,
   LayoutDashboard,
   LogIn,
@@ -70,6 +71,7 @@ import {
   entryClearedForDraw,
   generateCompetitionDraw,
   pickedTeamRidersMissingFromDraw,
+  reorderDraftDrawTeams,
   teamEligibleForCompetition,
   teamHandicapTotal,
 } from "./competition";
@@ -2109,6 +2111,7 @@ function Teams({
   const [message, setMessage] = useState("");
   const [teamSearch, setTeamSearch] = useState("");
   const [draftDraw, setDraftDraw] = useState<Team[] | null>(null);
+  const [draggedTeamId, setDraggedTeamId] = useState("");
   const eventTeams = teams.filter((team) => team.eventId === event?.id).sort((a, b) => a.drawPosition - b.drawPosition);
   const eventRegistrations = registrations.filter(
     (entry) => entry.eventId === event?.id && !entry.sourceTeamId,
@@ -2135,8 +2138,32 @@ function Teams({
 
   useEffect(() => {
     setDraftDraw(null);
+    setDraggedTeamId("");
     setMessage("");
   }, [event?.id]);
+
+  const dropDraftTeam = (targetTeamId: string) => {
+    if (!draftDraw || !draggedTeamId) return;
+    const movingTeam = draftDraw.find((team) => team.id === draggedTeamId);
+    const targetTeam = draftDraw.find((team) => team.id === targetTeamId);
+    if (
+      movingTeam &&
+      targetTeam &&
+      Boolean(movingTeam.generated) !== Boolean(targetTeam.generated)
+    ) {
+      setMessage(
+        "Draw Pot teams must remain before Picked Teams. Reorder teams within their own section.",
+      );
+      setDraggedTeamId("");
+      return;
+    }
+    setDraftDraw((current) =>
+      current
+        ? reorderDraftDrawTeams(current, draggedTeamId, targetTeamId)
+        : current,
+    );
+    setDraggedTeamId("");
+  };
 
   const saveTeam = (team: Team) => {
     const duplicate = eventTeams.some(
@@ -2367,7 +2394,7 @@ function Teams({
         <div className="table-toolbar">
           <div>
             <h3>{draftDraw ? "Draft draw — review before approval" : "Approved draw order"}</h3>
-            <p>{visibleDrawTeams.length} teams · {event?.drawHistory.length ?? 0} approved version{event?.drawHistory.length === 1 ? "" : "s"}</p>
+            <p>{visibleDrawTeams.length} teams · {event?.drawHistory.length ?? 0} approved version{event?.drawHistory.length === 1 ? "" : "s"}{draftDraw ? " · Drag teams to reorder before approval" : ""}</p>
           </div>
           <div className="toolbar-actions">
             <label className="search draw-search"><Search size={15} /><input value={teamSearch} onChange={(e) => setTeamSearch(e.target.value)} placeholder="Search teams" /></label>
@@ -2412,8 +2439,31 @@ function Teams({
                     Picked Teams — run after the final draw team
                   </div>
                 )}
-            <div className={`draw-row ${team.scratched ? "scratched-row" : ""}`}>
-              <span className="draw-number large">{team.drawPosition}</span>
+            <div
+              className={`draw-row ${team.scratched ? "scratched-row" : ""} ${draftDraw ? "draggable-draw-row" : ""} ${draggedTeamId === team.id ? "dragging" : ""}`}
+              draggable={Boolean(draftDraw && !teamSearch)}
+              onDragStart={(dragEvent: DragEvent<HTMLDivElement>) => {
+                if (!draftDraw || teamSearch) return;
+                setDraggedTeamId(team.id);
+                dragEvent.dataTransfer.effectAllowed = "move";
+                dragEvent.dataTransfer.setData("text/plain", team.id);
+              }}
+              onDragOver={(dragEvent) => {
+                if (draftDraw && draggedTeamId && !teamSearch) {
+                  dragEvent.preventDefault();
+                  dragEvent.dataTransfer.dropEffect = "move";
+                }
+              }}
+              onDrop={(dragEvent) => {
+                dragEvent.preventDefault();
+                dropDraftTeam(team.id);
+              }}
+              onDragEnd={() => setDraggedTeamId("")}
+            >
+              <span className="draw-number large">
+                {draftDraw && !teamSearch && <GripVertical className="draw-drag-handle" size={16} />}
+                {team.drawPosition}
+              </span>
               <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}</small></span></div>
               <span className="pair-mark">&</span>
               <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}</small></span></div>

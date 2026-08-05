@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { defaultCompetitionSettings, generateCompetitionDraw } from "./competition";
+import {
+  defaultCompetitionSettings,
+  generateCompetitionDraw,
+  reorderDraftDrawTeams,
+} from "./competition";
 import {
   competitionGroup,
   parsePublicRoute,
@@ -329,6 +333,7 @@ describe("online signup", () => {
       pickDrawRole: "both",
       allowRepeatPartners: true,
     });
+
     const fixedTeam = run({
       id: "picked-team",
       status: "ready",
@@ -370,6 +375,24 @@ describe("online signup", () => {
     expect(draw.map((team) => team.generated)).toEqual([true, false]);
     expect(draw.map((team) => team.drawPosition)).toEqual([1, 2]);
     expect(draw[draw.length - 1]?.id).toBe("picked-team");
+  });
+
+  it("reorders draft teams only within the same draw section", () => {
+    const generatedOne = run({ id: "generated-1", generated: true, drawPosition: 1 });
+    const generatedTwo = run({ id: "generated-2", generated: true, drawPosition: 2 });
+    const picked = run({ id: "picked", generated: false, drawPosition: 3 });
+    const teams = [generatedOne, generatedTwo, picked];
+
+    expect(
+      reorderDraftDrawTeams(teams, "generated-2", "generated-1").map(
+        (team) => [team.id, team.drawPosition],
+      ),
+    ).toEqual([
+      ["generated-2", 1],
+      ["generated-1", 2],
+      ["picked", 3],
+    ]);
+    expect(reorderDraftDrawTeams(teams, "picked", "generated-1")).toBe(teams);
   });
 
   it("removes legacy picked-team registrations from the Draw Pot pool", () => {

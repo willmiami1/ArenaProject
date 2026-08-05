@@ -239,6 +239,11 @@ main { grid-column: 2; min-width: 0; }
 .draw-section-label.picked { color: #e0bd90; background: #352518; border-color: #68492f; }
 .draw-row { min-height: 73px; display: grid; grid-template-columns: 50px 1fr 25px 1fr auto 120px; align-items: center; gap: 15px; border-bottom: 1px solid #efefeb; }
 .draw-row:last-child { border: 0; }
+.draggable-draw-row { cursor: grab; transition: opacity .15s ease, background-color .15s ease; }
+.draggable-draw-row:active { cursor: grabbing; }
+.draggable-draw-row.dragging { opacity: .45; background: #f6efe5; }
+.draw-number:has(.draw-drag-handle) { display: flex; align-items: center; gap: 3px; }
+.draw-drag-handle { flex: 0 0 auto; color: #9a806c; }
 .pair-mark { color: #a7aea9; font-family: Georgia, serif; font-style: italic; }
 .draw-status { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .draw-status small { color: var(--muted); font-size: 9px; }

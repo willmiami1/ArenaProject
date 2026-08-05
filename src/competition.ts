@@ -316,6 +316,30 @@ export function pickedTeamRidersMissingFromDraw(
   );
 }
 
+export function reorderDraftDrawTeams(
+  teams: Team[],
+  movingTeamId: string,
+  targetTeamId: string,
+) {
+  const movingIndex = teams.findIndex((team) => team.id === movingTeamId);
+  const targetIndex = teams.findIndex((team) => team.id === targetTeamId);
+  if (
+    movingIndex < 0 ||
+    targetIndex < 0 ||
+    movingIndex === targetIndex ||
+    Boolean(teams[movingIndex].generated) !== Boolean(teams[targetIndex].generated)
+  ) {
+    return teams;
+  }
+  const reordered = [...teams];
+  const [movingTeam] = reordered.splice(movingIndex, 1);
+  reordered.splice(targetIndex, 0, movingTeam);
+  return reordered.map((team, index) => ({
+    ...team,
+    drawPosition: index + 1,
+  }));
+}
+
 function pickAndDrawTeams(
   event: ArenaEvent,
   fixedTeams: Team[],
