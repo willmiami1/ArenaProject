@@ -81,6 +81,30 @@ export interface PublicSpectatorLeaderboardRow {
   correct: number;
 }
 
+export function aggregatePublicSpectatorLeaderboard(
+  rows: PublicSpectatorLeaderboardRow[],
+) {
+  const totals = new Map<string, PublicSpectatorLeaderboardRow>();
+  rows.forEach((row) => {
+    const key = row.name.trim().toLowerCase();
+    const current = totals.get(key) ?? {
+      name: row.name,
+      round: 0,
+      picks: 0,
+      correct: 0,
+    };
+    current.picks += row.picks;
+    current.correct += row.correct;
+    totals.set(key, current);
+  });
+  return [...totals.values()].sort(
+    (left, right) =>
+      right.correct - left.correct ||
+      right.picks - left.picks ||
+      left.name.localeCompare(right.name),
+  );
+}
+
 export interface PublicPredictionRun {
   id: string;
   round: number;

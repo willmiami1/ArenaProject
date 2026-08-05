@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { seedData } from "./data";
 import {
+  aggregatePublicSpectatorLeaderboard,
   competitionGroup,
   parsePublicRoute,
   projectPublicArenaData,
@@ -27,6 +28,7 @@ import {
   type PublicCompetition,
   type PublicMeet,
   type PublicRoute,
+  type PublicSpectatorLeaderboardRow,
 } from "./publicData";
 import {
   createContestantAccount,
@@ -665,6 +667,76 @@ function ResultsTable({ competition }: { competition: PublicCompetition }) {
   );
 }
 
+function SpectatorWinnerTable({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: PublicSpectatorLeaderboardRow[];
+}) {
+  return (
+    <article className="public-published-picks-card">
+      <h3>{title}</h3>
+      {rows.length ? (
+        <div>
+          {rows.map((row, index) => (
+            <div
+              className={`public-spectator-row${index === 0 ? " winner" : ""}`}
+              key={`${title}-${row.name}`}
+            >
+              <strong>{index + 1}</strong>
+              <span>
+                {row.name}
+                {index === 0 && <small>Winner</small>}
+              </span>
+              <b>{row.correct} / {row.picks} correct</b>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p>No scored picks.</p>
+      )}
+    </article>
+  );
+}
+
+function PublishedSpectatorWinners({
+  competition,
+}: {
+  competition: PublicCompetition;
+}) {
+  const rounds = Array.from(
+    { length: Math.max(competition.rounds, 1) },
+    (_, index) => index + 1,
+  );
+  const overall = aggregatePublicSpectatorLeaderboard(
+    competition.spectatorLeaderboards,
+  );
+  return (
+    <section className="public-detail-section public-published-picks">
+      <div className="public-section-heading">
+        <div>
+          <span>Cowboys × Steer</span>
+          <h2>Spectator winners</h2>
+        </div>
+        <span>Published by arena staff</span>
+      </div>
+      <div className="public-published-picks-grid">
+        {rounds.map((round) => (
+          <SpectatorWinnerTable
+            key={round}
+            title={`Round ${round}`}
+            rows={competition.spectatorLeaderboards.filter(
+              (row) => row.round === round,
+            )}
+          />
+        ))}
+        <SpectatorWinnerTable title="All rounds overall" rows={overall} />
+      </div>
+    </section>
+  );
+}
+
 function CompetitionPage({ competition, meet }: { competition?: PublicCompetition; meet?: PublicMeet }) {
   if (!competition) return <NotFound />;
   return (
@@ -715,6 +787,9 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
         <div className="public-section-heading"><h2>{competition.status === "Live" ? "Live standings" : "Official results"}</h2>{competition.resultsPublished && <span>Published by arena staff</span>}</div>
         <ResultsTable competition={competition} />
       </section>
+      {competition.resultsPublished && (
+        <PublishedSpectatorWinners competition={competition} />
+      )}
     </>
   );
 }

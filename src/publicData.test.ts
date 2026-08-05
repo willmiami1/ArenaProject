@@ -9,6 +9,7 @@ import {
   slideTimeAdjustment,
 } from "./competition";
 import {
+  aggregatePublicSpectatorLeaderboard,
   competitionGroup,
   parsePublicRoute,
   projectPublicArenaData,
@@ -995,6 +996,20 @@ describe("workspace compatibility", () => {
         picks: 2,
         correct: 2,
       });
+    });
+
+    it("combines spectator scores across all rounds", () => {
+      expect(
+        aggregatePublicSpectatorLeaderboard([
+          { name: "Taylor Fan", round: 1, picks: 2, correct: 2 },
+          { name: "Morgan Fan", round: 1, picks: 2, correct: 1 },
+          { name: "Taylor Fan", round: 2, picks: 3, correct: 1 },
+          { name: "Morgan Fan", round: 2, picks: 3, correct: 3 },
+        ]),
+      ).toEqual([
+        { name: "Morgan Fan", round: 0, picks: 5, correct: 4 },
+        { name: "Taylor Fan", round: 0, picks: 5, correct: 3 },
+      ]);
     });
 
     it("scores a Cowboys pick only when a run time is entered", () => {
