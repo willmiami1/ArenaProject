@@ -228,6 +228,14 @@ function SpectatorPage({
   useEffect(() => {
     window.sessionStorage.removeItem("arena-spectator-phone");
   }, []);
+  useEffect(() => {
+    const spectatorName = name.trim();
+    if (spectatorName) {
+      window.sessionStorage.setItem("arena-spectator-name", name);
+    } else {
+      window.sessionStorage.removeItem("arena-spectator-name");
+    }
+  }, [name]);
   if (!competition || competition.status !== "Live") {
     return <NotFound />;
   }
@@ -307,7 +315,16 @@ function SpectatorPage({
             <span>Play</span>
             <strong>Cowboys × Steer</strong>
           </h2>
-          <label>Name<input required maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
+          <label>
+            Enter name or avatar to play
+            <input
+              required
+              maxLength={80}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Name or avatar"
+            />
+          </label>
           {selectedRun?.open && selectedRun.closesAt && (
             <p className="public-pick-cutoff">Picks close {new Date(selectedRun.closesAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>
           )}
