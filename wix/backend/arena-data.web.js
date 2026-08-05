@@ -1941,7 +1941,7 @@ export const submitSpectatorPrediction = webMethod(
           nextSpectator,
         );
         if (!spectatorInserted) {
-          const latestSpectators = await readCollection(COLLECTIONS.spectators);
+          const latestSpectators = await readAll(COLLECTIONS.spectators);
           const persistedSpectator = latestSpectators.find(
             (item) => item.id === spectatorId,
           );
