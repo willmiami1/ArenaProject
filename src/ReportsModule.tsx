@@ -107,6 +107,8 @@ const escapeHtml = (value: unknown) =>
     .replace(/"/g, "&quot;");
 
 const csvValue = (value: unknown) => `"${String(value).replace(/"/g, '""')}"`;
+const isHorseColumn = (key: string) =>
+  key === "horse" || key === "horses" || key.endsWith("Horse");
 
 function saveBlob(content: BlobPart, type: string, fileName: string) {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -140,6 +142,7 @@ table { width:100%; border-collapse:collapse; }
 th { color:#fff; background:#285f46; text-align:left; }
 th,td { padding:6px 7px; border:1px solid #dfe3df; }
 tr { break-inside:avoid; } tr:nth-child(even) td { background:#f8faf8; }
+td.horse { color:#6e7872; font-size:8px; font-weight:700; }
 footer { margin-top:12px; padding-top:8px; display:flex; justify-content:space-between; color:#737d77; border-top:1px solid #dfe3df; font-size:9px; }
 </style></head><body>
 <header>
@@ -149,7 +152,7 @@ footer { margin-top:12px; padding-top:8px; display:flex; justify-content:space-b
 </header>
 <div class="summary">${report.metrics.slice(0, 10).map((metric) => `<div><span>${escapeHtml(metric.label)}</span><strong>${escapeHtml(metric.value)}</strong></div>`).join("")}</div>
 <table><thead><tr>${visibleColumns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr></thead>
-<tbody>${report.rows.map((row) => `<tr>${visibleColumns.map((column) => `<td>${escapeHtml(row[column.key] ?? "—")}</td>`).join("")}</tr>`).join("")}</tbody></table>
+<tbody>${report.rows.map((row) => `<tr>${visibleColumns.map((column) => `<td${isHorseColumn(column.key) ? ' class="horse"' : ""}>${escapeHtml(row[column.key] ?? "—")}</td>`).join("")}</tr>`).join("")}</tbody></table>
 <footer><span>Destiny Ranch Arena · ${escapeHtml(report.definition.title)}</span><span>Page 1 of ${pages}</span></footer>
 </body></html>`;
 }
@@ -452,11 +455,15 @@ export function ReportsModule({ data }: { data: ArenaData }) {
             borderWidth: 0.4,
           });
           page.drawText(
-            fitText(row[column.key] ?? "—", columnWidth - 8, 6.5),
+            fitText(
+              row[column.key] ?? "—",
+              columnWidth - 8,
+              isHorseColumn(column.key) ? 5.4 : 6.5,
+            ),
             {
               x: x + 4,
               y: y + 5,
-              size: 6.5,
+              size: isHorseColumn(column.key) ? 5.4 : 6.5,
               font: regular,
               color: rgb(0.15, 0.2, 0.17),
             },
@@ -524,6 +531,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
           return {
             value,
             type: typeof value === "number" ? Number : String,
+            ...(isHorseColumn(column.key) ? { fontSize: 8 } : {}),
           };
         }),
       ),
@@ -804,7 +812,7 @@ export function ReportsModule({ data }: { data: ArenaData }) {
         <div className="report-table-wrap">
           <table className="report-table">
             <thead><tr>{visibleReportColumns.map((column) => <th key={column.key}><button onClick={() => setSort((current) => ({ key: column.key, direction: current.key === column.key && current.direction === "asc" ? "desc" : "asc" }))}>{column.label}{sort.key === column.key ? (sort.direction === "asc" ? " ↑" : " ↓") : ""}</button></th>)}</tr></thead>
-            <tbody>{pageRows.map((row, index) => <tr key={`${page}-${index}`}>{visibleReportColumns.map((column) => <td key={column.key}>{row[column.key] ?? "—"}</td>)}</tr>)}</tbody>
+            <tbody>{pageRows.map((row, index) => <tr key={`${page}-${index}`}>{visibleReportColumns.map((column) => <td className={isHorseColumn(column.key) ? "report-horse" : undefined} key={column.key}>{row[column.key] ?? "—"}</td>)}</tr>)}</tbody>
           </table>
           {!pageRows.length && <div className="empty-state"><FileText size={27} /><p>No records match the selected report filters.</p></div>}
         </div>

@@ -88,7 +88,6 @@ import type {
   Contestant,
   EventRegistration,
   EventStatus,
-  PickDrawRole,
   Team,
   View,
 } from "./types";
@@ -184,7 +183,10 @@ function StaffApp() {
     url.searchParams.set("display", "leaderboard");
     url.searchParams.set("event", activeEvent.id);
     url.searchParams.set("round", String(latestRound));
-    window.location.assign(url.toString());
+    const popup = window.open(url.toString(), "_blank", "noopener,noreferrer");
+    if (!popup) {
+      window.alert("Allow pop-ups to open the LED screen in a new tab.");
+    }
   };
   const openContestantPortal = () => {
     const url = new URL(window.location.href);
@@ -923,7 +925,7 @@ function LedLeaderboard({
       : finalRoundLeaderTotal - currentTeamPriorTotal - 0.01;
   const rider = (id: string) =>
     data.contestants.find((contestant) => contestant.id === id);
-  const ledRider = (id: string) => {
+  const ledRider = (id: string, horseName?: string) => {
     const contestant = rider(id);
     const name = contestant?.name ?? "Unknown";
     return (
@@ -933,7 +935,10 @@ function LedLeaderboard({
             ? <img src={contestant.photo} alt={`${name} profile`} />
             : <span aria-hidden="true">{initials(name)}</span>}
         </span>
-        <strong>{name}</strong>
+        <span className="led-rider-name">
+          {horseName && <small>{horseName}</small>}
+          <strong>{name}</strong>
+        </span>
       </span>
     );
   };
@@ -978,9 +983,9 @@ function LedLeaderboard({
         {currentTeam && (
           <>
             <div className="led-current-riders">
-              {ledRider(currentTeam.headerId)}
+              {ledRider(currentTeam.headerId, currentTeam.headerHorseName)}
               <i>&</i>
-              {ledRider(currentTeam.heelerId)}
+              {ledRider(currentTeam.heelerId, currentTeam.heelerHorseName)}
             </div>
             {isFinalRound && (
               <div className="led-current-targets">
@@ -1011,7 +1016,7 @@ function LedLeaderboard({
             return (
               <div className={`led-row led-place-${index + 1}`} key={team.id}>
                 <span className="led-place">{index + 1}</span>
-                <span className="led-team">{ledRider(team.headerId)}<i>&</i>{ledRider(team.heelerId)}</span>
+                <span className="led-team">{ledRider(team.headerId, team.headerHorseName)}<i>&</i>{ledRider(team.heelerId, team.heelerHorseName)}</span>
                 <span className="led-rounds">{completedRounds} / {event.rounds}</span>
                 <span className="led-total">{teamQualifiedTotal(team, eventTeams, undefined, event, data.contestants).toFixed(2)}</span>
               </div>
@@ -1026,7 +1031,7 @@ function LedLeaderboard({
         {nextTeam ? (
           <>
             <span className="led-next-draw">Draw #{nextTeam.drawPosition}</span>
-            <span className="led-next-team">{ledRider(nextTeam.headerId)}<i>&</i>{ledRider(nextTeam.heelerId)}</span>
+            <span className="led-next-team">{ledRider(nextTeam.headerId, nextTeam.headerHorseName)}<i>&</i>{ledRider(nextTeam.heelerId, nextTeam.heelerHorseName)}</span>
             {nextTeam.rolled && <span className="led-rolled">Rolled</span>}
           </>
         ) : <span className="led-next-team">Round complete</span>}
@@ -1423,7 +1428,7 @@ function EventForm({
     status: event?.status ?? "Upcoming" as EventStatus,
     entryFee: event?.entryFee.toString() ?? "60",
     competitionType: competitionType ?? event?.competitionType ?? defaultCompetitionSettings.competitionType,
-    pickDrawRole: event?.pickDrawRole ?? defaultCompetitionSettings.pickDrawRole,
+    pickDrawRole: "both" as const,
     registrationOpen: event?.registrationOpen ?? true,
     entriesAllowed: (event?.entriesAllowed ?? 1).toString(),
     minDrawsAllowed: (event?.minDrawsAllowed ?? 0).toString(),
@@ -1450,6 +1455,7 @@ function EventForm({
     onSubmit({
       ...event,
       ...form,
+      pickDrawRole: "both",
       id: event?.id ?? uid("event"),
       parentEventId: parent.id,
       date: parent.date,
@@ -1506,9 +1512,6 @@ function EventForm({
       <div className="form-grid">
         <Field label="Entry fee"><input required min="0" type="number" value={form.entryFee} onChange={(e) => setForm({ ...form, entryFee: e.target.value })} /></Field>
         <Field label="Competition type"><select value={form.competitionType} onChange={(e) => setForm({ ...form, competitionType: e.target.value as CompetitionType })}>{competitionTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}</select></Field>
-        {form.competitionType === "pick-and-draw" && (
-          <Field label="Draw assignment"><select value={form.pickDrawRole} onChange={(e) => setForm({ ...form, pickDrawRole: e.target.value as PickDrawRole })}><option value="header">Draw Header</option><option value="heeler">Draw Heeler</option><option value="both">Draw Both</option></select></Field>
-        )}
         <Field label="Maximum runs allowed"><input required type="number" min="1" value={form.entriesAllowed} onChange={(e) => setForm({ ...form, entriesAllowed: e.target.value })} /><small>Total draw and picked runs allowed per contestant.</small></Field>
         {form.competitionType === "pick-and-draw" && (
           <Field label="Minimum draws required"><input required type="number" min="0" max={form.entriesAllowed} value={form.minDrawsAllowed} onChange={(e) => setForm({ ...form, minDrawsAllowed: e.target.value })} /><small>Minimum draw entries required before picked teams may be added.</small></Field>
@@ -2252,6 +2255,19 @@ function Teams({
     const handicap = teamHandicapTotal(team.headerId, team.heelerId, contestants);
     const header = rider(team.headerId);
     const heeler = rider(team.heelerId);
+    const horseBelongsTo = (horseName: string | undefined, contestant?: Contestant) =>
+      !horseName ||
+      contestant?.horses?.some(
+        (horse) => horse.toLocaleLowerCase() === horseName.toLocaleLowerCase(),
+      );
+    if (!horseBelongsTo(team.headerHorseName, header)) {
+      setMessage("Choose a horse saved on the Header contestant profile.");
+      return;
+    }
+    if (!horseBelongsTo(team.heelerHorseName, heeler)) {
+      setMessage("Choose a horse saved on the Heeler contestant profile.");
+      return;
+    }
     if (
       event &&
       (!contestantEligibleForRole(event, header, "Header") ||
@@ -2303,12 +2319,7 @@ function Teams({
       return;
     }
     if (event.competitionType === "pick-and-draw") {
-      const expectedDrawTeams =
-        event.pickDrawRole === "header"
-          ? headerEntryCount
-          : event.pickDrawRole === "heeler"
-            ? heelerEntryCount
-            : Math.max(headerEntryCount, heelerEntryCount);
+      const expectedDrawTeams = Math.max(headerEntryCount, heelerEntryCount);
       const generatedDrawTeams = generated.filter(
         (team) => team.generated,
       ).length;
@@ -2426,7 +2437,7 @@ function Teams({
               <span><strong>{headerEntryCount}</strong> Draw-cleared header entries</span>
               <span><strong>{heelerEntryCount}</strong> Draw-cleared heeler entries</span>
               {event.competitionType === "pick-and-draw" && (
-                <span><strong>{event.pickDrawRole === "header" ? headerEntryCount : event.pickDrawRole === "heeler" ? heelerEntryCount : Math.max(headerEntryCount, heelerEntryCount)}</strong> Round 1 draw teams</span>
+                <span><strong>{Math.max(headerEntryCount, heelerEntryCount)}</strong> Round 1 draw teams</span>
               )}
               {event.competitionType === "round-robin" && (
                 <span><strong>{eventRegistrations.filter((entry) => entry.role === "Header" && entry.status === "entered" && entryClearedForDraw(entry)).length * eventRegistrations.filter((entry) => entry.role === "Heeler" && entry.status === "entered" && entryClearedForDraw(entry)).length}</strong> Round Robin teams</span>
@@ -2439,7 +2450,7 @@ function Teams({
           <div className="registration-list">
             {eventRegistrations.map((registration) => (
               <div className="registration-row" key={registration.id}>
-                <span className="person"><i>{initials(rider(registration.contestantId)?.name ?? "")}</i><span><strong>{rider(registration.contestantId)?.name}</strong><small>{registration.role} · {registration.entries} entr{registration.entries === 1 ? "y" : "ies"}{registration.sourceTeamId ? " · Picked team" : ""}{registration.paid === false && registration.paymentMethod === "tab" ? " · Open tab" : ""}</small></span></span>
+                <span className="person"><i>{initials(rider(registration.contestantId)?.name ?? "")}</i><span><strong>{rider(registration.contestantId)?.name}</strong><small>{registration.role} · {registration.entries} entr{registration.entries === 1 ? "y" : "ies"}{registration.horseName ? ` · Horse: ${registration.horseName}` : ""}{registration.sourceTeamId ? " · Picked team" : ""}{registration.paid === false && registration.paymentMethod === "tab" ? " · Open tab" : ""}</small></span></span>
                 <span className={`tag ${registration.status === "entered" ? "complete" : registration.status === "waitlist" ? "amber" : "no-time"}`}>{registration.status}</span>
                 <button className={registration.paid === false ? "secondary small-action" : "selected-button small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, paid: registration.paid === false })}>{registration.paid === false ? (registration.paymentMethod === "tab" ? "Open tab · mark paid" : "Mark paid") : "Paid"}</button>
                 <button className={registration.checkedIn ? "selected-button small-action" : "secondary small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, checkedIn: !registration.checkedIn })}>{registration.checkedIn ? <><Check size={14} /> Checked in</> : "Check in"}</button>
@@ -2531,9 +2542,9 @@ function Teams({
                 {draftDraw && !teamSearch && <GripVertical className="draw-drag-handle" size={16} />}
                 {team.drawPosition}
               </span>
-              <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}</small></span></div>
+              <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}{team.headerHorseName ? ` · Horse: ${team.headerHorseName}` : ""}</small></span></div>
               <span className="pair-mark">&</span>
-              <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}</small></span></div>
+              <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}{team.heelerHorseName ? ` · Horse: ${team.heelerHorseName}` : ""}</small></span></div>
               <span className="draw-status">{(team.headerFreeRun || team.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}{repeatedTeamKeys.has(`${team.headerId}|${team.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}<span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}{team.paid === false && team.paymentMethod === "tab" ? " · Open tab" : ""}</small></span>
               <span className="row-actions no-print">
                 {!team.generated && team.paid === false && (
@@ -2584,10 +2595,7 @@ function IndividualRegistrationForm({
   onSubmit: (registration: EventRegistration) => void;
   onCancel: () => void;
 }) {
-  const requiredRole =
-    event.competitionType === "pick-and-draw" && event.pickDrawRole !== "both"
-      ? event.pickDrawRole === "header" ? "Header" : "Heeler"
-      : null;
+  const requiredRole = null;
   const eligibleContestants = contestants.filter((contestant) =>
     requiredRole
       ? contestantEligibleForRole(event, contestant, requiredRole)
@@ -2605,6 +2613,7 @@ function IndividualRegistrationForm({
   );
   const minimumEntries = minimumDrawEntries(event);
   const [entries, setEntries] = useState(String(minimumEntries));
+  const [horseName, setHorseName] = useState("");
   const [status, setStatus] = useState<EventRegistration["status"]>("entered");
   const [paid, setPaid] = useState(true);
   const [notes, setNotes] = useState("");
@@ -2617,6 +2626,7 @@ function IndividualRegistrationForm({
       id: uid("registration"),
       eventId: event.id,
       contestantId,
+      horseName: horseName || undefined,
       role,
       entries: Number(entries),
       checkedIn: false,
@@ -2629,7 +2639,8 @@ function IndividualRegistrationForm({
     <form className="form-panel" onSubmit={submit}>
       <div className="form-heading"><div><h3>{event.competitionType === "pick-and-draw" ? "Add contestant to Draw Pot" : "Register rider"}</h3><p>Individual entry #{registrations.length + 1} for {event.name}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
       <div className="form-grid">
-        <Field label="Contestant"><select required value={contestantId} onChange={(e) => { const id = e.target.value; setContestantId(id); const contestant = eligibleContestants.find((item) => item.id === id); if (!requiredRole && !contestantEligibleForRole(event, contestant, role)) setRole(firstEligibleRole(contestant)); }}>{eligibleContestants.map((contestant) => <option value={contestant.id} key={contestant.id}>{contestant.name}</option>)}</select></Field>
+        <Field label="Contestant"><select required value={contestantId} onChange={(e) => { const id = e.target.value; setContestantId(id); setHorseName(""); const contestant = eligibleContestants.find((item) => item.id === id); if (!requiredRole && !contestantEligibleForRole(event, contestant, role)) setRole(firstEligibleRole(contestant)); }}>{eligibleContestants.map((contestant) => <option value={contestant.id} key={contestant.id}>{contestant.name}</option>)}</select></Field>
+        <Field label="Horse"><select value={horseName} disabled={!eligibleContestants.find((contestant) => contestant.id === contestantId)?.horses?.length} onChange={(e) => setHorseName(e.target.value)}><option value="">{eligibleContestants.find((contestant) => contestant.id === contestantId)?.horses?.length ? "No horse selected" : "No saved horses"}</option>{eligibleContestants.find((contestant) => contestant.id === contestantId)?.horses?.map((horse) => <option key={horse} value={horse}>{horse}</option>)}</select>{!eligibleContestants.find((contestant) => contestant.id === contestantId)?.horses?.length && <small>Add a horse under Contestants, then return here.</small>}</Field>
         <Field label="Draw position"><select value={role} disabled={Boolean(requiredRole)} onChange={(e) => setRole(e.target.value as "Header" | "Heeler")}>{contestantEligibleForRole(event, eligibleContestants.find((contestant) => contestant.id === contestantId), "Header") && <option>Header</option>}{contestantEligibleForRole(event, eligibleContestants.find((contestant) => contestant.id === contestantId), "Heeler") && <option>Heeler</option>}</select></Field>
         <Field label="Number of entries"><input required type="number" min={minimumEntries} max={event.entriesAllowed} value={entries} onChange={(e) => setEntries(e.target.value)} /><small>Competition minimum: {minimumEntries}</small></Field>
         <Field label="Entry status"><select value={status} onChange={(e) => setStatus(e.target.value as EventRegistration["status"])}><option value="entered">Entered</option><option value="waitlist">Wait list</option></select></Field>
@@ -2650,6 +2661,8 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel, 
   );
   const [headerId, setHeaderId] = useState(team?.headerId ?? headers[0]?.id ?? "");
   const [heelerId, setHeelerId] = useState(team?.heelerId ?? heelers.find((rider) => rider.id !== headerId)?.id ?? "");
+  const [headerHorseName, setHeaderHorseName] = useState(team?.headerHorseName ?? "");
+  const [heelerHorseName, setHeelerHorseName] = useState(team?.heelerHorseName ?? "");
   const [notes, setNotes] = useState(team?.notes ?? "");
   const [paid, setPaid] = useState(team?.paid ?? true);
   const handicap = teamHandicapTotal(headerId, heelerId, contestants);
@@ -2660,6 +2673,8 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel, 
       eventId: event.id,
       headerId,
       heelerId,
+      headerHorseName: headerHorseName || undefined,
+      heelerHorseName: heelerHorseName || undefined,
       drawPosition,
       status: team?.status ?? "ready",
       rawTime: team?.rawTime ?? null,
@@ -2682,8 +2697,10 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel, 
     <form className="form-panel" onSubmit={submit}>
       <div className="form-heading"><div><h3>{team ? "Edit team" : rideIn ? "Add ride-in team" : "Add team"}</h3><p>{rideIn ? "Append a late team to the end of the Round 1 run order." : `Entry #${drawPosition} for ${event.name}`}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
       <div className="form-grid">
-        <Field label="Header"><select value={headerId} required onChange={(e) => setHeaderId(e.target.value)}>{headers.map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
-        <Field label="Heeler"><select value={heelerId} required onChange={(e) => setHeelerId(e.target.value)}>{heelers.filter((rider) => rider.id !== headerId).map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
+        <Field label="Header"><select value={headerId} required onChange={(e) => { setHeaderId(e.target.value); setHeaderHorseName(""); }}>{headers.map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
+        {(headers.find((rider) => rider.id === headerId)?.horses?.length ?? 0) > 0 && <Field label="Header horse"><select value={headerHorseName} onChange={(e) => setHeaderHorseName(e.target.value)}><option value="">No horse selected</option>{headers.find((rider) => rider.id === headerId)?.horses?.map((horse) => <option key={horse} value={horse}>{horse}</option>)}</select></Field>}
+        <Field label="Heeler"><select value={heelerId} required onChange={(e) => { setHeelerId(e.target.value); setHeelerHorseName(""); }}>{heelers.filter((rider) => rider.id !== headerId).map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
+        {(heelers.find((rider) => rider.id === heelerId)?.horses?.length ?? 0) > 0 && <Field label="Heeler horse"><select value={heelerHorseName} onChange={(e) => setHeelerHorseName(e.target.value)}><option value="">No horse selected</option>{heelers.find((rider) => rider.id === heelerId)?.horses?.map((horse) => <option key={horse} value={horse}>{horse}</option>)}</select></Field>}
         <Field label="Team notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" /></Field>
         <Field label="Payment status"><select value={paid ? "paid" : "unpaid"} onChange={(e) => setPaid(e.target.value === "paid")}><option value="paid">Paid</option><option value="unpaid">Unpaid</option></select></Field>
       </div>
@@ -2861,7 +2878,10 @@ function RunDesk({
     url.searchParams.set("event", event.id);
     url.searchParams.set("round", String(activeRound));
     if (selected) url.searchParams.set("team", selected.id);
-    window.location.assign(url.toString());
+    const popup = window.open(url.toString(), "_blank", "noopener,noreferrer");
+    if (!popup) {
+      window.alert("Allow pop-ups to open the LED screen in a new tab.");
+    }
   };
   const previewRoundTimeSheet = () => {
     if (!event || !eventTeams.length) return;

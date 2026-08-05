@@ -78,7 +78,7 @@ export function reconcilePickDrawRegistrations(
 
 export const defaultCompetitionSettings = {
   competitionType: "pick-only" as CompetitionType,
-  pickDrawRole: "heeler" as PickDrawRole,
+  pickDrawRole: "both" as PickDrawRole,
   registrationOpen: true,
   drawLocked: false,
   resultsPublished: false,
@@ -315,6 +315,8 @@ const newTeam = (
   heelerEntryNumber = 1,
   headerFreeRun = false,
   heelerFreeRun = false,
+  headerHorseName?: string,
+  heelerHorseName?: string,
 ): Team => ({
   id: `team-${Date.now()}-${drawPosition}-${Math.random().toString(36).slice(2, 6)}`,
   eventId,
@@ -334,6 +336,8 @@ const newTeam = (
   heelerEntryNumber,
   headerFreeRun,
   heelerFreeRun,
+  headerHorseName,
+  heelerHorseName,
   paid: true,
 });
 
@@ -356,6 +360,7 @@ function drawPotTeams(
           contestantId: entry.contestantId,
           entryNumber: index + 1,
           freeRun: false,
+          horseName: entry.horseName,
         })),
       );
   const heelerEntries =
@@ -366,6 +371,7 @@ function drawPotTeams(
           contestantId: entry.contestantId,
           entryNumber: index + 1,
           freeRun: false,
+          horseName: entry.horseName,
         })),
       );
   if (!headerEntries.length || !heelerEntries.length) return [];
@@ -440,6 +446,8 @@ function drawPotTeams(
         heeler.entryNumber,
         header.freeRun,
         heeler.freeRun,
+        header.horseName,
+        heeler.horseName,
       ));
     });
     }
@@ -555,6 +563,7 @@ function pickAndDrawTeams(
       Array.from({ length: registration.entries }, (_, index) => ({
         contestantId: registration.contestantId,
         entryNumber: index + 1,
+        horseName: registration.horseName,
       })),
     );
   const heelers = activeDrawEntries
@@ -563,77 +572,13 @@ function pickAndDrawTeams(
       Array.from({ length: registration.entries }, (_, index) => ({
         contestantId: registration.contestantId,
         entryNumber: index + 1,
+        horseName: registration.horseName,
       })),
     );
   const used = new Set(baseTeams.map((team) => pairKey(team.headerId, team.heelerId)));
   const generated: Team[] = [];
 
-  const pickCandidate = (
-    slotId: string,
-    candidates: { headerId: string; heelerId: string }[],
-  ) => {
-    const eligible = candidates.filter(({ headerId, heelerId }) =>
-      eligiblePair(event, headerId, heelerId, contestants),
-    );
-    return (
-      shuffle(eligible).find(
-        ({ headerId, heelerId }) => !used.has(pairKey(headerId, heelerId)),
-      ) ?? (event.allowRepeatPartners
-        ? shuffle(eligible).find(
-            ({ headerId, heelerId }) =>
-              headerId === slotId || heelerId === slotId,
-          )
-        : undefined)
-    );
-  };
-
-  if (event.pickDrawRole === "heeler") {
-    shuffle(heelers).forEach((slot) => {
-      const partner = pickCandidate(
-        slot.contestantId,
-        baseTeams.map((team) => ({
-          headerId: team.headerId,
-          heelerId: slot.contestantId,
-        })),
-      );
-      if (!partner) return;
-      used.add(pairKey(partner.headerId, partner.heelerId));
-      generated.push(
-        newTeam(
-          event.id,
-          partner.headerId,
-          partner.heelerId,
-          baseTeams.length + generated.length + 1,
-          1,
-          1,
-          slot.entryNumber,
-        ),
-      );
-    });
-  } else if (event.pickDrawRole === "header") {
-    shuffle(headers).forEach((slot) => {
-      const partner = pickCandidate(
-        slot.contestantId,
-        baseTeams.map((team) => ({
-          headerId: slot.contestantId,
-          heelerId: team.heelerId,
-        })),
-      );
-      if (!partner) return;
-      used.add(pairKey(partner.headerId, partner.heelerId));
-      generated.push(
-        newTeam(
-          event.id,
-          partner.headerId,
-          partner.heelerId,
-          baseTeams.length + generated.length + 1,
-          1,
-          slot.entryNumber,
-          1,
-        ),
-      );
-    });
-  } else if (headers.length && heelers.length) {
+  if (headers.length && heelers.length) {
     const count = Math.max(headers.length, heelers.length);
     type DrawEntry = (typeof headers)[number] & { freeRun: boolean };
     type DrawPair = { header: DrawEntry; heeler: DrawEntry };
@@ -712,6 +657,8 @@ function pickAndDrawTeams(
           heeler.entryNumber,
           header.freeRun,
           heeler.freeRun,
+          header.horseName,
+          heeler.horseName,
         ),
       );
     });
@@ -760,6 +707,8 @@ function roundRobinTeams(
           headerId: header.contestantId,
           heelerId: heeler.contestantId,
           entryNumber: index + 1,
+          headerHorseName: header.horseName,
+          heelerHorseName: heeler.horseName,
         }));
       }),
   );
@@ -774,6 +723,10 @@ function roundRobinTeams(
         1,
         pair.entryNumber,
         pair.entryNumber,
+        false,
+        false,
+        pair.headerHorseName,
+        pair.heelerHorseName,
       ),
     ),
   );

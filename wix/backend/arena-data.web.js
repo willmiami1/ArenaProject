@@ -243,7 +243,7 @@ async function readWorkspace() {
     onlineRevision: Number(onlineRevision?.value || 0),
     loadedAt: new Date().toISOString(),
     meets,
-    events,
+    events: events.map((event) => ({ ...event, pickDrawRole: "both" })),
     contestants: contestants.map((contestant) => ({
       ...contestant,
       horses: Array.isArray(contestant.horses)
@@ -1133,6 +1133,7 @@ export const createContestantAccount = webMethod(
         role: contestant.role,
         headerHandicap: contestant.headerHandicap,
         heelerHandicap: contestant.heelerHandicap,
+        horses: contestant.horses || [],
       },
       partners:
         event.competitionType === "pick-only" ||
@@ -1359,7 +1360,8 @@ export const loadSignupOptions = webMethod(
       role,
       headerHandicap,
       heelerHandicap,
-    }) => ({ id, name, role, headerHandicap, heelerHandicap });
+      horses,
+    }) => ({ id, name, role, headerHandicap, heelerHandicap, horses: horses || [] });
     return {
       contestant: privateContestant(contestant),
       partners:
@@ -1422,6 +1424,7 @@ async function createSignupRecords(request, authenticatedId, source) {
     } else {
       assertOnlineRegistrationOpen(event);
     }
+    const requestedHorse = String(request.horseName || "").trim().replace(/\s+/g, " ");
     const normalizedPartnerIds =
       event.competitionType === "pick-and-draw" &&
       Array.isArray(request.partnerIds)
@@ -1440,6 +1443,7 @@ async function createSignupRecords(request, authenticatedId, source) {
           entries:
             request.entries === undefined ? null : Number(request.entries),
           partnerIds: normalizedPartnerIds,
+          horseName: requestedHorse.toLowerCase(),
           paymentMethod: source === "staff" ? request.paymentMethod || "" : "",
         }),
       )
@@ -1486,6 +1490,20 @@ async function createSignupRecords(request, authenticatedId, source) {
       ) {
         throw new Error("That submission ID is already in use.");
       }
+      return {
+        submissionId: request.submissionId,
+        competitionId: event.id,
+        summary: `Your entry in ${event.name} is already confirmed and pending payment.`,
+        existing: true,
+      };
+    }
+    const horseName = requestedHorse
+      ? (contestant.horses || []).find(
+         (horse) => horse.toLowerCase() === requestedHorse.toLowerCase(),
+       )
+      : undefined;
+    if (requestedHorse && !horseName) {
+      throw new Error("Choose a horse saved on this contestant profile.");
     }
 
     const submittedAt = new Date().toISOString();
@@ -1548,6 +1566,7 @@ async function createSignupRecords(request, authenticatedId, source) {
         id: `${idPrefix}-registration-${request.submissionId}`,
         eventId: event.id,
         contestantId: contestant.id,
+        horseName,
         role: request.role,
         entries,
         checkedIn: false,
@@ -1567,10 +1586,7 @@ async function createSignupRecords(request, authenticatedId, source) {
           Number(event.minDrawsAllowed ?? 0),
         );
         const drawRole = request.drawRole || request.role;
-        const allowedRoles =
-          event.pickDrawRole === "both"
-            ? ["Header", "Heeler"]
-            : [event.pickDrawRole === "header" ? "Header" : "Heeler"];
+        const allowedRoles = ["Header", "Heeler"];
         if (
           !Number.isInteger(entries) ||
           entries < minimumDraws ||
@@ -1621,6 +1637,7 @@ async function createSignupRecords(request, authenticatedId, source) {
             id: `${idPrefix}-registration-${request.submissionId}-draw`,
             eventId: event.id,
             contestantId: contestant.id,
+            horseName,
             role: drawRole,
             entries,
             checkedIn: false,
@@ -1738,6 +1755,9 @@ async function createSignupRecords(request, authenticatedId, source) {
             eventId: event.id,
             headerId: header.id,
             heelerId: heeler.id,
+            ...(request.role === "Header"
+              ? { headerHorseName: horseName }
+              : { heelerHorseName: horseName }),
             drawPosition: 0,
             status: "ready",
             rawTime: null,

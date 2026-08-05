@@ -14,6 +14,7 @@ import {
   assertOnlineRegistrationOpen,
   assertRegistrationDeskOpen,
 } from "./registrationWindow";
+import { normalizeHorseNames } from "./contestantHorses";
 
 export interface SignupRequest {
   submissionId: string;
@@ -24,6 +25,7 @@ export interface SignupRequest {
   entries?: number;
   partnerId?: string;
   partnerIds?: string[];
+  horseName?: string;
   paymentConfirmed?: boolean;
   paymentMethod?: "cash" | "card" | "tab";
 }
@@ -65,6 +67,15 @@ export function createOnlineSignup(
       registrations: existingRegistrations,
       existing: true,
     };
+  }
+  const requestedHorse = normalizeHorseNames([request.horseName ?? ""])[0];
+  const horseName = requestedHorse
+    ? normalizeHorseNames(contestant.horses).find(
+        (horse) => horse.toLocaleLowerCase() === requestedHorse.toLocaleLowerCase(),
+      )
+    : undefined;
+  if (requestedHorse && !horseName) {
+    throw new Error("Choose a horse saved on this contestant profile.");
   }
 
   const metadata = {
@@ -118,6 +129,7 @@ export function createOnlineSignup(
         id: deterministicSignupId("registration", request.submissionId),
         eventId: event.id,
         contestantId: contestant.id,
+        horseName,
         role: request.role,
         entries,
         checkedIn: false,
@@ -144,10 +156,7 @@ export function createOnlineSignup(
     const entries = Number(request.entries ?? 0);
     const minimumDraws = minimumDrawEntries(event);
     const drawRole = request.drawRole ?? request.role;
-    const allowedRoles =
-      event.pickDrawRole === "both"
-        ? ["Header", "Heeler"]
-        : [event.pickDrawRole === "header" ? "Header" : "Heeler"];
+    const allowedRoles = ["Header", "Heeler"];
     if (
       !Number.isInteger(entries) ||
       entries < minimumDraws ||
@@ -192,6 +201,7 @@ export function createOnlineSignup(
         id: deterministicSignupId("registration", request.submissionId, "draw"),
         eventId: event.id,
         contestantId: contestant.id,
+        horseName,
         role: drawRole!,
         entries,
         checkedIn: false,
@@ -300,6 +310,9 @@ export function createOnlineSignup(
     eventId: event.id,
     headerId,
     heelerId,
+    ...(request.role === "Header"
+      ? { headerHorseName: horseName }
+      : { heelerHorseName: horseName }),
     drawPosition: 0,
     status: "ready",
     rawTime: null,

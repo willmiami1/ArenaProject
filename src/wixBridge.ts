@@ -45,7 +45,7 @@ export interface ContestantPortalData {
 }
 
 export interface SignupOptions {
-  contestant: Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap">;
+  contestant: Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap" | "horses">;
   partners: Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap">[];
 }
 

@@ -481,6 +481,7 @@ main { grid-column: 2; min-width: 0; }
 .report-table th { padding: 0; color: #fff; background: var(--green); border-right: 1px solid rgba(255,255,255,.12); text-align: left; }
 .report-table th button { width: 100%; min-height: 37px; padding: 8px 9px; color: inherit; background: none; border: 0; font-size: 8px; font-weight: 800; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
 .report-table td { padding: 8px 9px; color: #354139; border-right: 1px solid #ecefeb; border-bottom: 1px solid #ecefeb; font-size: 9px; }
+.report-table td.report-horse { color: #6f7973; font-size: 7px; font-weight: 700; }
 .report-table tr:nth-child(even) td { background: #fafbfa; }
 .report-table tr:last-child td { border-bottom: 0; }
 .report-document-footer { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 9px; color: #78827c; border-top: 1px solid #e2e5e2; font-size: 8px; }
@@ -538,7 +539,9 @@ main { grid-column: 2; min-width: 0; }
 .led-place { font-family: "Manrope", sans-serif; font-size: clamp(28px, 3.4vw, 68px); font-weight: 900; line-height: 1; }
 .led-team { min-width: 0; display: flex; align-items: center; gap: .8vw; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(17px, 2vw, 39px); text-transform: uppercase; white-space: nowrap; }
 .led-rider { min-width: 0; display: flex; align-items: center; gap: .55vw; overflow: hidden; }
-.led-rider strong { overflow: hidden; text-overflow: ellipsis; }
+.led-rider-name { min-width: 0; display: flex; align-items: baseline; gap: .4vw; overflow: hidden; }
+.led-rider-name small { flex: 0 1 auto; overflow: hidden; color: #cfaa66; font-size: .48em; font-weight: 800; text-overflow: ellipsis; }
+.led-rider-name strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .led-avatar { flex: 0 0 auto; width: clamp(28px, 4.2vh, 58px); height: clamp(28px, 4.2vh, 58px); display: grid; place-items: center; overflow: hidden; color: #fff3d7; background: #365545; border: 2px solid rgba(226,182,95,.72); border-radius: 50%; font-size: clamp(10px, 1vw, 18px); font-style: normal; font-weight: 900; letter-spacing: .04em; }
 .led-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .led-team i { flex: 0 0 auto; color: #cfaa66; font-family: Georgia, serif; font-weight: 400; }

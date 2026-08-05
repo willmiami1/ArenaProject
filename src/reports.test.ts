@@ -32,8 +32,8 @@ const event: ArenaEvent = {
 };
 
 const contestants: Contestant[] = [
-  { id: "header", name: "Ada Header", role: "Header", headerHandicap: 4, heelerHandicap: 0, photo: "", phone: "", hometown: "" },
-  { id: "heeler", name: "Bo Heeler", role: "Heeler", headerHandicap: 0, heelerHandicap: 4, photo: "", phone: "", hometown: "" },
+  { id: "header", name: "Ada Header", role: "Header", headerHandicap: 4, heelerHandicap: 0, photo: "", phone: "", hometown: "", horses: ["Blue"] },
+  { id: "heeler", name: "Bo Heeler", role: "Heeler", headerHandicap: 0, heelerHandicap: 4, photo: "", phone: "", hometown: "", horses: ["Star"] },
 ];
 
 const team = (overrides: Partial<Team> = {}): Team => ({
@@ -52,6 +52,8 @@ const team = (overrides: Partial<Team> = {}): Team => ({
   generated: false,
   paid: true,
   points: 1,
+  headerHorseName: "Blue",
+  heelerHorseName: "Star",
   ...overrides,
 });
 
@@ -178,6 +180,33 @@ describe("Slide reports", () => {
       heeler: "Bo Heeler (HC 4)",
       teamHandicap: 8,
       slideAdjustment: "2.0s deducted",
+    });
+
+    describe("horse report fields", () => {
+      it("places each horse before its contestant column", () => {
+        const workspace = data([team()]);
+        const definition = reportDefinitions.find(
+          (report) => report.id === "competition-final",
+        )!;
+        const report = generateReport(workspace, definition, {
+          ...emptyReportFilters(workspace),
+          competitionId: event.id,
+        });
+
+        expect(report.rows[0]).toMatchObject({
+          headerHorse: "Blue",
+          header: "Ada Header",
+          heelerHorse: "Star",
+          heeler: "Bo Heeler",
+        });
+        expect(report.columns.map((column) => column.key)).toEqual(
+          expect.arrayContaining(["headerHorse", "header", "heelerHorse", "heeler"]),
+        );
+        expect(report.columns.findIndex((column) => column.key === "headerHorse"))
+          .toBeLessThan(report.columns.findIndex((column) => column.key === "header"));
+        expect(report.columns.findIndex((column) => column.key === "heelerHorse"))
+          .toBeLessThan(report.columns.findIndex((column) => column.key === "heeler"));
+      });
     });
   });
 });

@@ -739,6 +739,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   const [options, setOptions] = useState<SignupOptions | null>(null);
   const [role, setRole] = useState<"Header" | "Heeler">("Header");
   const [entries, setEntries] = useState(1);
+  const [horseName, setHorseName] = useState("");
   const [partnerId, setPartnerId] = useState("");
   const [slideEntryType, setSlideEntryType] = useState<"draw" | "pick">("draw");
   const [submissionId, setSubmissionId] = useState("");
@@ -751,12 +752,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     (slide && slideEntryType === "draw");
   const pickAndDraw = competition?.competitionType === "pick-and-draw";
   const minimumDraws = competition ? minimumDrawEntries(competition) : 1;
-  const drawRole =
-    competition?.pickDrawRole === "header"
-      ? "Header"
-      : competition?.pickDrawRole === "heeler"
-        ? "Heeler"
-        : role;
+  const drawRole = role;
   const contestantCanEnter = (
     contestant: SignupOptions["contestant"],
     position: "Header" | "Heeler",
@@ -861,6 +857,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
             role: created.contestant.role,
             headerHandicap: created.contestant.headerHandicap,
             heelerHandicap: created.contestant.heelerHandicap,
+            horses: created.contestant.horses,
           },
           partners: workspace.contestants
             .filter((contestant) => contestant.id !== created.contestant.id)
@@ -911,6 +908,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
           drawRole: pickAndDraw ? drawRole : undefined,
           entries: individual || pickAndDraw ? entries : undefined,
           partnerId: individual ? undefined : partnerId,
+          horseName: horseName || undefined,
         },
       );
       if (!result) throw new Error("The signup could not be confirmed.");
@@ -962,6 +960,16 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       ) : (
         <form onSubmit={submit}>
           <div className="public-authenticated"><CheckCircle2 /><span>Entering as <strong>{options.contestant.name}</strong></span></div>
+          <label>
+            Horse
+            <select disabled={!options.contestant.horses?.length} value={horseName} onChange={(event) => setHorseName(event.target.value)}>
+              <option value="">{options.contestant.horses?.length ? "No horse selected" : "No saved horses"}</option>
+              {options.contestant.horses?.map((horse) => (
+                <option key={horse} value={horse}>{horse}</option>
+              ))}
+            </select>
+            {!options.contestant.horses?.length && <small>Add a horse to your contestant profile before selecting one.</small>}
+          </label>
          {slide && (
            <fieldset>
              <legend>Entry type</legend>

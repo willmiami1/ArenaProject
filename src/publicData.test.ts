@@ -40,8 +40,8 @@ const event = (overrides: Partial<ArenaEvent> = {}): ArenaEvent => ({
   ...overrides,
 });
 const contestants: Contestant[] = [
-  { id: "header", name: "Ada Header", role: "Header", headerHandicap: 4, heelerHandicap: 0, photo: "data:image/png;base64,secret", phone: "555", email: "ada@example.com", hometown: "Texas" },
-  { id: "heeler", name: "Bo Heeler", role: "Heeler", headerHandicap: 0, heelerHandicap: 4, photo: "", phone: "555", email: "bo@example.com", hometown: "Texas" },
+  { id: "header", name: "Ada Header", role: "Header", headerHandicap: 4, heelerHandicap: 0, photo: "data:image/png;base64,secret", phone: "555", email: "ada@example.com", hometown: "Texas", horses: ["Blue"] },
+  { id: "heeler", name: "Bo Heeler", role: "Heeler", headerHandicap: 0, heelerHandicap: 4, photo: "", phone: "555", email: "bo@example.com", hometown: "Texas", horses: ["Star"] },
 ];
 const run = (overrides: Partial<Team> = {}): Team => ({
   id: "team-1",
@@ -404,10 +404,10 @@ describe("online signup", () => {
     expect(created.registrations).toHaveLength(1);
   });
 
-  it("places picked teams after every generated Pick and Draw team", () => {
+  it("always draws both Pick and Draw positions and places picked teams last", () => {
     const competition = event({
       competitionType: "pick-and-draw",
-      pickDrawRole: "both",
+      pickDrawRole: "header",
       allowRepeatPartners: true,
     });
 
@@ -452,6 +452,28 @@ describe("online signup", () => {
     expect(draw.map((team) => team.generated)).toEqual([true, false]);
     expect(draw.map((team) => team.drawPosition)).toEqual([1, 2]);
     expect(draw[draw.length - 1]?.id).toBe("picked-team");
+  });
+
+  it("accepts either draw position regardless of legacy draw assignment", () => {
+    const data = workspace(event({
+      competitionType: "pick-and-draw",
+      pickDrawRole: "header",
+      entriesAllowed: 3,
+    }));
+
+    const created = createOnlineSignup(data, {
+      submissionId: "both-draw-positions",
+      contestantId: "heeler",
+      eventId: "competition-1",
+      role: "Heeler",
+      drawRole: "Heeler",
+      entries: 1,
+    });
+
+    expect(created.registrations[0]).toMatchObject({
+      contestantId: "heeler",
+      role: "Heeler",
+    });
   });
 
   it("combines Slide draw entries with picked teams", () => {
@@ -732,6 +754,108 @@ describe("online signup", () => {
       }),
     ).toThrow("Entry limit");
   });
+
+  it("validates and saves the authenticated contestant's horse", () => {
+    const fixed = createOnlineSignup(workspace(event()), {
+      submissionId: "horse-team",
+      contestantId: "header",
+      eventId: "competition-1",
+      role: "Header",
+      partnerId: "heeler",
+      horseName: " blue ",
+    });
+    expect(fixed.teams[0].headerHorseName).toBe("Blue");
+    expect(fixed.teams[0].heelerHorseName).toBeUndefined();
+
+    expect(() =>
+      createOnlineSignup(workspace(event()), {
+        submissionId: "unknown-horse",
+        contestantId: "header",
+        eventId: "competition-1",
+        role: "Header",
+        partnerId: "heeler",
+        horseName: "Not Mine",
+      }),
+    ).toThrow("saved on this contestant profile");
+
+    const draw = createOnlineSignup(
+      workspace(event({ competitionType: "draw-pot" })),
+      {
+        submissionId: "horse-registration",
+        contestantId: "header",
+        eventId: "competition-1",
+        role: "Header",
+        entries: 1,
+        horseName: "Blue",
+      },
+    );
+    expect(draw.registrations[0].horseName).toBe("Blue");
+  });
+
+  it("carries registration horses into generated draw teams", () => {
+    const competition = event({ competitionType: "draw-pot" });
+    const data = workspace(competition);
+    data.registrations = [
+      { id: "header-horse", eventId: competition.id, contestantId: "header", horseName: "Blue", role: "Header", entries: 1, checkedIn: true, status: "entered", notes: "", paid: true },
+      { id: "heeler-horse", eventId: competition.id, contestantId: "heeler", horseName: "Star", role: "Heeler", entries: 1, checkedIn: true, status: "entered", notes: "", paid: true },
+    ];
+
+    const draw = generateCompetitionDraw(
+      competition,
+      data.registrations,
+      [],
+      data.contestants,
+    );
+    expect(draw[0]).toMatchObject({
+      headerHorseName: "Blue",
+      heelerHorseName: "Star",
+    });
+  });
+
+  it("keeps each generated slot's source-registration horse", () => {
+    const competition = event({
+      competitionType: "draw-pot",
+      allowRepeatPartners: true,
+    });
+    const data = workspace(competition);
+    data.contestants[0].horses = ["Blue", "Red"];
+    data.registrations = [
+      { id: "header-blue", eventId: competition.id, contestantId: "header", horseName: "Blue", role: "Header", entries: 1, checkedIn: true, status: "entered", notes: "", paid: true },
+      { id: "header-red", eventId: competition.id, contestantId: "header", horseName: "Red", role: "Header", entries: 1, checkedIn: true, status: "entered", notes: "", paid: true },
+      { id: "heeler-star", eventId: competition.id, contestantId: "heeler", horseName: "Star", role: "Heeler", entries: 1, checkedIn: true, status: "entered", notes: "", paid: true },
+    ];
+
+    const draw = generateCompetitionDraw(
+      competition,
+      data.registrations,
+      [],
+      data.contestants,
+    );
+    expect(draw.map((team) => team.headerHorseName).sort()).toEqual(["Blue", "Red"]);
+  });
+
+  it("returns an existing signup even if the saved horse list changed", () => {
+    const data = workspace(event());
+    data.teams = [
+      run({
+        id: "online-team-retry-horse",
+        submissionId: "retry-horse",
+        headerHorseName: "Blue",
+      }),
+    ];
+    data.contestants[0].horses = [];
+
+    const repeated = createOnlineSignup(data, {
+      submissionId: "retry-horse",
+      contestantId: "header",
+      eventId: "competition-1",
+      role: "Header",
+      partnerId: "heeler",
+      horseName: "Blue",
+    });
+    expect(repeated.existing).toBe(true);
+    expect(repeated.teams[0].headerHorseName).toBe("Blue");
+  });
 });
 
 describe("workspace compatibility", () => {
@@ -745,6 +869,7 @@ describe("workspace compatibility", () => {
     expect(normalizeData(legacy).events[0].handicapTotal).toBe(20);
     expect(normalizeData(legacy).events[0].maxContestantHandicap).toBe(10);
     expect(normalizeData(legacy).events[0].minDrawsAllowed).toBe(0);
+    expect(normalizeData(legacy).events[0].pickDrawRole).toBe("both");
     expect(normalizeData(legacy).contestants[0]).toMatchObject({
       headerHandicap: 3,
       heelerHandicap: 3,

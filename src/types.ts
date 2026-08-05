@@ -77,6 +77,8 @@ export interface Team {
   eventId: string;
   headerId: string;
   heelerId: string;
+  headerHorseName?: string;
+  heelerHorseName?: string;
   drawPosition: number;
   status: RunStatus;
   rawTime: number | null;
@@ -133,6 +135,7 @@ export interface EventRegistration {
   eventId: string;
   contestantId: string;
   sourceTeamId?: string;
+  horseName?: string;
   role: "Header" | "Heeler";
   entries: number;
   checkedIn: boolean;

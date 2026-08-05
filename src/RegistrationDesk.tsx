@@ -95,6 +95,7 @@ export function RegistrationDesk() {
   const [contestantId, setContestantId] = useState("");
   const [role, setRole] = useState<"Header" | "Heeler">("Header");
   const [entries, setEntries] = useState(1);
+  const [entryHorseName, setEntryHorseName] = useState("");
   const [addPick, setAddPick] = useState(false);
   const [partnerId, setPartnerId] = useState("");
   const [partnerIds, setPartnerIds] = useState<string[]>([]);
@@ -143,12 +144,7 @@ export function RegistrationDesk() {
     (slide && slideEntryType === "draw");
   const pickAndDraw = event?.competitionType === "pick-and-draw";
   const minimumDraws = event ? minimumDrawEntries(event) : 1;
-  const drawRole =
-    event?.pickDrawRole === "header"
-      ? "Header"
-      : event?.pickDrawRole === "heeler"
-        ? "Heeler"
-        : role;
+  const drawRole = role;
   const workspace = data ? asWorkspace(data) : null;
   const workspaceEvent = workspace?.events.find((item) => item.id === eventId);
   const partners = useMemo(
@@ -173,7 +169,7 @@ export function RegistrationDesk() {
 
   useEffect(() => {
     setPaymentMethod("");
-  }, [contestantId, entries, eventId, partnerId, partnerIds, role]);
+  }, [contestantId, entries, entryHorseName, eventId, partnerId, partnerIds, role]);
   const normalizedSearch = search.trim().toLowerCase();
   const filteredContestants =
     normalizedSearch.length < 2
@@ -356,6 +352,7 @@ export function RegistrationDesk() {
       submissionId,
       eventId: signupEvent.id,
       contestantId: signupContestant.id,
+      horseName: entryHorseName || undefined,
       role,
       drawRole: pickAndDraw ? drawRole : undefined,
       entries: individual || pickAndDraw ? entries : undefined,
@@ -384,6 +381,7 @@ export function RegistrationDesk() {
       setPartnerId("");
       setPartnerIds([]);
       setEntries(minimumDraws);
+      setEntryHorseName("");
       setAddPick(false);
       setPickStage("draws");
       setPaymentMethod("");
@@ -467,6 +465,7 @@ export function RegistrationDesk() {
                     className={contestantId === item.id ? "selected" : ""}
                     onClick={() => {
                       setContestantId(item.id);
+                      setEntryHorseName("");
                       setSearch("");
                       setPartnerId("");
                       setPartnerIds([]);
@@ -575,6 +574,16 @@ export function RegistrationDesk() {
                     <span>Entries this competition</span>
                   </div>
                   <form className="registration-competition-form" onSubmit={submitEntry}>
+                  <label>
+                    Horse
+                    <select disabled={!contestant.horses?.length} value={entryHorseName} onChange={(change) => setEntryHorseName(change.target.value)}>
+                      <option value="">{contestant.horses?.length ? "No horse selected" : "No saved horses"}</option>
+                      {contestant.horses?.map((horse) => (
+                        <option value={horse} key={horse}>{horse}</option>
+                      ))}
+                    </select>
+                    {!contestant.horses?.length && <small>Add a horse in Edit contestant, then select it here.</small>}
+                  </label>
                   {slide && (
                    <fieldset>
                      <legend>Entry type</legend>

@@ -49,6 +49,7 @@ export function normalizeData(parsed: ArenaData): ArenaData {
     return {
       ...defaultCompetitionSettings,
       ...event,
+      pickDrawRole: "both" as const,
       description: event.description ?? "",
       parentEventId: event.parentEventId ?? `meet-${event.id}`,
       allowRepeatPartners: event.allowRepeatPartners ?? false,
