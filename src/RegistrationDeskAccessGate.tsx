@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, ClipboardPen, LogIn, ShieldAlert } from "lucide-react";
 import {
   canMountArenaCommand,
+  isBrowserStoragePreview,
   localAdminAccess,
   type AdminAccessState,
 } from "./adminAccess";
@@ -17,13 +18,14 @@ export function RegistrationDeskAccessGate({
   children: ReactNode;
 }) {
   const embedded = isWixEmbed();
+  const browserPreview = isBrowserStoragePreview();
   const [state, setState] = useState<AdminAccessState>(() =>
-    localAdminAccess(embedded, import.meta.env.DEV),
+    localAdminAccess(embedded, import.meta.env.DEV, browserPreview),
   );
   const [message, setMessage] = useState(
     embedded
       ? "Checking registration desk access..."
-      : import.meta.env.DEV
+      : import.meta.env.DEV || browserPreview
         ? "Local registration desk preview"
         : "The Registration Desk is available only through the published Wix site.",
   );

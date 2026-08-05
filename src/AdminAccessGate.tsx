@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, LockKeyhole, LogIn, ShieldAlert } from "lucide-react";
 import {
   canMountArenaCommand,
+  isBrowserStoragePreview,
   localAdminAccess,
   type AdminAccessState,
 } from "./adminAccess";
@@ -13,14 +14,15 @@ import {
 
 export function AdminAccessGate({ children }: { children: ReactNode }) {
   const embedded = isWixEmbed();
+  const browserPreview = isBrowserStoragePreview();
   const [state, setState] = useState<AdminAccessState>(() =>
-    localAdminAccess(embedded, import.meta.env.DEV),
+    localAdminAccess(embedded, import.meta.env.DEV, browserPreview),
   );
   const [message, setMessage] = useState(
     embedded
       ? "Checking your Wix administrator access..."
-      : import.meta.env.DEV
-        ? "Local development access"
+      : import.meta.env.DEV || browserPreview
+        ? "Browser test mode using this browser's local storage."
         : "Arena Command is available only through the published Wix site.",
   );
   const [busy, setBusy] = useState(embedded);
@@ -80,7 +82,7 @@ export function AdminAccessGate({ children }: { children: ReactNode }) {
       <>
         {state === "local-development" && (
           <div className="admin-development-banner" role="status">
-            Local development mode - Wix authorization is still required in production.
+            Browser test mode - data is stored only in this browser. Wix authorization is still required in production.
           </div>
         )}
         {children}

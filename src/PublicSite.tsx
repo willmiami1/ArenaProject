@@ -46,6 +46,7 @@ import {
   type ContestantAccountRequest,
 } from "./contestantAccount";
 import type { ArenaData } from "./types";
+import { isBrowserStoragePreview } from "./adminAccess";
 
 const localWorkspaceKey = "arena-command-data-v1";
 
@@ -64,7 +65,9 @@ const href = (page: string, id?: string) =>
   `?page=${encodeURIComponent(page)}${id ? `&id=${encodeURIComponent(id)}` : ""}`;
 const eventsHref = `${href("home")}#events`;
 const operationalHref = (app: "command" | "registration") => {
-  if (isWixEmbed() || import.meta.env.DEV) return `?app=${app}`;
+  if (isWixEmbed() || import.meta.env.DEV || isBrowserStoragePreview()) {
+    return `?app=${app}`;
+  }
   const wixOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
   return wixOrigin
     ? `${wixOrigin.replace(/\/$/, "")}/?app=${app}`

@@ -8,7 +8,11 @@ import {
 import { publicStandingRows } from "./standings";
 import { createOnlineSignup, mergeStaleOnlineEntries } from "./onlineSignup";
 import type { ArenaData, ArenaEvent, Contestant, Team } from "./types";
-import { canMountArenaCommand, localAdminAccess } from "./adminAccess";
+import {
+  canMountArenaCommand,
+  isBrowserStoragePreview,
+  localAdminAccess,
+} from "./adminAccess";
 import { normalizeData } from "./useArenaData";
 import {
   createSpectatorPrediction,
@@ -75,11 +79,17 @@ describe("public routing", () => {
   });
 
   describe("admin access boundary", () => {
-    it("allows an explicit local bypass only in development builds", () => {
+    it("allows development and local-storage preview access", () => {
       expect(localAdminAccess(false, true)).toBe("local-development");
       expect(canMountArenaCommand(localAdminAccess(false, true))).toBe(true);
+      expect(localAdminAccess(false, false, true)).toBe("local-development");
       expect(localAdminAccess(false, false)).toBe("unavailable");
       expect(canMountArenaCommand(localAdminAccess(false, false))).toBe(false);
+      expect(isBrowserStoragePreview("127.0.0.1", "/")).toBe(true);
+      expect(
+        isBrowserStoragePreview("willmiami1.github.io", "/ArenaProject/"),
+      ).toBe(true);
+      expect(isBrowserStoragePreview("example.com", "/ArenaProject/")).toBe(false);
     });
 
     it("always requires Wix verification for embedded production routes", () => {
