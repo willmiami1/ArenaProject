@@ -252,6 +252,7 @@ describe("multi-round Run Desk results", () => {
         status: "complete",
         rawTime: 8,
         penalties: 0,
+        predictionClosesAt: "2026-08-05T18:00:00.000Z",
       }),
       run({
         id: "round-1-team-2",
@@ -261,6 +262,7 @@ describe("multi-round Run Desk results", () => {
         status: "complete",
         rawTime: 9,
         penalties: 0,
+        predictionClosesAt: "2026-08-05T18:05:00.000Z",
       }),
     ];
     const withFinalists = applyRunResult(
@@ -274,6 +276,8 @@ describe("multi-round Run Desk results", () => {
     );
     const roundTwoTeams = withFinalists.filter((team) => team.round === 2);
     expect(roundTwoTeams).toHaveLength(2);
+    expect(roundTwoTeams.every((team) => team.predictionClosesAt === undefined))
+      .toBe(true);
 
     const scoredTeam = roundTwoTeams[0];
     const nextTeams = applyRunResult(

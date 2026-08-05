@@ -876,6 +876,7 @@ export function applyRunResult(
     checkedIn: false,
     generated: true,
     points: 0,
+    predictionClosesAt: undefined,
   });
   return nextTeams;
 }
@@ -976,6 +977,7 @@ function syncShortGoFinalists(
       checkedIn: false,
       generated: true,
       points: 0,
+      predictionClosesAt: undefined,
     })),
   ];
 }
