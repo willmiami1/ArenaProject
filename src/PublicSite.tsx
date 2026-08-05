@@ -730,10 +730,15 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   const [role, setRole] = useState<"Header" | "Heeler">("Header");
   const [entries, setEntries] = useState(1);
   const [partnerId, setPartnerId] = useState("");
+  const [slideEntryType, setSlideEntryType] = useState<"draw" | "pick">("draw");
   const [submissionId, setSubmissionId] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const individual = competition?.competitionType === "draw-pot" || competition?.competitionType === "round-robin";
+  const slide = competition?.competitionType === "slide";
+  const individual =
+    competition?.competitionType === "draw-pot" ||
+    competition?.competitionType === "round-robin" ||
+    (slide && slideEntryType === "draw");
   const pickAndDraw = competition?.competitionType === "pick-and-draw";
   const minimumDraws = competition ? minimumDrawEntries(competition) : 1;
   const drawRole =
@@ -947,6 +952,13 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       ) : (
         <form onSubmit={submit}>
           <div className="public-authenticated"><CheckCircle2 /><span>Entering as <strong>{options.contestant.name}</strong></span></div>
+         {slide && (
+           <fieldset>
+             <legend>Entry type</legend>
+             <label className="public-radio"><input type="radio" name="slide-entry-type" checked={slideEntryType === "draw"} onChange={() => { setSlideEntryType("draw"); setPartnerId(""); }} />Draw entry</label>
+             <label className="public-radio"><input type="radio" name="slide-entry-type" checked={slideEntryType === "pick"} onChange={() => setSlideEntryType("pick")} />Picked team</label>
+           </fieldset>
+         )}
           <fieldset>
             <legend>Your position</legend>
             {(["Header", "Heeler"] as const).map((value) => {

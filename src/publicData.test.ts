@@ -454,6 +454,72 @@ describe("online signup", () => {
     expect(draw[draw.length - 1]?.id).toBe("picked-team");
   });
 
+  it("combines Slide draw entries with picked teams", () => {
+    const competition = event({
+      competitionType: "slide",
+      allowRepeatPartners: true,
+    });
+    const registrations = [
+      {
+        id: "slide-header",
+        eventId: competition.id,
+        contestantId: "header",
+        role: "Header" as const,
+        entries: 1,
+        checkedIn: false,
+        status: "entered" as const,
+        notes: "",
+        paid: true,
+      },
+      {
+        id: "slide-heeler",
+        eventId: competition.id,
+        contestantId: "heeler",
+        role: "Heeler" as const,
+        entries: 1,
+        checkedIn: false,
+        status: "entered" as const,
+        notes: "",
+        paid: true,
+      },
+    ];
+    const pickedTeam = run({
+      id: "slide-picked",
+      status: "ready",
+      rawTime: null,
+    });
+
+    const draw = generateCompetitionDraw(
+      competition,
+      registrations,
+      [pickedTeam],
+      contestants,
+    );
+
+    expect(draw.map((team) => team.generated)).toEqual([true, false]);
+    expect(draw.map((team) => team.drawPosition)).toEqual([1, 2]);
+  });
+
+  it("accepts individual draw entries for Slide competitions", () => {
+    const data = workspace(
+      event({ competitionType: "slide", entriesAllowed: 3 }),
+    );
+    const created = createOnlineSignup(data, {
+      submissionId: "slide-draw",
+      contestantId: "header",
+      eventId: "competition-1",
+      role: "Header",
+      entries: 2,
+    });
+
+    expect(created.teams).toEqual([]);
+    expect(created.registrations[0]).toMatchObject({
+      contestantId: "header",
+      role: "Header",
+      entries: 2,
+    });
+  });
+
   it("reorders draft teams only within the same draw section", () => {
     const generatedOne = run({ id: "generated-1", generated: true, drawPosition: 1 });
     const generatedTwo = run({ id: "generated-2", generated: true, drawPosition: 2 });

@@ -1470,7 +1470,10 @@ async function createSignupRecords(request, authenticatedId, source) {
     const teams = [];
     if (
       event.competitionType === "draw-pot" ||
-      event.competitionType === "round-robin"
+      event.competitionType === "round-robin" ||
+      (event.competitionType === "slide" &&
+        request.entries !== undefined &&
+        normalizedPartnerIds.length === 0)
     ) {
       const entries = Number(request.entries);
       const minimumDraws = Math.max(

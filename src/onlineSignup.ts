@@ -73,7 +73,13 @@ export function createOnlineSignup(
     submissionId: request.submissionId,
     submittedAt: now.toISOString(),
   };
-  if (event.competitionType === "draw-pot" || event.competitionType === "round-robin") {
+  if (
+    event.competitionType === "draw-pot" ||
+    event.competitionType === "round-robin" ||
+    (event.competitionType === "slide" &&
+      request.entries !== undefined &&
+      !request.partnerId)
+  ) {
     const entries = Number(request.entries);
     const minimumDraws = minimumDrawEntries(event);
     if (

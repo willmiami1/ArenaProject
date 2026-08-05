@@ -2107,7 +2107,12 @@ function Teams({
   const individualRegistration =
     event?.competitionType === "draw-pot" || event?.competitionType === "round-robin";
   const usesDrawPool =
-    individualRegistration || event?.competitionType === "pick-and-draw";
+    individualRegistration ||
+    event?.competitionType === "pick-and-draw" ||
+    event?.competitionType === "slide";
+  const usesMixedTeams =
+    event?.competitionType === "pick-and-draw" ||
+    event?.competitionType === "slide";
   const canEdit = Boolean(event?.registrationOpen && !event?.drawLocked);
   const format = competitionTypes.find((type) => type.id === event?.competitionType);
 
@@ -2208,7 +2213,8 @@ function Teams({
     const generated = generateCompetitionDraw(event, eventRegistrations, teams, contestants);
     if (!generated.length) {
       setMessage(
-        event.competitionType === "draw-pot"
+        event.competitionType === "draw-pot" ||
+        event.competitionType === "slide"
           ? "Register at least one eligible header and heeler before drawing."
           : event.competitionType === "pick-and-draw"
             ? "No eligible draw teams could be made. Confirm paid Header and Heeler entries, check the handicap limit, and enable repeat partner runs when entries must reuse partners."
@@ -2386,9 +2392,7 @@ function Teams({
               disabled={
                 !event ||
                 event.drawLocked ||
-                ((event.competitionType === "pick-only" ||
-                  event.competitionType === "slide") &&
-                  !eventTeams.length)
+                (event.competitionType === "pick-only" && !eventTeams.length)
               }
               onClick={generateDraw}
             >
@@ -2409,13 +2413,13 @@ function Teams({
               {hasRepeatEntries && <span className="repeat-entry-key">Repeated team</span>}
             </div>
           )}
-          {event?.competitionType === "pick-and-draw" &&
+          {usesMixedTeams &&
             displayedTeams.some((team) => team.generated) && (
               <div className="draw-section-label">Draw Pot Teams</div>
             )}
           {displayedTeams.map((team, index) => (
             <Fragment key={team.id}>
-              {event?.competitionType === "pick-and-draw" &&
+              {usesMixedTeams &&
                 !team.generated &&
                 (index === 0 || displayedTeams[index - 1]?.generated) && (
                   <div className="draw-section-label picked">
@@ -2721,7 +2725,8 @@ function RunDesk({
       ? fixedPaidEntries +
         (event.competitionType === "draw-pot" ||
         event.competitionType === "round-robin" ||
-        event.competitionType === "pick-and-draw"
+        event.competitionType === "pick-and-draw" ||
+        event.competitionType === "slide"
           ? registrations
               .filter(
                 (entry) =>

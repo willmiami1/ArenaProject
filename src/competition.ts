@@ -799,7 +799,7 @@ export function generateCompetitionDraw(
       entryClearedForDraw(team) &&
       teamEligibleForCompetition(event, team, contestants),
   );
-  return spaceDrawTeamsApart(
+  const fixedTeams = spaceDrawTeamsApart(
     shuffle(baseTeams).map((team) => ({
       ...team,
       round: 1,
@@ -809,6 +809,14 @@ export function generateCompetitionDraw(
       points: 0,
     })),
   );
+  if (event.competitionType === "slide") {
+    const drawTeams = drawPotTeams(event, registrations, contestants);
+    return [...drawTeams, ...fixedTeams].map((team, index) => ({
+      ...team,
+      drawPosition: index + 1,
+    }));
+  }
+  return fixedTeams;
 }
 
 export function calculatePurse(event: ArenaEvent, teamCount: number) {

@@ -94,6 +94,7 @@ export function RegistrationDesk() {
   const [partnerId, setPartnerId] = useState("");
   const [partnerIds, setPartnerIds] = useState<string[]>([]);
   const [pickStage, setPickStage] = useState<"draws" | "picks">("draws");
+  const [slideEntryType, setSlideEntryType] = useState<"draw" | "pick">("draw");
   const [paymentMethod, setPaymentMethod] = useState<
     "" | "cash" | "card" | "tab"
   >("");
@@ -129,9 +130,11 @@ export function RegistrationDesk() {
 
   const event = data?.events.find((item) => item.id === eventId);
   const contestant = data?.contestants.find((item) => item.id === contestantId);
+  const slide = event?.competitionType === "slide";
   const individual =
     event?.competitionType === "draw-pot" ||
-    event?.competitionType === "round-robin";
+    event?.competitionType === "round-robin" ||
+    (slide && slideEntryType === "draw");
   const pickAndDraw = event?.competitionType === "pick-and-draw";
   const minimumDraws = event ? minimumDrawEntries(event) : 1;
   const drawRole =
@@ -518,6 +521,13 @@ export function RegistrationDesk() {
                     <span>Entries this competition</span>
                   </div>
                   <form className="registration-competition-form" onSubmit={submitEntry}>
+                  {slide && (
+                   <fieldset>
+                     <legend>Entry type</legend>
+                     <label><input type="radio" name="slide-entry-type" checked={slideEntryType === "draw"} onChange={() => { setSlideEntryType("draw"); setPartnerId(""); }} /> Draw entry</label>
+                     <label><input type="radio" name="slide-entry-type" checked={slideEntryType === "pick"} onChange={() => setSlideEntryType("pick")} /> Picked team</label>
+                   </fieldset>
+                  )}
                   <label>Position<select value={role} onChange={(change) => {
                     setRole(change.target.value as "Header" | "Heeler");
                     setPartnerId("");
