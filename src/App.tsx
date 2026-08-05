@@ -2125,11 +2125,6 @@ function Teams({
     .reduce((total, entry) => total + entry.entries, 0);
   const rider = (id: string) => contestants.find((item) => item.id === id);
   const visibleDrawTeams = draftDraw ?? eventTeams;
-  const riderAppearanceCounts = visibleDrawTeams.reduce((counts, team) => {
-    counts.set(team.headerId, (counts.get(team.headerId) ?? 0) + 1);
-    counts.set(team.heelerId, (counts.get(team.heelerId) ?? 0) + 1);
-    return counts;
-  }, new Map<string, number>());
   const teamAppearanceCounts = visibleDrawTeams.reduce((counts, team) => {
     const key = `${team.headerId}|${team.heelerId}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -2138,9 +2133,9 @@ function Teams({
   const hasFreeRuns = visibleDrawTeams.some(
     (team) => team.headerFreeRun || team.heelerFreeRun,
   );
-  const hasRepeatEntries =
-    [...riderAppearanceCounts.values()].some((count) => count > 1) ||
-    [...teamAppearanceCounts.values()].some((count) => count > 1);
+  const hasRepeatEntries = [...teamAppearanceCounts.values()].some(
+    (count) => count > 1,
+  );
   const displayedTeams = visibleDrawTeams.filter((team) =>
     `${rider(team.headerId)?.name ?? ""} ${rider(team.heelerId)?.name ?? ""}`
       .toLowerCase()
@@ -2446,7 +2441,7 @@ function Teams({
           {(hasFreeRuns || hasRepeatEntries) && (
             <div className="draw-color-legend no-print">
               {hasFreeRuns && <span className="free-run-key">Free Run</span>}
-              {hasRepeatEntries && <span className="repeat-entry-key">Repeated rider or team</span>}
+              {hasRepeatEntries && <span className="repeat-entry-key">Repeated team</span>}
             </div>
           )}
           {event?.competitionType === "pick-and-draw" &&
@@ -2487,9 +2482,9 @@ function Teams({
                 {draftDraw && !teamSearch && <GripVertical className="draw-drag-handle" size={16} />}
                 {team.drawPosition}
               </span>
-              <div className={`person ${(riderAppearanceCounts.get(team.headerId) ?? 0) > 1 ? "repeat-rider" : ""}`}><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}{(riderAppearanceCounts.get(team.headerId) ?? 0) > 1 ? " · Repeat rider" : ""}</small></span></div>
+              <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}</small></span></div>
               <span className="pair-mark">&</span>
-              <div className={`person ${(riderAppearanceCounts.get(team.heelerId) ?? 0) > 1 ? "repeat-rider" : ""}`}><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}{(riderAppearanceCounts.get(team.heelerId) ?? 0) > 1 ? " · Repeat rider" : ""}</small></span></div>
+              <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}</small></span></div>
               <span className="draw-status">{(team.headerFreeRun || team.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}{(teamAppearanceCounts.get(`${team.headerId}|${team.heelerId}`) ?? 0) > 1 && <span className="tag repeat-team-tag">Repeat Team</span>}<span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}{team.paid === false && team.paymentMethod === "tab" ? " · Open tab" : ""}</small></span>
               <span className="row-actions no-print">
                 {!team.generated && team.paid === false && (

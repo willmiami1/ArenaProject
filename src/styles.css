@@ -242,8 +242,6 @@ main { grid-column: 2; min-width: 0; }
 .draw-row.free-run-row { background: rgba(214, 145, 43, .14); box-shadow: inset 4px 0 #d6912b; }
 .draw-row.repeat-team-row { background: rgba(75, 118, 170, .14); box-shadow: inset 4px 0 #4b76aa; }
 .draw-row.free-run-row.repeat-team-row { background: linear-gradient(90deg, rgba(214, 145, 43, .18), rgba(75, 118, 170, .14)); box-shadow: inset 4px 0 #d6912b, inset 8px 0 #4b76aa; }
-.repeat-rider > i { color: #d9e9ff; background: #4b76aa; }
-.repeat-rider small { color: #5278a5; font-weight: 800; }
 .draw-color-legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0 2px; }
 .draw-color-legend span { padding: 5px 9px; border-radius: 5px; font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
 .free-run-key, .free-run-tag { color: #7b490b !important; background: #f8dfb8 !important; border: 1px solid #e4b66f; }
