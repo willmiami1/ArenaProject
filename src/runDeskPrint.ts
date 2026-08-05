@@ -84,7 +84,7 @@ export function roundTimeSheetHtml(
   </header>
   <table>
     <thead>
-      <tr><th>Draw</th><th>Header</th><th>Heeler</th><th>Steer</th><th>Raw Time</th><th>Penalty</th><th>Total / NT</th><th>Notes</th></tr>
+      <tr><th>Team Number</th><th>Header</th><th>Heeler</th><th>Steer</th><th>Raw Time</th><th>Penalty</th><th>Total / NT</th><th>Notes</th></tr>
     </thead>
     <tbody>${rows || '<tr><td colspan="8">No teams in this round.</td></tr>'}</tbody>
   </table>

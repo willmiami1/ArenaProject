@@ -53,6 +53,8 @@ describe("Run Desk manual time sheet", () => {
     );
 
     expect(html).toContain("Round 1 Manual Time Sheet");
+    expect(html).toContain("<th>Team Number</th>");
+    expect(html).not.toContain("<th>Draw</th>");
     expect(html).toContain("Raw Time");
     expect(html).not.toContain("No teams in this round.");
     expect(html.match(/Ada &lt;Header&gt;/g)).toHaveLength(2);
