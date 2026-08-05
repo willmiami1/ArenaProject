@@ -305,6 +305,7 @@ main { grid-column: 2; min-width: 0; }
 .active-team div { padding: 13px; background: #f5f7f5; border-radius: 8px; }
 .active-team span { display: block; margin-bottom: 4px; color: #939b97; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
 .active-team strong { font-size: 14px; }
+.active-team small { display: block; margin-top: 5px; color: var(--green); font-size: 10px; font-weight: 900; }
 .active-team i { color: #a5ada8; font-family: Georgia, serif; }
 .run-handicap { display: flex; align-items: center; justify-content: space-between; margin: -12px 0 18px; padding: 8px 11px; color: var(--muted); background: #f7f9f7; border-radius: 6px; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
 .run-handicap strong { color: var(--green); font-family: "Manrope", sans-serif; font-size: 12px; }
@@ -348,6 +349,7 @@ main { grid-column: 2; min-width: 0; }
 .queue-row strong, .queue-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queue-row strong { font-size: 11px; }
 .queue-row small { margin-top: 3px; color: #929a95; font-size: 9px; text-transform: capitalize; }
+.queue-row small.queue-handicap-details { color: #80653e; font-weight: 800; text-transform: none; }
 .queue-row small.cumulative-times { color: #4e6759; font-weight: 700; text-transform: none; }
 .queue-row.rolled small { color: #9a651a; font-weight: 800; }
 .roll-team-button { padding: 6px 9px; color: #8b641f; background: #fff9ed; border: 1px solid #e6cc9e; border-radius: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; }

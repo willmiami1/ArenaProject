@@ -1068,7 +1068,8 @@ function Overview({
         : 0,
     )
     .slice(0, 3);
-  const rider = (id: string) => contestants.find((item) => item.id === id)?.name ?? "Unknown";
+  const rider = (id: string) =>
+    contestants.find((item) => item.id === id)?.name ?? "Unknown";
 
   return (
     <>
@@ -2673,7 +2674,26 @@ function RunDesk({
   const [penalties, setPenalties] = useState("0");
   const [notes, setNotes] = useState("");
   const isEditingResult = Boolean(selected && selected.status !== "ready");
-  const rider = (id: string) => contestants.find((item) => item.id === id)?.name ?? "Unknown";
+  const contestant = (id: string) =>
+    contestants.find((item) => item.id === id);
+  const rider = (id: string) => contestant(id)?.name ?? "Unknown";
+  const headerHandicap = (team: Team) =>
+    contestant(team.headerId)?.headerHandicap ?? 0;
+  const heelerHandicap = (team: Team) =>
+    contestant(team.heelerId)?.heelerHandicap ?? 0;
+  const slideAdjustmentLabel = (team: Team) => {
+    if (event?.competitionType !== "slide") return "";
+    const adjustment = slideTimeAdjustment(
+      event,
+      { ...team, round: 2 },
+      contestants,
+    );
+    if (adjustment > 0) return `${adjustment.toFixed(1)}s added`;
+    if (adjustment < 0) {
+      return `${Math.abs(adjustment).toFixed(1)}s subtracted`;
+    }
+    return "0.0s adjustment";
+  };
   const entryRuns = (team: Team) =>
     allEventTeams
       .filter(
@@ -3038,9 +3058,9 @@ function RunDesk({
           {selected ? (
             <>
               <div className="active-team">
-                <div><span>Header</span><strong>{rider(selected.headerId)}</strong></div>
+                <div><span>Header</span><strong>{rider(selected.headerId)}</strong><small>HC {headerHandicap(selected)}</small></div>
                 <i>&</i>
-                <div><span>Heeler</span><strong>{rider(selected.heelerId)}</strong></div>
+                <div><span>Heeler</span><strong>{rider(selected.heelerId)}</strong><small>HC {heelerHandicap(selected)}</small></div>
               </div>
               <div className="run-entry-markers">
                 <span className={`tag team-source-tag ${selected.generated ? "draw" : "pick"}`}>
@@ -3049,9 +3069,9 @@ function RunDesk({
                 {(selected.headerFreeRun || selected.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}
                 {repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}
               </div>
-              <div className="run-handicap"><span>Team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
-              {event?.competitionType === "slide" && selected.round === 2 && (
-                <div className="run-handicap"><span>Round 2 slide adjustment</span><strong>{slideTimeAdjustment(event, selected, contestants) >= 0 ? "+" : ""}{slideTimeAdjustment(event, selected, contestants).toFixed(1)}s · Slide #{event.slideNumber ?? 10}</strong></div>
+              <div className="run-handicap"><span>Combined team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
+              {event?.competitionType === "slide" && (
+               <div className="run-handicap"><span>Round 2 slide adjustment</span><strong>{slideAdjustmentLabel(selected)} · Slide #{event.slideNumber ?? 10}</strong></div>
               )}
               {selected.status === "ready" && (
                 <button
@@ -3099,7 +3119,7 @@ function RunDesk({
               <div className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""}`} key={team.id}>
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.competitionType === "slide" ? ` · R2 ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>
