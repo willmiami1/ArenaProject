@@ -207,6 +207,9 @@ main { grid-column: 2; min-width: 0; }
 .competition-row .competition-icon { width: 40px; height: 40px; }
 .competition-row-main h3 { margin: 7px 0 4px; font-family: "Manrope", sans-serif; font-size: 14px; }
 .competition-row-main p { margin: 0; color: var(--muted); font-size: 9px; }
+.competition-name-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin: 7px 0 4px; }
+.competition-name-actions h3 { margin: 0; }
+.publish-results-button { min-height: 28px; padding: 5px 9px; font-size: 8px; }
 
 .search { width: min(270px, 45vw); display: flex; align-items: center; gap: 8px; padding: 8px 11px; color: #7f8983; background: #f8f9f7; border: 1px solid #e1e4e1; border-radius: 7px; }
 .search input { width: 100%; background: none; border: 0; outline: 0; font-size: 12px; }

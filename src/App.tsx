@@ -1284,7 +1284,37 @@ function Events({
                     <span className="competition-icon">{event.competitionType === "draw-pot" ? <Dices size={20} /> : event.competitionType === "pick-only" ? <Handshake size={20} /> : event.competitionType === "pick-and-draw" ? <GitFork size={20} /> : <Repeat2 size={20} />}</span>
                     <div className="competition-row-main">
                       <div className="event-card-tags"><span className={`tag ${event.status.toLowerCase()}`}>{eventStatusLabel(event.status)}</span><span className="tag neutral">{competitionName(event.competitionType)}</span></div>
-                      <h3>{event.name}</h3>
+                      <div className="competition-name-actions">
+                        <h3>{event.name}</h3>
+                        <button
+                          className={event.resultsPublished ? "selected-button publish-results-button" : "secondary publish-results-button"}
+                          disabled={
+                            !event.resultsPublished &&
+                            !teams.some(
+                              (team) =>
+                                team.eventId === event.id &&
+                                (team.status === "complete" ||
+                                  team.status === "no-time"),
+                            )
+                          }
+                          onClick={() =>
+                            onUpdate({
+                              ...event,
+                              resultsPublished: !event.resultsPublished,
+                            })
+                          }
+                          title={
+                            event.resultsPublished
+                              ? "Remove this roping's results from the public website"
+                              : "Publish this individual roping's results on the public website"
+                          }
+                        >
+                          <Trophy size={14} />
+                          {event.resultsPublished
+                            ? "Unpublish Results"
+                            : "Publish Event Results"}
+                        </button>
+                      </div>
                       <p>${event.entryFee} entry · HC {event.handicapTotal} · {event.rounds} round{event.rounds === 1 ? "" : "s"}{event.rounds > 1 && event.shortGoTeams > 0 ? ` · Top ${event.shortGoTeams} Short Go` : ""} · {teams.filter((team) => team.eventId === event.id).length} teams</p>
                     </div>
                     <div className="event-actions">
