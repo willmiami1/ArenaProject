@@ -1512,7 +1512,7 @@ function EventForm({
         {form.competitionType === "pick-and-draw" && (
           <Field label="Minimum draws required"><input required type="number" min="0" max={form.entriesAllowed} value={form.minDrawsAllowed} onChange={(e) => setForm({ ...form, minDrawsAllowed: e.target.value })} /><small>Minimum draw entries required before picked teams may be added.</small></Field>
         )}
-        <Field label="Handicap Total"><input required type="number" min="0" step="0.5" value={form.handicapTotal} onChange={(e) => setForm({ ...form, handicapTotal: e.target.value })} placeholder="10.5" /></Field>
+        <Field label="Max Team Handicap"><input required type="number" min="0" step="0.5" value={form.handicapTotal} onChange={(e) => setForm({ ...form, handicapTotal: e.target.value })} placeholder="10.5" /></Field>
         {form.competitionType === "slide" && (
           <Field label="Slide number"><input required type="number" min="0" max="40" step="0.5" value={form.slideNumber} onChange={(e) => setForm({ ...form, slideNumber: e.target.value })} /><small>In Round 2, each 0.5 handicap above or below this number adds or subtracts 0.5 seconds, capped at 4 seconds.</small></Field>
         )}

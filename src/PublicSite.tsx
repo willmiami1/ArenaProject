@@ -106,7 +106,11 @@ const socialLinks = [
     url: "https://www.facebook.com/profile.php?id=61590614630641",
     Icon: Facebook,
   },
-  { label: "Instagram", url: "https://www.instagram.com/", Icon: Instagram },
+  {
+    label: "Instagram",
+    url: "https://www.instagram.com/destinyrancharena?igsh=bHZvd3oxa3ZzaW5m",
+    Icon: Instagram,
+  },
   {
     label: "YouTube",
     url: "https://www.youtube.com/@destinyranchvideos-hp9im",
