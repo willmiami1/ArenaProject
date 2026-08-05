@@ -3,6 +3,8 @@ import {
   calculatePurse,
   competitionName,
   officialRunTime,
+  slideTimeAdjustment,
+  teamHandicapTotal,
 } from "./competition";
 import { aggregateStandings, teamEntryKey } from "./standings";
 import type {
@@ -178,6 +180,40 @@ const finalTime = (
 const contestantName = (contestants: Contestant[], id: string) =>
   contestants.find((contestant) => contestant.id === id)?.name ?? "Unknown";
 
+function slideReportDetails(
+  event: ArenaEvent | undefined,
+  headerId: string,
+  heelerId: string,
+  contestants: Contestant[],
+) {
+  if (event?.competitionType !== "slide") {
+    return {
+      header: contestantName(contestants, headerId),
+      heeler: contestantName(contestants, heelerId),
+      teamHandicap: "—",
+      slideAdjustment: "—",
+    };
+  }
+  const header = contestants.find((contestant) => contestant.id === headerId);
+  const heeler = contestants.find((contestant) => contestant.id === heelerId);
+  const adjustment = slideTimeAdjustment(
+    event,
+    { headerId, heelerId, round: 2 },
+    contestants,
+  );
+  return {
+    header: `${header?.name ?? "Unknown"} (HC ${header?.headerHandicap ?? 3})`,
+    heeler: `${heeler?.name ?? "Unknown"} (HC ${heeler?.heelerHandicap ?? 3})`,
+    teamHandicap: teamHandicapTotal(headerId, heelerId, contestants),
+    slideAdjustment:
+      adjustment > 0
+        ? `${adjustment.toFixed(1)}s added`
+        : adjustment < 0
+          ? `${Math.abs(adjustment).toFixed(1)}s deducted`
+          : "0.0s",
+  };
+}
+
 function eventEntries(
   event: ArenaEvent,
   teams: Team[],
@@ -339,6 +375,12 @@ function teamRows(
     .sort((a, b) => a.round - b.round || a.drawPosition - b.drawPosition)
     .map((team) => {
       const event = eventMap.get(team.eventId);
+      const slideDetails = slideReportDetails(
+        event,
+        team.headerId,
+        team.heelerId,
+        data.contestants,
+      );
       const result = payouts.get(
         `${team.eventId}|${team.headerId}|${team.heelerId}|${team.headerEntryNumber ?? 1}|${team.heelerEntryNumber ?? 1}`,
       );
@@ -347,8 +389,10 @@ function teamRows(
         round: team.round,
         draw: team.drawPosition,
         teamNumber: team.drawPosition,
-        header: contestantName(data.contestants, team.headerId),
-        heeler: contestantName(data.contestants, team.heelerId),
+        header: slideDetails.header,
+        heeler: slideDetails.heeler,
+        teamHandicap: slideDetails.teamHandicap,
+        slideAdjustment: slideDetails.slideAdjustment,
         arenaPosition: team.arenaPosition ?? "—",
         steer: team.steerNumber ?? "—",
         rawTime: team.rawTime ?? "—",
@@ -643,14 +687,21 @@ function payoutRows(data: ArenaData, events: ArenaEvent[], teams: Team[]) {
     );
     return payouts.map((payout) => {
       const standing = standings[payout.place - 1];
+      const slideDetails = standing
+        ? slideReportDetails(
+            event,
+            standing.headerId,
+            standing.heelerId,
+            data.contestants,
+          )
+        : null;
       return {
         competition: event.name,
         place: payout.place,
-        team: standing
-          ? `${contestantName(data.contestants, standing.headerId)} / ${contestantName(
-              data.contestants,
-              standing.heelerId,
-            )}`
+        team: standing && slideDetails
+          ? event.competitionType === "slide"
+            ? `${slideDetails.header} / ${slideDetails.heeler} · Team HC ${slideDetails.teamHandicap} · ${slideDetails.slideAdjustment}`
+            : `${slideDetails.header} / ${slideDetails.heeler}`
           : "TBD",
         time: standing?.total ?? "—",
         prize: money(payout.amount),
@@ -671,17 +722,27 @@ function standingRows(data: ArenaData, events: ArenaEvent[], teams: Team[]) {
       standings.filter((standing) => standing.qualified).length,
       event.payoutPercentages,
     );
-    return standings.map((standing) => ({
-      competition: event.name,
-      rank: standing.rank,
-      header: contestantName(data.contestants, standing.headerId),
-      heeler: contestantName(data.contestants, standing.heelerId),
-      rounds: standing.rounds,
-      total: standing.rounds ? standing.total.toFixed(2) : "—",
-      average: standing.rounds ? standing.average.toFixed(2) : "—",
-      status: standing.qualified ? "Qualified" : "No Time",
-      prize: money(payouts[standing.rank - 1]?.amount ?? 0),
-    }));
+    return standings.map((standing) => {
+      const slideDetails = slideReportDetails(
+        event,
+        standing.headerId,
+        standing.heelerId,
+        data.contestants,
+      );
+      return {
+        competition: event.name,
+        rank: standing.rank,
+        header: slideDetails.header,
+        heeler: slideDetails.heeler,
+        teamHandicap: slideDetails.teamHandicap,
+        slideAdjustment: slideDetails.slideAdjustment,
+        rounds: standing.rounds,
+        total: standing.rounds ? standing.total.toFixed(2) : "—",
+        average: standing.rounds ? standing.average.toFixed(2) : "—",
+        status: standing.qualified ? "Qualified" : "No Time",
+        prize: money(payouts[standing.rank - 1]?.amount ?? 0),
+      };
+    });
   });
 }
 
@@ -808,6 +869,8 @@ const columns = {
     ["draw", "Draw"],
     ["header", "Header"],
     ["heeler", "Heeler"],
+    ["teamHandicap", "Team HC"],
+    ["slideAdjustment", "Slide Adjustment"],
     ["time", "Time"],
     ["status", "Result"],
     ["standing", "Standing"],
@@ -820,6 +883,8 @@ const columns = {
     ["teamNumber", "Team #"],
     ["header", "Header"],
     ["heeler", "Heeler"],
+    ["teamHandicap", "Team HC"],
+    ["slideAdjustment", "Slide Adjustment"],
     ["arenaPosition", "Arena Position"],
   ],
   results: [
@@ -828,6 +893,8 @@ const columns = {
     ["draw", "Draw"],
     ["header", "Header"],
     ["heeler", "Heeler"],
+    ["teamHandicap", "Team HC"],
+    ["slideAdjustment", "Slide Adjustment"],
     ["rawTime", "Raw Time"],
     ["penalties", "Penalty"],
     ["time", "Total Time"],
@@ -841,6 +908,8 @@ const columns = {
     ["rank", "Rank"],
     ["header", "Header"],
     ["heeler", "Heeler"],
+    ["teamHandicap", "Team HC"],
+    ["slideAdjustment", "Slide Adjustment"],
     ["rounds", "Rounds"],
     ["total", "Total"],
     ["average", "Average"],

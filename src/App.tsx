@@ -3156,7 +3156,7 @@ function RunDesk({
           {standings.map((team, index) => (
             <div className="table-row" key={team.id}>
               <span><b className={`place place-${index + 1}`}>{index + 1}</b></span>
-              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong><small>Draw #{team.drawPosition}{activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
+              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong>{event?.competitionType === "slide" && <small>Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)} · R2 {slideAdjustmentLabel(team)}</small>}<small>Draw #{team.drawPosition}{activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
               <span>{entryRuns(team).filter((run) => run.status === "complete" && run.rawTime !== null).length} / {roundCount}</span>
               <span><b className="total-time">{qualifiedTotal(team).toFixed(2)}</b></span>
             </div>

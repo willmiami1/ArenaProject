@@ -147,5 +147,37 @@ describe("event summary", () => {
       key: "freeRuns",
       label: "Free Runs",
     });
+
+    describe("Slide reports", () => {
+      it("shows rider handicaps, combined handicap, and adjustment", () => {
+        const slide = {
+          ...event,
+          competitionType: "slide" as const,
+          slideNumber: 10,
+          rounds: 2,
+        };
+        const workspace = data([
+          team(),
+          team({ id: "round-2", round: 2, rawTime: 8 }),
+        ]);
+        workspace.events = [slide];
+        const definition = reportDefinitions.find(
+          (report) => report.id === "competition-final",
+        )!;
+        const filters = {
+          ...emptyReportFilters(workspace),
+          competitionId: slide.id,
+        };
+
+        const report = generateReport(workspace, definition, filters);
+
+        expect(report.rows[0]).toMatchObject({
+          header: "Ada Header (HC 4)",
+          heeler: "Bo Heeler (HC 4)",
+          teamHandicap: 8,
+          slideAdjustment: "2.0s deducted",
+        });
+      });
+    });
   });
 });

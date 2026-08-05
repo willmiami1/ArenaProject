@@ -206,9 +206,18 @@ export function ReportsModule({ data }: { data: ArenaData }) {
   useEffect(() => {
     if (!report) return;
     const preferenceKey = `${role}:${report.definition.id}`;
+    const preferredColumns = columnPreferences[preferenceKey];
     setVisibleColumns(
-      columnPreferences[preferenceKey] ??
-        report.columns.map((column) => column.key),
+      preferredColumns
+        ? [
+            ...preferredColumns.filter((key) =>
+              report.columns.some((column) => column.key === key),
+            ),
+            ...report.columns
+              .map((column) => column.key)
+              .filter((key) => !preferredColumns.includes(key)),
+          ]
+        : report.columns.map((column) => column.key),
     );
     setSort({ key: "", direction: "asc" });
     setPage(1);
