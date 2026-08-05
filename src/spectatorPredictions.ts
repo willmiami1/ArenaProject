@@ -18,8 +18,8 @@ export interface SpectatorLeaderboardRow {
 export function predictionIsOpen(team: Team, now = new Date()) {
   return (
     team.status === "ready" &&
-    Boolean(team.predictionClosesAt) &&
-    Date.parse(team.predictionClosesAt!) > now.getTime()
+    (!team.predictionClosesAt ||
+      Date.parse(team.predictionClosesAt) > now.getTime())
   );
 }
 

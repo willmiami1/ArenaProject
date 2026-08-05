@@ -529,7 +529,7 @@ describe("workspace compatibility", () => {
       ).toThrow("closed");
     });
 
-    it("shows the current ready team even before a pick cutoff is configured", () => {
+    it("keeps the current ready team open until staff closes picks", () => {
       const competition = event({ status: "Live" });
       const currentRun = run({
         status: "ready",
@@ -540,8 +540,20 @@ describe("workspace compatibility", () => {
       expect(projectPublicArenaData(workspace(competition, [currentRun]), now)
         .competitions[0].predictionRuns[0]).toMatchObject({
           id: currentRun.id,
-          open: false,
+          open: true,
         });
+      expect(() =>
+        createSpectatorPrediction(
+          workspace(competition, [currentRun]),
+          {
+            name: "Taylor Fan",
+            eventId: competition.id,
+            teamId: currentRun.id,
+            choice: "cowboys",
+          },
+          now,
+        ),
+      ).not.toThrow();
     });
 
     it("scores Cowboys on a qualified run and Steer on a no-time", () => {

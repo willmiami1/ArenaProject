@@ -424,7 +424,9 @@ function publicProjection(workspace) {
             heelerPhoto: publicProfilePhoto(heeler?.photo),
             steerNumber: team.steerNumber || "",
             closesAt: team.predictionClosesAt,
-            open: Date.parse(team.predictionClosesAt) > Date.now(),
+            open:
+              !team.predictionClosesAt ||
+              Date.parse(team.predictionClosesAt) > Date.now(),
           };
         }),
       spectatorLeaderboards: Array.from(
@@ -1742,8 +1744,8 @@ export const submitSpectatorPrediction = webMethod(
     }
     if (
       team.status !== "ready" ||
-      !team.predictionClosesAt ||
-      Date.parse(team.predictionClosesAt) <= Date.now()
+      (team.predictionClosesAt &&
+        Date.parse(team.predictionClosesAt) <= Date.now())
     ) {
       throw new Error("Predictions are closed for this run.");
     }
