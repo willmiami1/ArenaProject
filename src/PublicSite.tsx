@@ -318,14 +318,18 @@ function SpectatorPage({
                   <span className="public-cowboy-rider">
                     <small>Header</small>
                     <span className="public-cowboy-avatar">
-                      <span aria-hidden="true">{initials(selectedRun.headerName)}</span>
+                      {selectedRun.headerPhoto
+                        ? <img src={selectedRun.headerPhoto} alt={`${selectedRun.headerName} profile`} />
+                        : <span aria-hidden="true">{initials(selectedRun.headerName)}</span>}
                     </span>
                     <strong>{selectedRun.headerName}</strong>
                   </span>
                   <span className="public-cowboy-rider">
                     <small>Heeler</small>
                     <span className="public-cowboy-avatar">
-                      <span aria-hidden="true">{initials(selectedRun.heelerName)}</span>
+                      {selectedRun.heelerPhoto
+                        ? <img src={selectedRun.heelerPhoto} alt={`${selectedRun.heelerName} profile`} />
+                        : <span aria-hidden="true">{initials(selectedRun.heelerName)}</span>}
                     </span>
                     <strong>{selectedRun.heelerName}</strong>
                   </span>

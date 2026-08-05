@@ -80,9 +80,22 @@ export interface PublicPredictionRun {
   drawPosition: number;
   headerName: string;
   heelerName: string;
+  headerPhoto?: string;
+  heelerPhoto?: string;
   steerNumber: string;
   closesAt?: string;
   open: boolean;
+}
+
+function publicProfilePhoto(photo: string | undefined) {
+  if (
+    !photo ||
+    photo.length > 3_000_000 ||
+    !/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\s]+$/i.test(photo)
+  ) {
+    return undefined;
+  }
+  return photo;
 }
 
 export interface PublicMeet {
@@ -134,8 +147,8 @@ export function projectPublicArenaData(
   today = new Date(),
 ): PublicArenaData {
   const competitions = data.events.map((event): PublicCompetition => {
-    const contestantNames = new Map(
-      data.contestants.map((contestant) => [contestant.id, contestant.name]),
+    const contestantsById = new Map(
+      data.contestants.map((contestant) => [contestant.id, contestant]),
     );
     const fixedEntries = data.teams.filter(
       (team) =>
@@ -193,8 +206,10 @@ export function projectPublicArenaData(
           id: team.id,
           round: team.round,
           drawPosition: team.drawPosition,
-          headerName: contestantNames.get(team.headerId) ?? "Unknown",
-          heelerName: contestantNames.get(team.heelerId) ?? "Unknown",
+          headerName: contestantsById.get(team.headerId)?.name ?? "Unknown",
+          heelerName: contestantsById.get(team.heelerId)?.name ?? "Unknown",
+          headerPhoto: publicProfilePhoto(contestantsById.get(team.headerId)?.photo),
+          heelerPhoto: publicProfilePhoto(contestantsById.get(team.heelerId)?.photo),
           steerNumber: team.steerNumber ?? "",
           closesAt: team.predictionClosesAt,
           open: predictionIsOpen(team, today),

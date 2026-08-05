@@ -126,6 +126,24 @@ describe("public grouping and privacy", () => {
     ).toBe(5);
     expect(projectPublicArenaData(data, today).meets[0].competitions[0].results).toEqual([]);
   });
+
+  it("projects profile photos only for the current prediction team", () => {
+    const projected = projectPublicArenaData(
+      workspace(event({ status: "Live" }), [
+        run({
+          status: "ready",
+          rawTime: null,
+          predictionClosesAt: "2026-08-05T23:00:00.000Z",
+        }),
+      ]),
+      today,
+    );
+
+    expect(projected.competitions[0].predictionRuns[0]).toMatchObject({
+      headerPhoto: "data:image/png;base64,secret",
+      heelerPhoto: undefined,
+    });
+  });
 });
 
 describe("aggregate public standings", () => {

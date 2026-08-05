@@ -269,6 +269,19 @@ function spectatorLeaderboard(workspace, eventId, round) {
 }
 
 function publicProjection(workspace) {
+    const contestantsById = new Map(
+      workspace.contestants.map((contestant) => [contestant.id, contestant]),
+    );
+    const publicProfilePhoto = (photo) => {
+      if (
+        typeof photo !== "string" ||
+        photo.length > 3000000 ||
+        !/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\s]+$/i.test(photo)
+      ) {
+        return undefined;
+      }
+      return photo;
+    };
     const competitions = workspace.events.map((event) => ({
       id: event.id,
       parentEventId: event.parentEventId,
@@ -327,18 +340,16 @@ function publicProjection(workspace) {
             Number(left.drawPosition) - Number(right.drawPosition),
         )
         .map((team) => {
-          const names = new Map(
-            workspace.contestants.map((contestant) => [
-              contestant.id,
-              contestant.name,
-            ]),
-          );
+          const header = contestantsById.get(team.headerId);
+          const heeler = contestantsById.get(team.heelerId);
           return {
             id: team.id,
             round: Number(team.round || 1),
             drawPosition: Number(team.drawPosition),
-            headerName: names.get(team.headerId) || "Unknown",
-            heelerName: names.get(team.heelerId) || "Unknown",
+            headerName: header?.name || "Unknown",
+            heelerName: heeler?.name || "Unknown",
+            headerPhoto: publicProfilePhoto(header?.photo),
+            heelerPhoto: publicProfilePhoto(heeler?.photo),
             steerNumber: team.steerNumber || "",
             closesAt: team.predictionClosesAt,
             open: Date.parse(team.predictionClosesAt) > Date.now(),

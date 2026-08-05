@@ -172,6 +172,7 @@
 .public-cowboy-rider>small { color: #fff; font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: .12em; }
 .public-cowboy-rider>strong { max-width: 100%; overflow: hidden; color: #fff; font-family: "Manrope",sans-serif; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .public-cowboy-avatar { width: 72px; height: 72px; display: grid; place-items: center; overflow: hidden; color: #fff3d7; background: #17130f; border: 2px solid #e2b65f; border-radius: 50%; font-family: "Manrope",sans-serif; font-size: 18px; font-weight: 900; }
+.public-cowboy-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .public-pick-card.selected .public-cowboy-rider { color: var(--public-tan); background: #17130f; }
 .public-pick-card>:is(.public-cowboy-team-label,.public-steer-label) { display: block; margin: 3px 0 0; padding: 9px; color: #000; background: var(--public-cream); font-family: "Manrope",sans-serif; font-size: 17px; font-weight: 900; text-align: center; text-transform: uppercase; letter-spacing: .05em; }
 .public-pick-card.selected .public-steer-picture { color: var(--public-tan); background: #17130f; }
