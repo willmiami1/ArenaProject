@@ -144,6 +144,8 @@ main { grid-column: 2; min-width: 0; }
 .handicap-preview.over { color: #a14a41; background: #fbf0ef; border-color: #e6c7c4; }
 .form-section-title { margin: 25px 0 13px; padding-bottom: 8px; color: #445149; border-bottom: 1px solid #eaedea; font-family: "Manrope", sans-serif; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; }
 .form-section-title:first-of-type { margin-top: 0; }
+.contestant-account-help { max-width: 760px; margin: -4px 0 16px; color: #65736b; font-size: 12px; line-height: 1.55; }
+.contestant-account-grid { padding: 18px; background: #f7f9f7; border: 1px solid #dfe5e1; }
 .copy-summary { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 17px; }
 .copy-summary span { padding: 6px 9px; color: #4f5d55; background: #f2f5f3; border-radius: 6px; font-size: 9px; font-weight: 700; }
 .toggle-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 18px; }

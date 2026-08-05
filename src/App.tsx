@@ -1970,6 +1970,7 @@ function ContestantForm({
   });
   const [photoError, setPhotoError] = useState("");
   const [loginPin, setLoginPin] = useState("");
+  const [confirmLoginPin, setConfirmLoginPin] = useState("");
   const [loginError, setLoginError] = useState("");
   const handlePhoto = async (file?: File) => {
     if (!file) return;
@@ -2001,13 +2002,17 @@ function ContestantForm({
       categoryNumber: contestant?.categoryNumber ?? "",
       photo: form.photo,
     };
-    if (loginPin) {
+    if (loginPin || confirmLoginPin) {
       if (!form.email.trim()) {
         setLoginError("Enter an email before configuring a contestant PIN.");
         return;
       }
       if (!/^\d{4}$/.test(loginPin)) {
         setLoginError("The contestant PIN must contain exactly four digits.");
+        return;
+      }
+      if (loginPin !== confirmLoginPin) {
+        setLoginError("The contestant PIN confirmation does not match.");
         return;
       }
       if (!isWixEmbed()) {
@@ -2027,7 +2032,7 @@ function ContestantForm({
   };
   return (
     <form className="form-panel" onSubmit={submit}>
-      <div className="form-heading"><div><h3>{contestant ? "Edit contestant" : "Add contestant"}</h3><p>{contestant ? "Update this rider's profile and handicaps." : "Create a rider profile for team entries."}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
+      <div className="form-heading"><div><h3>{contestant ? "Edit contestant and account" : "Add contestant and account"}</h3><p>{contestant ? "Update this rider's profile, handicaps, and login access." : "Create a rider profile and optional contestant login."}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
       <div className="photo-field">
         <div className="photo-preview">
           {form.photo ? <img src={form.photo} alt="Contestant preview" /> : <Camera size={24} />}
@@ -2049,9 +2054,16 @@ function ContestantForm({
         <Field label="Header Handicap"><input required type="number" min="0" step="0.5" value={form.headerHandicap} onChange={(e) => setForm({ ...form, headerHandicap: e.target.value })} placeholder="0" /></Field>
         <Field label="Heeler Handicap"><input required type="number" min="0" step="0.5" value={form.heelerHandicap} onChange={(e) => setForm({ ...form, heelerHandicap: e.target.value })} placeholder="0" /></Field>
         <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555-0123" /></Field>
-        <Field label="Email"><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="rider@example.com" /></Field>
-        <Field label="Contestant Login PIN"><input type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} value={loginPin} onChange={(e) => { setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setLoginError(""); }} placeholder={contestant ? "Enter 4 digits to reset" : "Optional 4-digit PIN"} /></Field>
         <Field label="Hometown"><input value={form.hometown} onChange={(e) => setForm({ ...form, hometown: e.target.value })} placeholder="City, State" /></Field>
+      </div>
+      <h4 className="form-section-title">Contestant account</h4>
+      <p className="contestant-account-help">
+        Set the email and four-digit PIN the contestant will use for online entry and the contestant portal. Leave both PIN fields blank to keep the current login unchanged.
+      </p>
+      <div className="form-grid contestant-account-grid">
+        <Field label="Login Email"><input type="email" autoComplete="off" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setLoginError(""); }} placeholder="rider@example.com" /></Field>
+        <Field label={contestant ? "Set or Reset 4-digit PIN" : "Set 4-digit PIN"}><input type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="new-password" value={loginPin} onChange={(e) => { setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setLoginError(""); }} placeholder="••••" /></Field>
+        <Field label="Confirm 4-digit PIN"><input type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="new-password" value={confirmLoginPin} onChange={(e) => { setConfirmLoginPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setLoginError(""); }} placeholder="••••" /></Field>
       </div>
       {loginError && <div className="form-error">{loginError}</div>}
       <FormActions onCancel={onCancel} submitLabel={contestant ? "Save changes" : "Add contestant"} />
