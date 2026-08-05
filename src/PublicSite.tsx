@@ -158,7 +158,6 @@ function PublicHeader() {
       </button>
       <nav id="public-navigation" className={open ? "open" : ""} aria-label="Public navigation">
         <a href={href("home")} onClick={() => setOpen(false)}>Home</a>
-        <a href={eventsHref} onClick={() => setOpen(false)}>Events</a>
         <a href={operationalHref("registration")} onClick={() => setOpen(false)}><ClipboardPen size={16} /> Registration Desk</a>
         <a href={operationalHref("command")} onClick={() => setOpen(false)}><ShieldCheck size={16} /> Admin login</a>
         <SocialLinks />
@@ -176,7 +175,6 @@ function PublicFooter() {
       </div>
       <nav aria-label="Footer navigation">
         <a href={href("home")}>Home</a>
-        <a href={eventsHref}>Events</a>
         <a href={operationalHref("registration")}>Registration Desk</a>
         <a href={operationalHref("command")}>Admin login</a>
       </nav>
@@ -516,7 +514,7 @@ function EventExplorer({ data }: { data: PublicArenaData }) {
   );
 }
 
-function HomePage({ data }: { data: PublicArenaData }) {
+function HomePage() {
   const flyers = [
     { src: "./future-event-flyer-1.png", alt: "Destiny Ranch Arena future event flyer" },
     { src: "./future-event-flyer-2.png", alt: "Destiny Ranch Arena upcoming roping flyer" },
@@ -542,7 +540,6 @@ function HomePage({ data }: { data: PublicArenaData }) {
           <div><Trophy /><strong>Results worth keeping</strong><span>Published averages show every qualified round.</span></div>
         </section>
       </section>
-      <EventExplorer data={data} />
       <section className="public-flyers" aria-labelledby="future-flyers-title">
         <div className="public-flyers-heading">
           <span>Save the date</span>
@@ -1091,6 +1088,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
   );
   const [error, setError] = useState("");
   useEffect(() => {
+    if (route.kind === "home") return;
     if (!isWixEmbed()) {
       const refresh = () => setData(loadLocalPublicData());
       window.addEventListener("focus", refresh);
@@ -1105,7 +1103,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       .then((result) => { if (!cancelled) setData(result); })
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Events could not be loaded."); });
     return () => { cancelled = true; };
-  }, []);
+  }, [route.kind]);
 
   const selected = useMemo(() => {
     const competition = (
@@ -1127,8 +1125,8 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       {/* THESIS: Arena day begins at the gate, not in a generic card grid. OWN-WORLD: ink-black ranch marks, bone paper, arena-gold signals, and squared field forms. STORY: find the next roping, understand the card, enter, and return for official results. FIRST VIEWPORT: oversized ride-your-run statement beside a stamped DR mark with the next event directly below. FORM: established ranch identity extended into a public event ledger. */}
       <PublicHeader />
       <main className="public-main">
-        {error ? <section className="public-not-found"><h1>We couldn’t open the event book.</h1><p>{error}</p></section> : !data ? <div className="public-loading" role="status">Loading the event book…</div> :
-          route.kind === "home" ? <HomePage data={data} /> :
+        {route.kind === "home" ? <HomePage /> :
+          error ? <section className="public-not-found"><h1>We couldn’t open the event book.</h1><p>{error}</p></section> : !data ? <div className="public-loading" role="status">Loading the event book…</div> :
           route.kind === "events" ? <><section className="public-index-head"><h1>Every run starts here.</h1><p>Upcoming entries, live ropings, and the official results book.</p></section><EventExplorer data={data} /></> :
           route.kind === "event" ? <EventPage meet={selected.meet} /> :
           route.kind === "competition" ? <CompetitionPage competition={selected.competition} meet={selected.meet} /> :
