@@ -314,6 +314,12 @@ function SpectatorPage({
                   checked={choice === "cowboys"}
                   onChange={() => setChoice("cowboys")}
                 />
+                <span className="public-cowboy-picture">
+                  <img
+                    src="./team-roping-hero.png"
+                    alt="Header and heeler chasing a steer in the arena"
+                  />
+                </span>
                 <span className="public-cowboy-roster">
                   <span className="public-cowboy-rider">
                     <small>Header</small>
