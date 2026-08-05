@@ -2,7 +2,7 @@ import type { ArenaData } from "./types";
 import { defaultCompetitionSettings } from "./competition";
 
 export const seedData: ArenaData = {
-  participantDatabaseVersion: 2,
+  participantDatabaseVersion: 3,
   meets: [
     {
       id: "meet-summer-series",
@@ -27,7 +27,8 @@ export const seedData: ArenaData = {
       competitionType: "pick-and-draw",
       pickDrawRole: "both",
       entriesAllowed: 10,
-      handicapTotal: 10,
+      handicapTotal: 20,
+      maxContestantHandicap: 10,
       timeLimit: 13,
       rounds: 2,
       producerFeePercent: 49.9,

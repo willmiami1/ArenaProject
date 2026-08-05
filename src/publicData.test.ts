@@ -674,7 +674,8 @@ describe("workspace compatibility", () => {
     delete (legacy.events[0] as Partial<ArenaEvent>).maxContestantHandicap;
     delete (legacy.events[0] as Partial<ArenaEvent>).minDrawsAllowed;
 
-    expect(normalizeData(legacy).events[0].maxContestantHandicap).toBe(99);
+    expect(normalizeData(legacy).events[0].handicapTotal).toBe(20);
+    expect(normalizeData(legacy).events[0].maxContestantHandicap).toBe(10);
     expect(normalizeData(legacy).events[0].minDrawsAllowed).toBe(0);
   });
 

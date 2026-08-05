@@ -85,9 +85,9 @@ export const defaultCompetitionSettings = {
   entriesAllowed: 1,
   minDrawsAllowed: 0,
   allowRepeatPartners: false,
-  handicapTotal: 99,
+  handicapTotal: 20,
   slideNumber: 10,
-  maxContestantHandicap: 99,
+  maxContestantHandicap: 10,
   timeLimit: 30,
   rounds: 1,
   shortGoTeams: 0,
@@ -283,7 +283,7 @@ export function contestantEligibleForRole(
     role === "Header"
       ? contestant.headerHandicap
       : contestant.heelerHandicap;
-  return canRope && handicap <= (event.maxContestantHandicap ?? 99);
+  return canRope && handicap <= (event.maxContestantHandicap ?? 10);
 }
 
 function eligiblePair(

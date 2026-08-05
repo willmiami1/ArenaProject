@@ -406,7 +406,7 @@ function publicProjection(workspace) {
       allowRepeatPartners: event.allowRepeatPartners === true,
       handicapTotal: event.handicapTotal,
       slideNumber: Number(event.slideNumber ?? 10),
-      maxContestantHandicap: Number(event.maxContestantHandicap ?? 99),
+      maxContestantHandicap: Number(event.maxContestantHandicap ?? 10),
       timeLimit: event.timeLimit,
       rounds: event.rounds,
       shortGoTeams: event.shortGoTeams,
@@ -1264,7 +1264,7 @@ const handicapTotal = (header, heeler) =>
   Number(header?.headerHandicap || 0) + Number(heeler?.heelerHandicap || 0);
 const contestantWithinHandicap = (event, contestant, role) =>
   Number(role === "Header" ? contestant?.headerHandicap || 0 : contestant?.heelerHandicap || 0) <=
-  Number(event.maxContestantHandicap ?? 99);
+  Number(event.maxContestantHandicap ?? 10);
 
 function availablePartners(workspace, event, contestant) {
   return workspace.contestants

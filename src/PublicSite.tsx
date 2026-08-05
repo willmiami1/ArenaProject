@@ -749,7 +749,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     (contestant.role === "Both" || contestant.role === position) &&
     (position === "Header"
       ? contestant.headerHandicap
-      : contestant.heelerHandicap) <= (competition?.maxContestantHandicap ?? 99);
+      : contestant.heelerHandicap) <= (competition?.maxContestantHandicap ?? 10);
   const eligiblePartners = options && competition
     ? options.partners.filter((partner) => {
         const partnerPosition = role === "Header" ? "Heeler" : "Header";

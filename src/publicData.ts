@@ -192,7 +192,7 @@ export function projectPublicArenaData(
       allowRepeatPartners: event.allowRepeatPartners,
       handicapTotal: event.handicapTotal,
       slideNumber: event.slideNumber ?? 10,
-      maxContestantHandicap: event.maxContestantHandicap ?? 99,
+      maxContestantHandicap: event.maxContestantHandicap ?? 10,
       timeLimit: event.timeLimit,
       rounds: event.rounds,
       shortGoTeams: event.shortGoTeams,

@@ -9,7 +9,7 @@ import type { ArenaData, ArenaMeet } from "./types";
 import { isWixEmbed, requestWixData } from "./wixBridge";
 
 const STORAGE_KEY = "arena-command-data-v1";
-const PARTICIPANT_DATABASE_VERSION = 2;
+const PARTICIPANT_DATABASE_VERSION = 3;
 const LEGACY_SAMPLE_MEETS = new Set([
   "Summer Buckle Series",
   "Friday Night Jackpot",
@@ -23,6 +23,8 @@ export type PersistenceStatus =
   | "error";
 
 export function normalizeData(parsed: ArenaData): ArenaData {
+  const applyHandicapDefaults =
+    (parsed.participantDatabaseVersion ?? 0) < PARTICIPANT_DATABASE_VERSION;
   const meets: ArenaMeet[] = (
     parsed.meets ??
     parsed.events.map((event) => ({
@@ -46,12 +48,16 @@ export function normalizeData(parsed: ArenaData): ArenaData {
       event.producerFeePercent ??
       (event as typeof event & { producerFee?: number }).producerFee ??
       0,
-    handicapTotal:
-      event.handicapTotal ??
-      (Number(
-        (event as typeof event & { handicapCategory?: string }).handicapCategory,
-      ) || 99),
-    maxContestantHandicap: event.maxContestantHandicap ?? 99,
+    handicapTotal: applyHandicapDefaults
+      ? 20
+      : event.handicapTotal ??
+        (Number(
+          (event as typeof event & { handicapCategory?: string })
+            .handicapCategory,
+        ) || 20),
+    maxContestantHandicap: applyHandicapDefaults
+      ? 10
+      : event.maxContestantHandicap ?? 10,
     minDrawsAllowed: event.minDrawsAllowed ?? 0,
     slideNumber: event.slideNumber ?? 10,
     shortGoTeams: event.shortGoTeams ?? 0,
