@@ -1485,7 +1485,7 @@ function EventForm({
     name: event?.name ?? "",
     description: event?.description ?? "",
     status: event?.status ?? "Upcoming" as EventStatus,
-    entryFee: event?.entryFee.toString() ?? "60",
+    entryFee: event?.entryFee.toString() ?? "50",
     competitionType: competitionType ?? event?.competitionType ?? defaultCompetitionSettings.competitionType,
     pickDrawRole: "both" as const,
     registrationOpen: event?.registrationOpen ?? true,
