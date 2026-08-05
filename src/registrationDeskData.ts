@@ -31,6 +31,7 @@ export type RegistrationDeskEvent = Pick<
   | "registrationOpen"
   | "drawLocked"
   | "entriesAllowed"
+  | "minDrawsAllowed"
   | "allowRepeatPartners"
   | "handicapTotal"
   | "maxContestantHandicap"
@@ -71,6 +72,7 @@ export function registrationDeskProjection(
         registrationOpen,
         drawLocked,
         entriesAllowed,
+        minDrawsAllowed,
         allowRepeatPartners,
         handicapTotal,
         maxContestantHandicap,
@@ -88,6 +90,7 @@ export function registrationDeskProjection(
         registrationOpen,
         drawLocked,
         entriesAllowed,
+        minDrawsAllowed,
         allowRepeatPartners,
         handicapTotal,
         maxContestantHandicap,

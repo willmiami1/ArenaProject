@@ -720,8 +720,31 @@ main { grid-column: 2; min-width: 0; }
 .registration-contestant-list strong,.registration-contestant-list small { display: block; }
 .registration-contestant-list small { margin-top: 4px; color: #8e7b69; font-size: 9px; }
 .registration-contestant-list i { padding: 8px; color: #bba58e; font-style: normal; }
+.registration-search-hint { margin: 0; padding: 24px 14px; color: #8e7b69; font-size: 11px; line-height: 1.5; text-align: center; }
 .registration-entry-form { display: grid; gap: 17px; padding: 24px; }
+.registration-competition-form { display: grid; gap: 17px; }
 .registration-selected-contestant { display: flex; align-items: center; gap: 10px; padding: 14px; color: #e4c494; background: #2c2015; border: 1px solid #5b422a; border-radius: 7px; font-size: 12px; }
+.registration-contestant-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.registration-contestant-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; color: #d7c0a7; background: #17110d; border: 1px solid #543d2c; border-radius: 6px; }
+.registration-pin-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; padding: 14px; border: 1px solid #68482e; border-radius: 7px; }
+.registration-pin-panel legend { padding: 0 7px; color: #d8b98f; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.registration-pin-panel button { grid-column: 1 / -1; min-height: 42px; background: #49301f; border-color: #765036; }
+.registration-inline-profile { overflow: hidden; background: #120d0a; border: 1px solid #5a3e2b; border-radius: 8px; }
+.registration-inline-profile .registration-profile-form { grid-template-columns: 1fr 1fr; padding: 16px; }
+.registration-entry-divider { display: flex; align-items: center; gap: 10px; color: #d8b98f; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .12em; }
+.registration-entry-divider::before,.registration-entry-divider::after { content: ""; flex: 1; height: 1px; background: #563d2b; }
+.registration-entry-hint { margin: -8px 0 0; color: #c99468; font-size: 11px; line-height: 1.5; }
+.registration-step-summary,.registration-confirmation { padding: 14px; background: #211810; border: 1px solid #4e3826; border-radius: 7px; }
+.registration-step-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #e4c494; }
+.registration-step-summary button { padding: 7px 10px; color: #d5b58f; background: transparent; border: 1px solid #65472f; border-radius: 5px; }
+.registration-pick-toggle { grid-template-columns: auto 1fr !important; align-items: center; padding: 12px; background: #17110d; border: 1px solid #493426; border-radius: 7px; }
+.registration-desk input[type="checkbox"] { width: 18px; min-height: 18px; accent-color: #a46b47; }
+.registration-partner-picks { display: grid; gap: 8px; max-height: 250px; margin: 0; padding: 14px; overflow-y: auto; border: 1px solid #4e3826; border-radius: 7px; }
+.registration-partner-picks legend { padding: 0 7px; color: #cdb9a3; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.registration-partner-picks label { grid-template-columns: auto 1fr; align-items: center; padding: 9px; background: #15100c; border-radius: 5px; }
+.registration-confirmation strong { color: #e4c494; }
+.registration-confirmation ul { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 18px; color: #cdb9a3; font-size: 11px; }
+.registration-confirmation p { margin: 8px 0 0; color: #8e7b69; font-size: 11px; }
 .registration-entry-form .primary,.registration-profile-form .primary { min-height: 48px; margin-top: 5px; background: #875538; border-color: #a46b47; }
 .registration-desk-empty { min-height: 290px; display: grid; place-items: center; align-content: center; gap: 12px; color: #796a5b; text-align: center; }
 .registration-profile-panel { margin-top: 22px; }
@@ -744,6 +767,8 @@ main { grid-column: 2; min-width: 0; }
 @media (max-width: 760px) {
   .registration-desk-header { align-items: flex-start; flex-direction: column; }
   .registration-profile-form { grid-template-columns: 1fr 1fr; }
+  .registration-pin-panel { grid-template-columns: 1fr; }
+  .registration-contestant-actions { grid-template-columns: 1fr; }
   .app-shell { display: block; }
   main { width: 100%; }
   .sidebar { transform: translateX(-100%); transition: transform .2s ease; }

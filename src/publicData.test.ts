@@ -376,11 +376,13 @@ describe("online signup", () => {
 });
 
 describe("workspace compatibility", () => {
-  it("defaults legacy ropings without an individual handicap cap", () => {
+  it("defaults legacy ropings without newer registration limits", () => {
     const legacy = workspace();
     delete (legacy.events[0] as Partial<ArenaEvent>).maxContestantHandicap;
+    delete (legacy.events[0] as Partial<ArenaEvent>).minDrawsAllowed;
 
     expect(normalizeData(legacy).events[0].maxContestantHandicap).toBe(99);
+    expect(normalizeData(legacy).events[0].minDrawsAllowed).toBe(0);
   });
 
   describe("spectator predictions", () => {

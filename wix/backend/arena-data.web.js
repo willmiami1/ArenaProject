@@ -375,6 +375,7 @@ function publicProjection(workspace) {
       drawLocked: event.drawLocked === true,
       resultsPublished: event.resultsPublished === true,
       entriesAllowed: event.entriesAllowed,
+      minDrawsAllowed: Number(event.minDrawsAllowed ?? 0),
       allowRepeatPartners: event.allowRepeatPartners === true,
       handicapTotal: event.handicapTotal,
       maxContestantHandicap: Number(event.maxContestantHandicap ?? 99),
@@ -628,6 +629,7 @@ function registrationDeskProjection(workspace) {
         registrationOpen,
         drawLocked,
         entriesAllowed,
+        minDrawsAllowed,
         allowRepeatPartners,
         handicapTotal,
         maxContestantHandicap,
@@ -645,6 +647,7 @@ function registrationDeskProjection(workspace) {
         registrationOpen,
         drawLocked,
         entriesAllowed,
+        minDrawsAllowed: Number(minDrawsAllowed ?? 0),
         allowRepeatPartners,
         handicapTotal,
         maxContestantHandicap,
@@ -793,6 +796,62 @@ export const saveRegistrationDeskContestant = webMethod(
       contestant,
       data: registrationDeskProjection(await readWorkspace()),
     };
+  },
+);
+
+export const setRegistrationDeskContestantPin = webMethod(
+  Permissions.SiteMember,
+  async ({ contestantId, pin }) => {
+    await requireRegistrationDesk();
+    if (!validAppId(contestantId) || !validPin(pin)) {
+      throw new Error("Choose a contestant and enter a four-digit PIN.");
+    }
+    const workspace = await readWorkspace();
+    const contestant = workspace.contestants.find(
+      (item) => item.id === contestantId,
+    );
+    const email = normalizeEmail(contestant?.email);
+    if (!contestant || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error(
+        "Add a valid email to the contestant profile before setting a PIN.",
+      );
+    }
+    const [duplicateEmail, existingCredential] = await Promise.all([
+      wixData
+        .query(CREDENTIALS_COLLECTION)
+        .eq("emailNormalized", email)
+        .limit(1)
+        .find(OPTIONS),
+      wixData
+        .query(CREDENTIALS_COLLECTION)
+        .eq("contestantId", contestantId)
+        .limit(1)
+        .find(OPTIONS),
+    ]);
+    if (
+      duplicateEmail.items.some(
+        (credential) => credential.contestantId !== contestantId,
+      )
+    ) {
+      throw new Error("That email is already used by another contestant login.");
+    }
+    const pepper = await getSecret(PIN_PEPPER_SECRET);
+    const salt = randomBytes(16).toString("hex");
+    await wixData.save(
+      CREDENTIALS_COLLECTION,
+      {
+        ...(existingCredential.items[0] || {}),
+        contestantId,
+        emailNormalized: email,
+        pinSalt: salt,
+        pinHash: pinHash(pin, salt, pepper),
+        failedAttempts: 0,
+        lockedUntil: null,
+        updatedAt: new Date(),
+      },
+      OPTIONS,
+    );
+    return { configured: true };
   },
 );
 
@@ -1231,22 +1290,13 @@ export const loadSignupOptions = webMethod(
   },
 );
 
-async function insertArenaRecord(collectionId, record) {
+async function insertUniqueArenaRecord(collectionId, record) {
   const existing = await wixData
     .query(collectionId)
     .eq("appId", record.id)
     .limit(1)
     .find(OPTIONS);
   if (existing.items.length) return false;
-  await wixData.insert(
-    collectionId,
-    { appId: record.id, payload: JSON.stringify(record) },
-    OPTIONS,
-  );
-  return true;
-}
-
-async function insertUniqueArenaRecord(collectionId, record) {
   const storageId = createHash("sha256")
     .update(`${collectionId}:${record.id}`)
     .digest("hex")
@@ -1287,6 +1337,27 @@ async function createSignupRecords(request, authenticatedId, source) {
     if (!event || !contestant) throw new Error("Competition or contestant not found.");
     if (source === "staff") assertRegistrationDeskOpen(event);
     else assertOnlineRegistrationOpen(event);
+    const normalizedPartnerIds =
+      event.competitionType === "pick-and-draw" &&
+      Array.isArray(request.partnerIds)
+        ? [...new Set(request.partnerIds)].sort()
+        : request.partnerId
+          ? [request.partnerId]
+          : [];
+    const submissionFingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          source,
+          eventId,
+          contestantId: authenticatedId,
+          role: request.role || "",
+          drawRole: request.drawRole || "",
+          entries:
+            request.entries === undefined ? null : Number(request.entries),
+          partnerIds: normalizedPartnerIds,
+        }),
+      )
+      .digest("hex");
 
     const priorTeams = workspace.teams.filter(
       (team) =>
@@ -1299,8 +1370,9 @@ async function createSignupRecords(request, authenticatedId, source) {
     );
     const repeated = priorTeams.length > 0 || priorRegistrations.length > 0;
     if (repeated) {
+      const priorRecords = [...priorTeams, ...priorRegistrations];
       const belongsToRequest =
-        [...priorTeams, ...priorRegistrations].every(
+        priorRecords.every(
           (record) => record.eventId === event.id,
         ) &&
         (priorTeams.some(
@@ -1313,12 +1385,21 @@ async function createSignupRecords(request, authenticatedId, source) {
       if (!belongsToRequest) {
         throw new Error("That submission ID is already in use.");
       }
-      return {
-        submissionId: request.submissionId,
-        competitionId: event.id,
-        summary: `Your entry in ${event.name} is already confirmed and pending payment.`,
-        existing: true,
-      };
+      if (priorRecords.some((record) => !record.submissionFingerprint)) {
+        return {
+          submissionId: request.submissionId,
+          competitionId: event.id,
+          summary: `Your entry in ${event.name} is already confirmed and pending payment.`,
+          existing: true,
+        };
+      }
+      if (
+        priorRecords.some(
+          (record) => record.submissionFingerprint !== submissionFingerprint,
+        )
+      ) {
+        throw new Error("That submission ID is already in use.");
+      }
     }
 
     const submittedAt = new Date().toISOString();
@@ -1326,6 +1407,7 @@ async function createSignupRecords(request, authenticatedId, source) {
       paid: false,
       source,
       submissionId: request.submissionId,
+      submissionFingerprint,
       submittedAt,
     };
     const idPrefix = source === "online" ? "online" : "desk";
@@ -1348,16 +1430,17 @@ async function createSignupRecords(request, authenticatedId, source) {
       if (!contestantWithinHandicap(event, contestant, request.role)) {
         throw new Error("Contestant handicap exceeds the competition limit.");
       }
-      const entered = workspace.registrations
+      const standaloneEntries = workspace.registrations
         .filter(
           (registration) =>
             registration.eventId === event.id &&
             registration.contestantId === contestant.id &&
+            !registration.sourceTeamId &&
             registration.submissionId !== request.submissionId &&
             registration.status !== "scratched",
         )
         .reduce((sum, registration) => sum + Number(registration.entries || 0), 0);
-      if (entered + entries > event.entriesAllowed) {
+      if (standaloneEntries + entries > event.entriesAllowed) {
         throw new Error("Entry limit exceeded.");
       }
       registrations.push({
@@ -1372,99 +1455,211 @@ async function createSignupRecords(request, authenticatedId, source) {
         ...metadata,
       });
     } else {
-      if (!["Header", "Heeler"].includes(request.role)) {
-        throw new Error("Choose your team position.");
-      }
-      const partner = workspace.contestants.find(
-        (item) => item.id === request.partnerId,
-      );
-      if (!partner || partner.id === contestant.id) {
+      const requestedPartnerIds = normalizedPartnerIds;
+      if (requestedPartnerIds.some((partnerId) => !validAppId(partnerId))) {
         throw new Error("Choose an eligible partner.");
       }
-      const header = request.role === "Header" ? contestant : partner;
-      const heeler = request.role === "Heeler" ? contestant : partner;
-      if (
-        !contestantCanRole(header, "Header") ||
-        !contestantCanRole(heeler, "Heeler") ||
-        !contestantWithinHandicap(event, header, "Header") ||
-        !contestantWithinHandicap(event, heeler, "Heeler")
-      ) {
-        throw new Error("A contestant handicap exceeds the competition limit.");
-      }
-      if (handicapTotal(header, heeler) > event.handicapTotal) {
-        throw new Error("Team handicap exceeds the competition limit.");
-      }
-      const activeTeams = workspace.teams.filter(
-        (team) =>
-          team.eventId === event.id &&
-          team.round === 1 &&
-          !team.generated &&
-          !team.scratched &&
-          team.submissionId !== request.submissionId,
-      );
-      if (
-        !event.allowRepeatPartners &&
-        activeTeams.some(
-          (team) => team.headerId === header.id && team.heelerId === heeler.id,
-        )
-      ) {
-        throw new Error("That partnership is already entered.");
-      }
-      const entryCount = (contestantId) =>
-        activeTeams.filter(
-          (team) =>
-            team.headerId === contestantId || team.heelerId === contestantId,
-        ).length;
-      if (
-        entryCount(header.id) >= event.entriesAllowed ||
-        entryCount(heeler.id) >= event.entriesAllowed
-      ) {
-        throw new Error("Entry limit exceeded.");
-      }
-      const teamId = `${idPrefix}-team-${request.submissionId}`;
-      teams.push({
-        id: teamId,
-        eventId: event.id,
-        headerId: header.id,
-        heelerId: heeler.id,
-        drawPosition: 0,
-        status: "ready",
-        rawTime: null,
-        penalties: 0,
-        notes: "",
-        round: 1,
-        checkedIn: false,
-        scratched: false,
-        generated: false,
-        points: 0,
-        ...metadata,
-      });
       if (event.competitionType === "pick-and-draw") {
-        const roles =
+        const entries = Number(request.entries ?? 0);
+        const minimumDraws = Number(event.minDrawsAllowed ?? 0);
+        const drawRole = request.drawRole || request.role;
+        const allowedRoles =
           event.pickDrawRole === "both"
             ? ["Header", "Heeler"]
             : [event.pickDrawRole === "header" ? "Header" : "Heeler"];
-        roles.forEach((role, index) => {
+        if (
+          !Number.isInteger(entries) ||
+          entries < minimumDraws ||
+          entries > Number(event.entriesAllowed || 1) ||
+          (entries > 0 &&
+            (!allowedRoles.includes(drawRole) ||
+              !contestantCanRole(contestant, drawRole) ||
+              !contestantWithinHandicap(event, contestant, drawRole)))
+        ) {
+          throw new Error(
+            `This competition requires at least ${minimumDraws} draw entr${minimumDraws === 1 ? "y" : "ies"}.`,
+          );
+        }
+        if (!requestedPartnerIds.length && entries === 0) {
+          throw new Error("Enter at least one draw or choose a picked partner.");
+        }
+        const standaloneEntries = workspace.registrations
+          .filter(
+            (registration) =>
+              registration.eventId === event.id &&
+              registration.contestantId === contestant.id &&
+              !registration.sourceTeamId &&
+              registration.submissionId !== request.submissionId &&
+              registration.status !== "scratched",
+          )
+          .reduce(
+            (sum, registration) => sum + Number(registration.entries || 0),
+            0,
+          );
+        const existingPickedTeams = workspace.teams.filter(
+          (team) =>
+            team.eventId === event.id &&
+            Number(team.round) === 1 &&
+            !team.scratched &&
+            !team.generated &&
+            team.submissionId !== request.submissionId &&
+            (team.headerId === contestant.id ||
+              team.heelerId === contestant.id),
+        ).length;
+        if (
+          standaloneEntries +
+            existingPickedTeams +
+            entries +
+            requestedPartnerIds.length >
+          event.entriesAllowed
+        ) {
+          throw new Error("Draw entry limit exceeded.");
+        }
+        if (entries > 0) {
           registrations.push({
-            id: `${idPrefix}-registration-${request.submissionId}-${index + 1}`,
+            id: `${idPrefix}-registration-${request.submissionId}-draw`,
             eventId: event.id,
-            contestantId: role === "Header" ? header.id : heeler.id,
-            sourceTeamId: teamId,
-            role,
-            entries: 1,
+            contestantId: contestant.id,
+            role: drawRole,
+            entries,
             checkedIn: false,
             status: "entered",
             notes: "",
             ...metadata,
           });
+        }
+      }
+      if (!requestedPartnerIds.length) {
+        if (event.competitionType !== "pick-and-draw") {
+          throw new Error("Choose an eligible partner.");
+        }
+      } else {
+        if (!["Header", "Heeler"].includes(request.role)) {
+          throw new Error("Choose your team position.");
+        }
+        const activeTeams = workspace.teams.filter(
+          (team) =>
+            team.eventId === event.id &&
+            team.round === 1 &&
+            !team.generated &&
+            !team.scratched &&
+            team.submissionId !== request.submissionId,
+        );
+        const entryCount = (contestantId) =>
+          activeTeams.filter(
+            (team) =>
+              team.headerId === contestantId ||
+              team.heelerId === contestantId,
+          ).length;
+        if (
+          entryCount(contestant.id) + requestedPartnerIds.length >
+          event.entriesAllowed
+        ) {
+          throw new Error("Entry limit exceeded.");
+        }
+        requestedPartnerIds.forEach((partnerId, partnerIndex) => {
+          const partner = workspace.contestants.find(
+            (item) => item.id === partnerId,
+          );
+          if (!partner || partner.id === contestant.id) {
+            throw new Error("Choose an eligible partner.");
+          }
+          const header = request.role === "Header" ? contestant : partner;
+          const heeler = request.role === "Heeler" ? contestant : partner;
+          if (
+            !contestantCanRole(header, "Header") ||
+            !contestantCanRole(heeler, "Heeler") ||
+            !contestantWithinHandicap(event, header, "Header") ||
+            !contestantWithinHandicap(event, heeler, "Heeler")
+          ) {
+            throw new Error(
+              "A contestant handicap exceeds the competition limit.",
+            );
+          }
+          if (handicapTotal(header, heeler) > event.handicapTotal) {
+            throw new Error("Team handicap exceeds the competition limit.");
+          }
+          if (
+            !event.allowRepeatPartners &&
+            activeTeams.some(
+              (team) =>
+                team.headerId === header.id && team.heelerId === heeler.id,
+            )
+          ) {
+            throw new Error("That partnership is already entered.");
+          }
+          const partnerStandaloneEntries = workspace.registrations
+            .filter(
+              (registration) =>
+                registration.eventId === event.id &&
+                registration.contestantId === partner.id &&
+                !registration.sourceTeamId &&
+                registration.submissionId !== request.submissionId &&
+                registration.status !== "scratched",
+            )
+            .reduce(
+              (sum, registration) =>
+                sum + Number(registration.entries || 0),
+              0,
+            );
+          if (
+            partnerStandaloneEntries + entryCount(partner.id) + 1 >
+            event.entriesAllowed
+          ) {
+            throw new Error(`Entry limit exceeded for ${partner.name}.`);
+          }
+          const legacySinglePick =
+            requestedPartnerIds.length === 1 &&
+            !Array.isArray(request.partnerIds);
+          const teamId = legacySinglePick
+            ? `${idPrefix}-team-${request.submissionId}`
+            : `${idPrefix}-team-${request.submissionId}-pick-${partnerIndex + 1}`;
+          teams.push({
+            id: teamId,
+            eventId: event.id,
+            headerId: header.id,
+            heelerId: heeler.id,
+            drawPosition: 0,
+            status: "ready",
+            rawTime: null,
+            penalties: 0,
+            notes: "",
+            round: 1,
+            checkedIn: false,
+            scratched: false,
+            generated: false,
+            points: 0,
+            ...metadata,
+          });
+          if (event.competitionType === "pick-and-draw") {
+            const roles =
+              event.pickDrawRole === "both"
+                ? ["Header", "Heeler"]
+                : [event.pickDrawRole === "header" ? "Header" : "Heeler"];
+            roles.forEach((pickRole, roleIndex) => {
+              registrations.push({
+                id: `${idPrefix}-registration-${request.submissionId}-pick-${partnerIndex + 1}-${roleIndex + 1}`,
+                eventId: event.id,
+                contestantId:
+                  pickRole === "Header" ? header.id : heeler.id,
+                sourceTeamId: teamId,
+                role: pickRole,
+                entries: 1,
+                checkedIn: false,
+                status: "entered",
+                notes: "",
+                ...metadata,
+              });
+            });
+          }
         });
       }
     }
 
     await Promise.all([
-      ...teams.map((team) => insertArenaRecord(COLLECTIONS.teams, team)),
+      ...teams.map((team) => insertUniqueArenaRecord(COLLECTIONS.teams, team)),
       ...registrations.map((registration) =>
-        insertArenaRecord(COLLECTIONS.registrations, registration),
+        insertUniqueArenaRecord(COLLECTIONS.registrations, registration),
       ),
     ]);
     await wixData.save(
@@ -1482,8 +1677,10 @@ async function createSignupRecords(request, authenticatedId, source) {
     return {
       submissionId: request.submissionId,
       competitionId: event.id,
-      summary: `Entry confirmed for ${event.name}. Payment is due with arena staff.`,
-      existing: false,
+      summary: repeated
+        ? `Your entry in ${event.name} is already confirmed and pending payment.`
+        : `Entry confirmed for ${event.name}. Payment is due with arena staff.`,
+      existing: repeated,
     };
 }
 

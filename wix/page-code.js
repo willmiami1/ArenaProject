@@ -12,6 +12,7 @@ import {
   getRegistrationDeskAccess as getRegistrationDeskAccessFromBackend,
   loadRegistrationDeskData,
   saveRegistrationDeskContestant,
+  setRegistrationDeskContestantPin,
   submitRegistrationDeskSignup,
 } from "backend/arena-data.web";
 import { authentication } from "wix-members-frontend";
@@ -56,6 +57,8 @@ $w.onReady(() => {
         data = await loadRegistrationDeskData();
       } else if (message.action === "saveRegistrationDeskContestant") {
         data = await saveRegistrationDeskContestant(message.data);
+      } else if (message.action === "setRegistrationDeskContestantPin") {
+        data = await setRegistrationDeskContestantPin(message.data);
       } else if (message.action === "submitRegistrationDeskSignup") {
         data = await submitRegistrationDeskSignup(message.data);
       } else {

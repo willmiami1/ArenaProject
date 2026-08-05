@@ -625,6 +625,9 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
             <div><dt>Handicap cap</dt><dd>#{competition.handicapTotal}</dd></div>
             <div><dt>Highest contestant handicap</dt><dd>#{competition.maxContestantHandicap}</dd></div>
             <div><dt>Entry limit</dt><dd>{competition.entriesAllowed} per contestant</dd></div>
+            {competition.competitionType === "pick-and-draw" && (
+              <div><dt>Minimum draws</dt><dd>{competition.minDrawsAllowed}</dd></div>
+            )}
           </dl>
           <p>{competition.allowRepeatPartners ? "Repeat partnerships are allowed." : "Each partnership may enter once."}</p>
         </section>
@@ -662,6 +665,14 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const individual = competition?.competitionType === "draw-pot" || competition?.competitionType === "round-robin";
+  const pickAndDraw = competition?.competitionType === "pick-and-draw";
+  const minimumDraws = competition?.minDrawsAllowed ?? 0;
+  const drawRole =
+    competition?.pickDrawRole === "header"
+      ? "Header"
+      : competition?.pickDrawRole === "heeler"
+        ? "Heeler"
+        : role;
   const contestantCanEnter = (
     contestant: SignupOptions["contestant"],
     position: "Header" | "Heeler",
@@ -693,6 +704,16 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     Boolean(options) &&
     (contestantCanEnter(options!.contestant, "Header") ||
       contestantCanEnter(options!.contestant, "Heeler"));
+  const hasEligibleDrawRole =
+    !pickAndDraw ||
+    !options ||
+    contestantCanEnter(options.contestant, drawRole);
+
+  useEffect(() => {
+    if (pickAndDraw && entries < minimumDraws) {
+      setEntries(minimumDraws);
+    }
+  }, [entries, minimumDraws, pickAndDraw]);
 
   if (!competition) return <NotFound />;
   if (!competition.registrationOpen || competition.status === "Complete" || competition.drawLocked) {
@@ -805,7 +826,8 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
           contestantId: options!.contestant.id,
           eventId: competition.id,
           role,
-          entries: individual ? entries : undefined,
+          drawRole: pickAndDraw ? drawRole : undefined,
+          entries: individual || pickAndDraw ? entries : undefined,
           partnerId: individual ? undefined : partnerId,
         },
       );
@@ -868,11 +890,17 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
           {!hasEligibleRole && <p className="public-form-message" role="status">Your handicap is above the #{competition.maxContestantHandicap} limit for this roping.</p>}
           {individual ? (
             <label>Number of entries<input type="number" min={1} max={competition.entriesAllowed} value={entries} onChange={(event) => setEntries(Number(event.target.value))} /></label>
+          ) : pickAndDraw ? (
+            <>
+              <label>Number of {drawRole.toLowerCase()} draws<input type="number" min={minimumDraws} max={competition.entriesAllowed} value={entries} onChange={(event) => setEntries(Number(event.target.value))} /></label>
+              {!hasEligibleDrawRole && <p className="public-form-message" role="status">Your handicap exceeds the {drawRole.toLowerCase()} draw limit for this roping.</p>}
+              <label>Picked partner<select required value={partnerId} onChange={(event) => setPartnerId(event.target.value)}><option value="">Choose an eligible partner</option>{eligiblePartners.map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select></label>
+            </>
           ) : (
             <label>Partner<select required value={partnerId} onChange={(event) => setPartnerId(event.target.value)}><option value="">Choose an eligible partner</option>{eligiblePartners.map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select></label>
           )}
           <p className="public-payment-note">Your entry will be pending until arena staff confirms payment.</p>
-          <button className="public-button primary" disabled={busy || !hasEligibleRole || (!individual && !partnerId)}>{busy ? "Submitting entry…" : "Submit entry"}</button>
+          <button className="public-button primary" disabled={busy || !hasEligibleRole || !hasEligibleDrawRole || (!individual && !partnerId)}>{busy ? "Submitting entry…" : "Submit entry"}</button>
         </form>
       )}
       {message && <p className="public-form-message" role="status">{message}</p>}

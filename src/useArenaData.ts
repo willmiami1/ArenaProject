@@ -52,6 +52,7 @@ export function normalizeData(parsed: ArenaData): ArenaData {
         (event as typeof event & { handicapCategory?: string }).handicapCategory,
       ) || 99),
     maxContestantHandicap: event.maxContestantHandicap ?? 99,
+    minDrawsAllowed: event.minDrawsAllowed ?? 0,
     shortGoTeams: event.shortGoTeams ?? 0,
     drawHistory: event.drawHistory ?? [],
   }));

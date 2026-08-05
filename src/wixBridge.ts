@@ -32,6 +32,7 @@ type WixAction =
   | "promptRegistrationDeskLogin"
   | "loadRegistrationDeskData"
   | "saveRegistrationDeskContestant"
+  | "setRegistrationDeskContestantPin"
   | "submitRegistrationDeskSignup";
 
 export interface ContestantPortalData {
@@ -92,6 +93,7 @@ function requestWix<T>(
       action === "promptRegistrationDeskLogin" ||
       action === "loadRegistrationDeskData" ||
       action === "saveRegistrationDeskContestant" ||
+      action === "setRegistrationDeskContestantPin" ||
       action === "submitRegistrationDeskSignup";
     let targetOrigin = "*";
     if (sensitiveAction) {
@@ -189,6 +191,16 @@ export function submitRegistrationDeskSignup(signup: SignupRequest) {
     summary: string;
     data: RegistrationDeskData;
   }>("submitRegistrationDeskSignup", signup);
+}
+
+export function setRegistrationDeskContestantPin(
+  contestantId: string,
+  pin: string,
+) {
+  return requestWix<{ configured: boolean }>(
+    "setRegistrationDeskContestantPin",
+    { contestantId, pin },
+  );
 }
 
 export function loadSignupOptions(

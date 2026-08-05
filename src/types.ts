@@ -30,6 +30,7 @@ export interface ArenaEvent {
   drawLocked: boolean;
   resultsPublished: boolean;
   entriesAllowed: number;
+  minDrawsAllowed: number;
   allowRepeatPartners: boolean;
   handicapTotal: number;
   maxContestantHandicap: number;

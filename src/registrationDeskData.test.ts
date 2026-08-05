@@ -163,4 +163,84 @@ describe("registration desk boundary", () => {
     expect(retry.result.existing).toBe(true);
     expect(retry.data.registrations).toHaveLength(1);
   });
+
+  it("records Pick and Draw entries before an optional picked team", () => {
+    const pickAndDrawData: ArenaData = {
+      ...data,
+      events: [
+        {
+          ...data.events[0],
+          id: "pick-draw-event",
+          competitionType: "pick-and-draw",
+          pickDrawRole: "header",
+          entriesAllowed: 4,
+          minDrawsAllowed: 2,
+        },
+      ],
+      contestants: [
+        ...data.contestants,
+        {
+          id: "heeler",
+          name: "Picked Heeler",
+          role: "Heeler",
+          headerHandicap: 0,
+          heelerHandicap: 4,
+          photo: "",
+          phone: "",
+          email: "",
+          hometown: "",
+        },
+        {
+          id: "heeler-two",
+          name: "Second Heeler",
+          role: "Heeler",
+          headerHandicap: 0,
+          heelerHandicap: 3,
+          photo: "",
+          phone: "",
+          email: "",
+          hometown: "",
+        },
+      ],
+      teams: [],
+      registrations: [],
+    };
+
+    const result = submitLocalRegistrationDeskSignup(
+      pickAndDrawData,
+      {
+        submissionId: "pick-draw-entry",
+        contestantId: "rider",
+        eventId: "pick-draw-event",
+        role: "Header",
+        entries: 2,
+        partnerIds: ["heeler", "heeler-two"],
+      },
+      new Date("2026-08-05T21:00:00"),
+    );
+
+    expect(result.data.teams).toHaveLength(2);
+    expect(result.data.registrations).toHaveLength(3);
+    expect(result.data.registrations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ contestantId: "rider", entries: 2 }),
+        expect.objectContaining({ sourceTeamId: result.data.teams[0].id }),
+        expect.objectContaining({ sourceTeamId: result.data.teams[1].id }),
+      ]),
+    );
+    expect(() =>
+      submitLocalRegistrationDeskSignup(
+        pickAndDrawData,
+        {
+          submissionId: "too-few-draws",
+          contestantId: "rider",
+          eventId: "pick-draw-event",
+          role: "Header",
+          entries: 1,
+          partnerIds: ["heeler"],
+        },
+        new Date("2026-08-05T21:00:00"),
+      ),
+    ).toThrow("at least 2 draw entries");
+  });
 });

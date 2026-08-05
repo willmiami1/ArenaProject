@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   ClipboardPen,
+  KeyRound,
   Pencil,
   Plus,
   Search,
@@ -27,6 +28,7 @@ import {
   isWixEmbed,
   loadRegistrationDeskData,
   saveRegistrationDeskContestant,
+  setRegistrationDeskContestantPin,
   submitRegistrationDeskSignup,
 } from "./wixBridge";
 
@@ -79,9 +81,15 @@ export function RegistrationDesk() {
   const [contestantId, setContestantId] = useState("");
   const [role, setRole] = useState<"Header" | "Heeler">("Header");
   const [entries, setEntries] = useState(1);
+  const [addPick, setAddPick] = useState(false);
   const [partnerId, setPartnerId] = useState("");
+  const [partnerIds, setPartnerIds] = useState<string[]>([]);
+  const [pickStage, setPickStage] = useState<"draws" | "picks">("draws");
   const [search, setSearch] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pin, setPin] = useState("");
+  const [pinConfirmation, setPinConfirmation] = useState("");
   const [profile, setProfile] =
     useState<RegistrationDeskContestantInput>(emptyContestant);
   const [busy, setBusy] = useState(false);
@@ -112,6 +120,14 @@ export function RegistrationDesk() {
   const individual =
     event?.competitionType === "draw-pot" ||
     event?.competitionType === "round-robin";
+  const pickAndDraw = event?.competitionType === "pick-and-draw";
+  const minimumDraws = event?.minDrawsAllowed ?? 0;
+  const drawRole =
+    event?.pickDrawRole === "header"
+      ? "Header"
+      : event?.pickDrawRole === "heeler"
+        ? "Heeler"
+        : role;
   const workspace = data ? asWorkspace(data) : null;
   const workspaceEvent = workspace?.events.find((item) => item.id === eventId);
   const partners = useMemo(
@@ -121,11 +137,27 @@ export function RegistrationDesk() {
         : [],
     [workspace, workspaceEvent, contestant, role],
   );
-  const filteredContestants = (data?.contestants ?? []).filter((item) =>
-    `${item.name} ${item.email ?? ""} ${item.phone}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
+  const selectedPartners = partners.filter((partner) =>
+    partnerIds.includes(partner.id),
   );
+  const drawEligible =
+    Boolean(workspaceEvent && contestant) &&
+    contestantEligibleForRole(workspaceEvent!, contestant, drawRole);
+
+  useEffect(() => {
+    if (pickAndDraw && entries < minimumDraws) {
+      setEntries(minimumDraws);
+    }
+  }, [entries, minimumDraws, pickAndDraw]);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredContestants =
+    normalizedSearch.length < 2
+      ? []
+      : (data?.contestants ?? []).filter((item) =>
+          `${item.name} ${item.email ?? ""} ${item.phone}`
+            .toLowerCase()
+            .includes(normalizedSearch),
+        );
   const eligibleRoles = workspaceEvent
     ? (["Header", "Heeler"] as const).filter((value) =>
         contestantEligibleForRole(workspaceEvent, contestant, value),
@@ -175,11 +207,67 @@ export function RegistrationDesk() {
         setData(registrationDeskProjection(result.data));
         setContestantId(result.contestant.id);
       }
+      setPinOpen(false);
+      setPin("");
+      setPinConfirmation("");
       setProfileOpen(false);
       setMessage("Contestant profile saved.");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "The profile could not be saved.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const profileEditor = (
+    <>
+      <div className="registration-desk-panel-heading">
+        <div>
+          <span>Contestant database</span>
+          <h2>{profile.id ? "Edit contestant" : "Add contestant"}</h2>
+        </div>
+        <button type="button" onClick={() => setProfileOpen(false)}>
+          Cancel
+        </button>
+      </div>
+      <form className="registration-profile-form" onSubmit={saveProfile}>
+        <label>Full name<input required maxLength={100} value={profile.name} onChange={(change) => setProfile({ ...profile, name: change.target.value })} /></label>
+        <label>Roping position<select value={profile.role} onChange={(change) => setProfile({ ...profile, role: change.target.value as Contestant["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
+        <label>Header handicap<input required type="number" min={0} max={20} step={0.5} value={profile.headerHandicap} onChange={(change) => setProfile({ ...profile, headerHandicap: Number(change.target.value) })} /></label>
+        <label>Heeler handicap<input required type="number" min={0} max={20} step={0.5} value={profile.heelerHandicap} onChange={(change) => setProfile({ ...profile, heelerHandicap: Number(change.target.value) })} /></label>
+        <label>Email<input type="email" value={profile.email} onChange={(change) => setProfile({ ...profile, email: change.target.value })} /></label>
+        <label>Phone<input type="tel" value={profile.phone} onChange={(change) => setProfile({ ...profile, phone: change.target.value })} /></label>
+        <label>Hometown<input value={profile.hometown} onChange={(change) => setProfile({ ...profile, hometown: change.target.value })} /></label>
+        <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save contestant"}</button>
+      </form>
+    </>
+  );
+
+  const savePin = async () => {
+    if (!contestant) return;
+    if (!/^\d{4}$/.test(pin) || pin !== pinConfirmation) {
+      setMessage("Enter the same four-digit PIN twice.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      if (!embedded) {
+        throw new Error(
+          "PIN setup is available when the Registration Desk is connected to Wix.",
+        );
+      }
+      const result = await setRegistrationDeskContestantPin(contestant.id, pin);
+      if (!result?.configured) throw new Error("The contestant PIN was not saved.");
+      setPin("");
+      setPinConfirmation("");
+      setPinOpen(false);
+      setMessage(`Four-digit PIN set for ${contestant.name}.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "The PIN could not be saved.",
       );
     } finally {
       setBusy(false);
@@ -198,8 +286,11 @@ export function RegistrationDesk() {
       eventId: event.id,
       contestantId: contestant.id,
       role,
-      entries: individual ? entries : undefined,
-      partnerId: individual ? undefined : partnerId,
+      drawRole: pickAndDraw ? drawRole : undefined,
+      entries: individual || pickAndDraw ? entries : undefined,
+      partnerId:
+        individual || pickAndDraw ? undefined : partnerId,
+      partnerIds: pickAndDraw && addPick ? partnerIds : undefined,
     };
     try {
       if (embedded) {
@@ -215,7 +306,10 @@ export function RegistrationDesk() {
         setMessage(`Entry saved for ${event.name}.`);
       }
       setPartnerId("");
+      setPartnerIds([]);
       setEntries(1);
+      setAddPick(false);
+      setPickStage("draws");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "The entry could not be saved.",
@@ -242,6 +336,12 @@ export function RegistrationDesk() {
             <select value={eventId} onChange={(change) => {
               setEventId(change.target.value);
               setPartnerId("");
+              setPartnerIds([]);
+              setAddPick(false);
+              setPickStage("draws");
+              setPinOpen(false);
+              setPin("");
+              setPinConfirmation("");
               setMessage("");
             }}>
               {(data?.events ?? []).map((item) => (
@@ -277,21 +377,31 @@ export function RegistrationDesk() {
                     className={contestantId === item.id ? "selected" : ""}
                     onClick={() => {
                       setContestantId(item.id);
+                      setSearch("");
                       setPartnerId("");
+                      setPartnerIds([]);
+                      setAddPick(false);
+                      setPickStage("draws");
+                      setPinOpen(false);
+                      setPin("");
+                      setPinConfirmation("");
                       setMessage("");
                     }}
                     key={item.id}
                   >
                     <span><strong>{item.name}</strong><small>{item.email || item.phone || "No contact information"}</small></span>
-                    <i
-                      title="Edit contestant"
-                      onClick={(click) => {
-                        click.stopPropagation();
-                        editProfile(item);
-                      }}
-                    ><Pencil size={15} /></i>
                   </button>
                 ))}
+                {normalizedSearch.length < 2 && (
+                  <p className="registration-search-hint">
+                    Enter at least two letters, an email, or a phone number.
+                  </p>
+                )}
+                {normalizedSearch.length >= 2 && !filteredContestants.length && (
+                  <p className="registration-search-hint">
+                    No contestants match that search.
+                  </p>
+                )}
               </div>
             </section>
 
@@ -305,50 +415,204 @@ export function RegistrationDesk() {
                   <p>Choose a contestant to prepare an entry.</p>
                 </div>
               ) : (
-                <form className="registration-entry-form" onSubmit={submitEntry}>
+                <div className="registration-entry-form">
                   <div className="registration-selected-contestant">
                     <CheckCircle2 />
                     <span>Registering <strong>{contestant.name}</strong></span>
                   </div>
+                  <div className="registration-contestant-actions">
+                    <button type="button" onClick={() => editProfile(contestant)}>
+                      <Pencil size={15} /> Edit contestant
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPinOpen((open) => !open);
+                        setMessage("");
+                      }}
+                    >
+                      <KeyRound size={15} /> Set 4-digit PIN
+                    </button>
+                  </div>
+                  {pinOpen && (
+                    <fieldset className="registration-pin-panel">
+                      <legend>Contestant login PIN</legend>
+                      <label>
+                        New 4-digit PIN
+                        <input
+                          required
+                          type="password"
+                          inputMode="numeric"
+                          pattern="\d{4}"
+                          maxLength={4}
+                          value={pin}
+                          onChange={(change) =>
+                            setPin(change.target.value.replace(/\D/g, "").slice(0, 4))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Confirm PIN
+                        <input
+                          required
+                          type="password"
+                          inputMode="numeric"
+                          pattern="\d{4}"
+                          maxLength={4}
+                          value={pinConfirmation}
+                          onChange={(change) =>
+                            setPinConfirmation(
+                              change.target.value.replace(/\D/g, "").slice(0, 4),
+                            )
+                          }
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void savePin()}
+                      >
+                        {busy ? "Saving…" : "Save PIN"}
+                      </button>
+                    </fieldset>
+                  )}
+                  {profileOpen && profile.id === contestant.id && (
+                    <section className="registration-inline-profile">
+                      {profileEditor}
+                    </section>
+                  )}
+                  <div className="registration-entry-divider">
+                    <span>Entries this competition</span>
+                  </div>
+                  <form className="registration-competition-form" onSubmit={submitEntry}>
                   <label>Position<select value={role} onChange={(change) => {
                     setRole(change.target.value as "Header" | "Heeler");
                     setPartnerId("");
+                    setPartnerIds([]);
                   }}>
                     {eligibleRoles.map((value) => <option key={value}>{value}</option>)}
                   </select></label>
                   {individual ? (
                     <label>Number of entries<input type="number" min={1} max={event.entriesAllowed} value={entries} onChange={(change) => setEntries(Number(change.target.value))} /></label>
+                  ) : pickAndDraw && pickStage === "draws" ? (
+                    <>
+                      <label>
+                        Number of {drawRole.toLowerCase()} draw entries
+                        <input type="number" min={minimumDraws} max={event.entriesAllowed} value={entries} onChange={(change) => setEntries(Number(change.target.value))} />
+                      </label>
+                      <p className="registration-entry-hint">
+                        Minimum {minimumDraws} draw{minimumDraws === 1 ? "" : "s"}; maximum {event.entriesAllowed} total runs. Handicap limits are checked before confirmation.
+                      </p>
+                      {!drawEligible && (
+                        <p className="registration-entry-hint">
+                          This contestant is not eligible for {drawRole.toLowerCase()} draws. Enter 0 to continue with picked teams only.
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={
+                          entries < minimumDraws ||
+                          entries > event.entriesAllowed ||
+                          (entries > 0 && !drawEligible)
+                        }
+                        onClick={() => setPickStage("picks")}
+                      >
+                        Continue to picked teams
+                      </button>
+                    </>
+                  ) : pickAndDraw ? (
+                    <>
+                      <div className="registration-step-summary">
+                        <strong>{entries} draw entr{entries === 1 ? "y" : "ies"}</strong>
+                        <button type="button" onClick={() => setPickStage("draws")}>Change draws</button>
+                      </div>
+                      <label className="registration-pick-toggle">
+                        <input
+                          type="checkbox"
+                          checked={addPick}
+                          onChange={(change) => {
+                            setAddPick(change.target.checked);
+                            if (!change.target.checked) setPartnerIds([]);
+                          }}
+                        />
+                        <span>Enter picked teams</span>
+                      </label>
+                      {addPick && (
+                        <fieldset className="registration-partner-picks">
+                          <legend>Choose all picked partners</legend>
+                          {partners.map((partner) => (
+                            <label key={partner.id}>
+                              <input
+                                type="checkbox"
+                                checked={partnerIds.includes(partner.id)}
+                                onChange={(change) =>
+                                  setPartnerIds((current) =>
+                                    change.target.checked
+                                      ? [...current, partner.id]
+                                      : current.filter((id) => id !== partner.id),
+                                  )
+                                }
+                              />
+                              <span>{partner.name}</span>
+                            </label>
+                          ))}
+                        </fieldset>
+                      )}
+                      <div className="registration-confirmation">
+                        <strong>Confirm {partnerIds.length} pick{partnerIds.length === 1 ? "" : "s"}</strong>
+                        {selectedPartners.length ? (
+                          <ul>
+                            {selectedPartners.map((partner) => (
+                              <li key={partner.id}>
+                                {role === "Header"
+                                  ? `${contestant.name} / ${partner.name}`
+                                  : `${partner.name} / ${contestant.name}`}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>No picked teams selected.</p>
+                        )}
+                      </div>
+                    </>
                   ) : (
                     <label>Partner<select required value={partnerId} onChange={(change) => setPartnerId(change.target.value)}>
                       <option value="">Choose eligible partner</option>
                       {partners.map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}
                     </select></label>
                   )}
-                  <button className="primary" disabled={busy || !eligibleRoles.length || (!individual && !partnerId)}>
-                    {busy ? "Saving…" : "Register contestant"}
-                  </button>
-                </form>
+                  {(!pickAndDraw || pickStage === "picks") && (
+                    <button
+                      className="primary"
+                      disabled={
+                        busy ||
+                        !eligibleRoles.length ||
+                        (!individual &&
+                          !pickAndDraw &&
+                          !partnerId) ||
+                        (pickAndDraw &&
+                          ((entries < 1 && !addPick) ||
+                            (addPick && !partnerIds.length)))
+                      }
+                    >
+                      {busy
+                        ? "Saving…"
+                        : pickAndDraw
+                          ? `Confirm ${entries} draw${entries === 1 ? "" : "s"} and ${partnerIds.length} pick${partnerIds.length === 1 ? "" : "s"}`
+                          : "Register contestant"}
+                    </button>
+                  )}
+                  </form>
+                </div>
               )}
             </section>
           </div>
         )}
 
-        {profileOpen && (
+        {profileOpen && profile.id !== contestant?.id && (
           <section className="registration-desk-panel registration-profile-panel">
-            <div className="registration-desk-panel-heading">
-              <div><span>Contestant database</span><h2>{profile.id ? "Edit contestant" : "Add contestant"}</h2></div>
-              <button type="button" onClick={() => setProfileOpen(false)}>Cancel</button>
-            </div>
-            <form className="registration-profile-form" onSubmit={saveProfile}>
-              <label>Full name<input required maxLength={100} value={profile.name} onChange={(change) => setProfile({ ...profile, name: change.target.value })} /></label>
-              <label>Roping position<select value={profile.role} onChange={(change) => setProfile({ ...profile, role: change.target.value as Contestant["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
-              <label>Header handicap<input required type="number" min={0} max={20} step={0.5} value={profile.headerHandicap} onChange={(change) => setProfile({ ...profile, headerHandicap: Number(change.target.value) })} /></label>
-              <label>Heeler handicap<input required type="number" min={0} max={20} step={0.5} value={profile.heelerHandicap} onChange={(change) => setProfile({ ...profile, heelerHandicap: Number(change.target.value) })} /></label>
-              <label>Email<input type="email" value={profile.email} onChange={(change) => setProfile({ ...profile, email: change.target.value })} /></label>
-              <label>Phone<input type="tel" value={profile.phone} onChange={(change) => setProfile({ ...profile, phone: change.target.value })} /></label>
-              <label>Hometown<input value={profile.hometown} onChange={(change) => setProfile({ ...profile, hometown: change.target.value })} /></label>
-              <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save contestant"}</button>
-            </form>
+            {profileEditor}
           </section>
         )}
         {message && <p className="registration-desk-message" role="status">{message}</p>}

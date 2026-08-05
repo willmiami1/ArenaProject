@@ -1468,6 +1468,7 @@ function EventForm({
     pickDrawRole: event?.pickDrawRole ?? defaultCompetitionSettings.pickDrawRole,
     registrationOpen: event?.registrationOpen ?? true,
     entriesAllowed: (event?.entriesAllowed ?? 1).toString(),
+    minDrawsAllowed: (event?.minDrawsAllowed ?? 0).toString(),
     allowRepeatPartners: event?.allowRepeatPartners ?? false,
     handicapTotal: (event?.handicapTotal ?? 99).toString(),
     maxContestantHandicap: (event?.maxContestantHandicap ?? 99).toString(),
@@ -1494,6 +1495,13 @@ function EventForm({
       location: parent.location,
       entryFee: Number(form.entryFee) || 0,
       entriesAllowed: Number(form.entriesAllowed) || 1,
+      minDrawsAllowed: Math.max(
+        0,
+        Math.min(
+          Math.floor(Number(form.minDrawsAllowed) || 0),
+          Number(form.entriesAllowed) || 1,
+        ),
+      ),
       allowRepeatPartners: form.allowRepeatPartners,
       handicapTotal: Number(form.handicapTotal) || 0,
       maxContestantHandicap: Number(form.maxContestantHandicap) || 0,
@@ -1531,7 +1539,10 @@ function EventForm({
         {form.competitionType === "pick-and-draw" && (
           <Field label="Draw assignment"><select value={form.pickDrawRole} onChange={(e) => setForm({ ...form, pickDrawRole: e.target.value as PickDrawRole })}><option value="header">Draw Header</option><option value="heeler">Draw Heeler</option><option value="both">Draw Both</option></select></Field>
         )}
-        <Field label="Entries allowed"><input required type="number" min="1" value={form.entriesAllowed} onChange={(e) => setForm({ ...form, entriesAllowed: e.target.value })} /></Field>
+        <Field label="Maximum runs allowed"><input required type="number" min="1" value={form.entriesAllowed} onChange={(e) => setForm({ ...form, entriesAllowed: e.target.value })} /><small>Total draw and picked runs allowed per contestant.</small></Field>
+        {form.competitionType === "pick-and-draw" && (
+          <Field label="Minimum draws required"><input required type="number" min="0" max={form.entriesAllowed} value={form.minDrawsAllowed} onChange={(e) => setForm({ ...form, minDrawsAllowed: e.target.value })} /><small>Minimum draw entries required before picked teams may be added.</small></Field>
+        )}
         <Field label="Handicap Total"><input required type="number" min="0" step="0.5" value={form.handicapTotal} onChange={(e) => setForm({ ...form, handicapTotal: e.target.value })} placeholder="10.5" /></Field>
         <Field label="Highest contestant handicap"><input required type="number" min="0" step="0.5" value={form.maxContestantHandicap} onChange={(e) => setForm({ ...form, maxContestantHandicap: e.target.value })} /><small>Contestants above this handicap in their entered position cannot participate.</small></Field>
         <Field label="Time limit (seconds)"><input required type="number" min="1" value={form.timeLimit} onChange={(e) => setForm({ ...form, timeLimit: e.target.value })} /></Field>

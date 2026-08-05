@@ -140,6 +140,7 @@ export const defaultCompetitionSettings = {
   drawLocked: false,
   resultsPublished: false,
   entriesAllowed: 1,
+  minDrawsAllowed: 0,
   allowRepeatPartners: false,
   handicapTotal: 99,
   maxContestantHandicap: 99,

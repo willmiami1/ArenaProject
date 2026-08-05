@@ -61,8 +61,9 @@ The default URL opens the public home page. Public routes use `?page=events`,
 `?app=command`; the existing
 `?portal=contestant` and `?display=leaderboard` routes remain available.
 `?app=registration` opens the restricted Registration Desk for staff who may
-maintain contestant profiles and submit eligible entries but may not access event
-configuration, Run Desk, reports, results, payouts, or LED controls.
+maintain contestant profiles, configure contestant four-digit login PINs, and
+submit eligible entries but may not access event configuration, Run Desk,
+reports, results, payouts, or LED controls.
 
 ### Permanent Wix Data storage
 
