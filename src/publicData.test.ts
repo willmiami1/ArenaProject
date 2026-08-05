@@ -3,6 +3,7 @@ import {
   defaultCompetitionSettings,
   generateCompetitionDraw,
   reorderDraftDrawTeams,
+  spaceDrawTeamsApart,
 } from "./competition";
 import {
   competitionGroup,
@@ -225,6 +226,27 @@ describe("online signup", () => {
     },
   );
 
+  it("enforces the configured minimum draw entries", () => {
+    expect(() =>
+      createOnlineSignup(
+        workspace(
+          event({
+            competitionType: "draw-pot",
+            minDrawsAllowed: 2,
+            entriesAllowed: 4,
+          }),
+        ),
+        {
+          submissionId: "below-minimum-draws",
+          contestantId: "header",
+          eventId: "competition-1",
+          role: "Header",
+          entries: 1,
+        },
+      ),
+    ).toThrow("at least 2 draw entries");
+  });
+
   it.each(["pick-only", "pick-and-draw"] as const)(
     "supports %s fixed teams",
     (competitionType) => {
@@ -393,6 +415,39 @@ describe("online signup", () => {
       ["picked", 3],
     ]);
     expect(reorderDraftDrawTeams(teams, "picked", "generated-1")).toBe(teams);
+  });
+
+  it("spaces repeated riders and teams as far apart as the draw allows", () => {
+    const spaced = spaceDrawTeamsApart([
+      run({ id: "repeat-team-1", headerId: "repeat-header", heelerId: "repeat-heeler" }),
+      run({ id: "repeat-team-2", headerId: "repeat-header", heelerId: "repeat-heeler" }),
+      run({ id: "repeat-rider", headerId: "repeat-header", heelerId: "other-heeler" }),
+      run({ id: "unique-1", headerId: "header-1", heelerId: "heeler-1" }),
+      run({ id: "unique-2", headerId: "header-2", heelerId: "heeler-2" }),
+      run({ id: "unique-3", headerId: "header-3", heelerId: "heeler-3" }),
+    ]);
+    const repeatedRiderPositions = spaced
+      .map((team, index) =>
+        team.headerId === "repeat-header" || team.heelerId === "repeat-header"
+          ? index + 1
+          : 0,
+      )
+      .filter(Boolean);
+    const repeatedTeamPositions = spaced
+      .map((team, index) =>
+        team.headerId === "repeat-header" && team.heelerId === "repeat-heeler"
+          ? index + 1
+          : 0,
+      )
+      .filter(Boolean);
+
+    const repeatedRiderGaps = repeatedRiderPositions.slice(1).map(
+        (position, index) => position - repeatedRiderPositions[index],
+      );
+    expect(Math.min(...repeatedRiderGaps)).toBeGreaterThanOrEqual(2);
+    expect(repeatedRiderGaps.reduce((total, gap) => total + gap, 0)).toBeGreaterThanOrEqual(4);
+    expect(repeatedTeamPositions[1] - repeatedTeamPositions[0]).toBeGreaterThanOrEqual(2);
+    expect(spaced.map((team) => team.drawPosition)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it("removes legacy picked-team registrations from the Draw Pot pool", () => {

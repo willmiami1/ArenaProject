@@ -14,6 +14,7 @@ import {
 import {
   competitionName,
   contestantEligibleForRole,
+  minimumDrawEntries,
 } from "./competition";
 import { eligibleSignupPartners, type SignupRequest } from "./onlineSignup";
 import {
@@ -132,9 +133,7 @@ export function RegistrationDesk() {
     event?.competitionType === "draw-pot" ||
     event?.competitionType === "round-robin";
   const pickAndDraw = event?.competitionType === "pick-and-draw";
-  const minimumDraws = pickAndDraw
-    ? Math.max(1, event?.minDrawsAllowed ?? 0)
-    : event?.minDrawsAllowed ?? 0;
+  const minimumDraws = event ? minimumDrawEntries(event) : 1;
   const drawRole =
     event?.pickDrawRole === "header"
       ? "Header"
@@ -160,10 +159,8 @@ export function RegistrationDesk() {
     contestantEligibleForRole(workspaceEvent!, contestant, drawRole);
 
   useEffect(() => {
-    if (pickAndDraw && entries < minimumDraws) {
-      setEntries(minimumDraws);
-    }
-  }, [entries, minimumDraws, pickAndDraw]);
+    setEntries(minimumDraws);
+  }, [eventId, minimumDraws]);
 
   useEffect(() => {
     setPaymentMethod("");
@@ -329,7 +326,7 @@ export function RegistrationDesk() {
       }
       setPartnerId("");
       setPartnerIds([]);
-      setEntries(1);
+      setEntries(minimumDraws);
       setAddPick(false);
       setPickStage("draws");
       setPaymentMethod("");
@@ -529,7 +526,7 @@ export function RegistrationDesk() {
                     {eligibleRoles.map((value) => <option key={value}>{value}</option>)}
                   </select></label>
                   {individual ? (
-                    <label>Number of entries<input type="number" min={1} max={event.entriesAllowed} value={entries} onChange={(change) => setEntries(Number(change.target.value))} /></label>
+                    <label>Number of entries<input type="number" min={minimumDraws} max={event.entriesAllowed} value={entries} onChange={(change) => setEntries(Number(change.target.value))} /><small>Competition minimum: {minimumDraws}</small></label>
                   ) : pickAndDraw && pickStage === "draws" ? (
                     <>
                       <label>

@@ -47,6 +47,7 @@ import {
 } from "./contestantAccount";
 import type { ArenaData } from "./types";
 import { isBrowserStoragePreview } from "./adminAccess";
+import { minimumDrawEntries } from "./competition";
 
 const localWorkspaceKey = "arena-command-data-v1";
 
@@ -731,7 +732,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   const [busy, setBusy] = useState(false);
   const individual = competition?.competitionType === "draw-pot" || competition?.competitionType === "round-robin";
   const pickAndDraw = competition?.competitionType === "pick-and-draw";
-  const minimumDraws = competition?.minDrawsAllowed ?? 0;
+  const minimumDraws = competition ? minimumDrawEntries(competition) : 1;
   const drawRole =
     competition?.pickDrawRole === "header"
       ? "Header"
@@ -775,10 +776,8 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     contestantCanEnter(options.contestant, drawRole);
 
   useEffect(() => {
-    if (pickAndDraw && entries < minimumDraws) {
-      setEntries(minimumDraws);
-    }
-  }, [entries, minimumDraws, pickAndDraw]);
+    setEntries(minimumDraws);
+  }, [competition?.id, minimumDraws]);
 
   if (!competition) return <NotFound />;
   if (!competition.registrationOpen || competition.status === "Complete" || competition.drawLocked) {
@@ -954,7 +953,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
           </fieldset>
           {!hasEligibleRole && <p className="public-form-message" role="status">Your handicap is above the #{competition.maxContestantHandicap} limit for this roping.</p>}
           {individual ? (
-            <label>Number of entries<input type="number" min={1} max={competition.entriesAllowed} value={entries} onChange={(event) => setEntries(Number(event.target.value))} /></label>
+            <label>Number of entries<input type="number" min={minimumDraws} max={competition.entriesAllowed} value={entries} onChange={(event) => setEntries(Number(event.target.value))} /></label>
           ) : pickAndDraw ? (
             <>
               <label>Number of {drawRole.toLowerCase()} draws<input type="number" min={minimumDraws} max={competition.entriesAllowed} value={entries} onChange={(event) => setEntries(Number(event.target.value))} /></label>

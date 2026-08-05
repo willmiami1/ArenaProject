@@ -47,6 +47,10 @@ export const competitionTypes: {
 export const competitionName = (type: CompetitionType) =>
   competitionTypes.find((item) => item.id === type)?.name ?? "Competition";
 
+export const minimumDrawEntries = (
+  event: Pick<ArenaEvent, "minDrawsAllowed">,
+) => Math.max(1, Number(event.minDrawsAllowed ?? 0));
+
 export function reconcilePickDrawRegistrations(
   registrations: EventRegistration[],
   _teams: Team[],
@@ -95,6 +99,130 @@ const shuffle = <T,>(items: T[]) =>
     .map(({ item }) => item);
 
 const pairKey = (headerId: string, heelerId: string) => `${headerId}|${heelerId}`;
+
+function spacingQuality(teams: Team[]) {
+  const lastRiderPosition = new Map<string, number>();
+  const lastPairPosition = new Map<string, number>();
+  let minimumGap = teams.length + 1;
+  let totalGap = 0;
+  let repeatCount = 0;
+  teams.forEach((team, index) => {
+    const position = index + 1;
+    [team.headerId, team.heelerId].forEach((contestantId) => {
+      const previous = lastRiderPosition.get(contestantId);
+      if (previous !== undefined) {
+        const gap = position - previous;
+        minimumGap = Math.min(minimumGap, gap);
+        totalGap += gap;
+        repeatCount += 1;
+      }
+      lastRiderPosition.set(contestantId, position);
+    });
+    const key = pairKey(team.headerId, team.heelerId);
+    const previousPair = lastPairPosition.get(key);
+    if (previousPair !== undefined) {
+      const gap = position - previousPair;
+      minimumGap = Math.min(minimumGap, gap);
+      totalGap += gap * 2;
+      repeatCount += 1;
+    }
+    lastPairPosition.set(key, position);
+  });
+  return {
+    minimumGap: repeatCount ? minimumGap : teams.length + 1,
+    totalGap,
+  };
+}
+
+export function spaceDrawTeamsApart(teams: Team[]) {
+  if (teams.length < 3) {
+    return teams.map((team, index) => ({ ...team, drawPosition: index + 1 }));
+  }
+  let bestOrder = teams;
+  let bestQuality = spacingQuality(teams);
+  const attempts = Math.min(100, Math.max(20, teams.length * 2));
+  const considerOrder = (order: Team[]) => {
+    const quality = spacingQuality(order);
+    if (
+      quality.minimumGap > bestQuality.minimumGap ||
+      (quality.minimumGap === bestQuality.minimumGap &&
+        quality.totalGap > bestQuality.totalGap)
+    ) {
+      bestOrder = [...order];
+      bestQuality = quality;
+    }
+  };
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const remaining = shuffle(teams);
+    considerOrder(remaining);
+    const ordered: Team[] = [];
+    const lastRiderPosition = new Map<string, number>();
+    const lastPairPosition = new Map<string, number>();
+
+    while (remaining.length) {
+      const position = ordered.length + 1;
+      let bestCandidateIndex = 0;
+      let bestCandidateScore = Number.NEGATIVE_INFINITY;
+      remaining.forEach((team, candidateIndex) => {
+        const riderDistances = [team.headerId, team.heelerId]
+          .map((contestantId) => lastRiderPosition.get(contestantId))
+          .filter((previous): previous is number => previous !== undefined)
+          .map((previous) => position - previous);
+        const previousPair = lastPairPosition.get(
+          pairKey(team.headerId, team.heelerId),
+        );
+        const riderGap = riderDistances.length
+          ? Math.min(...riderDistances)
+          : teams.length + 1;
+        const pairGap =
+          previousPair === undefined
+            ? teams.length + 1
+            : position - previousPair;
+        const score =
+          Math.min(riderGap, pairGap) * 10000 +
+          pairGap * 100 +
+          riderGap +
+          Math.random();
+        if (score > bestCandidateScore) {
+          bestCandidateScore = score;
+          bestCandidateIndex = candidateIndex;
+        }
+      });
+      const [selected] = remaining.splice(bestCandidateIndex, 1);
+      ordered.push(selected);
+      lastRiderPosition.set(selected.headerId, position);
+      lastRiderPosition.set(selected.heelerId, position);
+      lastPairPosition.set(
+        pairKey(selected.headerId, selected.heelerId),
+        position,
+      );
+    }
+
+    considerOrder(ordered);
+  }
+
+  if (teams.length <= 8) {
+    const permute = (prefix: Team[], remaining: Team[]) => {
+      if (!remaining.length) {
+        considerOrder(prefix);
+        return;
+      }
+      remaining.forEach((team, index) => {
+        permute(
+          [...prefix, team],
+          [...remaining.slice(0, index), ...remaining.slice(index + 1)],
+        );
+      });
+    };
+    permute([], teams);
+  }
+
+  return bestOrder.map((team, index) => ({
+    ...team,
+    drawPosition: index + 1,
+  }));
+}
 
 export function teamHandicapTotal(
   headerId: string,
@@ -275,7 +403,7 @@ function drawPotTeams(
       ));
     });
     }
-  return teams;
+  return spaceDrawTeamsApart(teams);
 }
 
 export function teamEligibleForCompetition(
@@ -533,7 +661,10 @@ function pickAndDrawTeams(
       );
     });
   }
-  return [...generated, ...baseTeams].map((team, index) => ({
+  return [
+    ...spaceDrawTeamsApart(generated),
+    ...spaceDrawTeamsApart(baseTeams),
+  ].map((team, index) => ({
     ...team,
     drawPosition: index + 1,
   }));
@@ -578,15 +709,17 @@ function roundRobinTeams(
       }),
   );
 
-  return shuffle(pairings).map((pair, index) =>
-    newTeam(
-      event.id,
-      pair.headerId,
-      pair.heelerId,
-      index + 1,
-      1,
-      pair.entryNumber,
-      pair.entryNumber,
+  return spaceDrawTeamsApart(
+    shuffle(pairings).map((pair, index) =>
+      newTeam(
+        event.id,
+        pair.headerId,
+        pair.heelerId,
+        index + 1,
+        1,
+        pair.entryNumber,
+        pair.entryNumber,
+      ),
     ),
   );
 }
@@ -614,15 +747,16 @@ export function generateCompetitionDraw(
       entryClearedForDraw(team) &&
       teamEligibleForCompetition(event, team, contestants),
   );
-  return shuffle(baseTeams).map((team, index) => ({
-    ...team,
-    drawPosition: index + 1,
-    round: 1,
-    status: "ready" as const,
-    rawTime: null,
-    penalties: 0,
-    points: 0,
-  }));
+  return spaceDrawTeamsApart(
+    shuffle(baseTeams).map((team) => ({
+      ...team,
+      round: 1,
+      status: "ready" as const,
+      rawTime: null,
+      penalties: 0,
+      points: 0,
+    })),
+  );
 }
 
 export function calculatePurse(event: ArenaEvent, teamCount: number) {

@@ -1,6 +1,7 @@
 import {
   contestantHasDrawRegistration,
   contestantEligibleForRole,
+  minimumDrawEntries,
   teamHandicapTotal,
 } from "./competition";
 import type {
@@ -74,13 +75,16 @@ export function createOnlineSignup(
   };
   if (event.competitionType === "draw-pot" || event.competitionType === "round-robin") {
     const entries = Number(request.entries);
+    const minimumDraws = minimumDrawEntries(event);
     if (
       !request.role ||
       !Number.isInteger(entries) ||
-      entries < 1 ||
+      entries < minimumDraws ||
       entries > event.entriesAllowed
     ) {
-      throw new Error("Choose a valid role and entry count.");
+      throw new Error(
+        `This competition requires at least ${minimumDraws} draw entr${minimumDraws === 1 ? "y" : "ies"}.`,
+      );
     }
     if (
       (request.role === "Header" && contestant.role === "Heeler") ||
@@ -132,7 +136,7 @@ export function createOnlineSignup(
   const drawRegistrations: EventRegistration[] = [];
   if (event.competitionType === "pick-and-draw") {
     const entries = Number(request.entries ?? 0);
-    const minimumDraws = Math.max(1, Number(event.minDrawsAllowed ?? 0));
+    const minimumDraws = minimumDrawEntries(event);
     const drawRole = request.drawRole ?? request.role;
     const allowedRoles =
       event.pickDrawRole === "both"

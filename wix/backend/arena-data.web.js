@@ -1444,14 +1444,20 @@ async function createSignupRecords(request, authenticatedId, source) {
       event.competitionType === "round-robin"
     ) {
       const entries = Number(request.entries);
+      const minimumDraws = Math.max(
+        1,
+        Number(event.minDrawsAllowed ?? 0),
+      );
       if (
         !["Header", "Heeler"].includes(request.role) ||
         !contestantCanRole(contestant, request.role) ||
         !Number.isInteger(entries) ||
-        entries < 1 ||
+        entries < minimumDraws ||
         entries > Number(event.entriesAllowed || 1)
       ) {
-        throw new Error("Choose a valid role and entry count.");
+        throw new Error(
+          `This competition requires at least ${minimumDraws} draw entr${minimumDraws === 1 ? "y" : "ies"}.`,
+        );
       }
       if (!contestantWithinHandicap(event, contestant, request.role)) {
         throw new Error("Contestant handicap exceeds the competition limit.");
