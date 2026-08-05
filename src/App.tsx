@@ -822,12 +822,14 @@ function LedSpectatorTop({
   }, [eventId, round, fallbackNames.join("|")]);
   return (
     <section className="led-spectator-top">
-      <span>Spectator leaders · Round {round}</span>
-      {names.length
-        ? names.map((name, index) => (
-            <strong key={`${index}-${name}`}>{index + 1}. {name}</strong>
-          ))
-        : <strong>Waiting for spectator picks</strong>}
+      <span>Spectator Results <small>Round {round}</small></span>
+      <div>
+        {names.length
+          ? names.map((name, index) => (
+              <strong key={`${index}-${name}`}><b>{index + 1}</b>{name}</strong>
+            ))
+          : <strong className="waiting">Waiting for spectator picks</strong>}
+      </div>
     </section>
   );
 }
