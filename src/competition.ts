@@ -994,24 +994,36 @@ function syncShortGoFinalists(
         team.status === "ready"
       ),
   );
+  const existingFinalists = new Map(
+    finalTeams.map((team) => [entryKey(team), team]),
+  );
   return [
     ...withoutReadyFinalists,
-    ...finalists.map(({ qualifier }, index) => ({
-      ...qualifier,
-      id: `team-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
-      drawPosition: index + 1,
-      originalTeamNumber:
-        qualifier.originalTeamNumber ?? qualifier.drawPosition,
-      round: finalRound,
-      status: "ready" as const,
-      rawTime: null,
-      penalties: 0,
-      notes: "",
-      checkedIn: false,
-      generated: true,
-      points: 0,
-      predictionClosesAt: undefined,
-    })),
+    ...finalists.map(({ qualifier }, index) => {
+      const existing = existingFinalists.get(entryKey(qualifier));
+      return {
+        ...qualifier,
+        ...existing,
+        id:
+          existing?.id ??
+          `team-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+        drawPosition: index + 1,
+        originalTeamNumber:
+          existing?.originalTeamNumber ??
+          qualifier.originalTeamNumber ??
+          qualifier.drawPosition,
+        round: finalRound,
+        status: "ready" as const,
+        rawTime: null,
+        penalties: 0,
+        notes: existing?.notes ?? "",
+        checkedIn: existing?.checkedIn ?? false,
+        generated: true,
+        points: 0,
+        predictionClosesAt: existing?.predictionClosesAt,
+        rolled: existing?.rolled,
+      };
+    }),
   ];
 }
 

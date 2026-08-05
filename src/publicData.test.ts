@@ -4,6 +4,7 @@ import {
   defaultCompetitionSettings,
   generateCompetitionDraw,
   officialRunTime,
+  reconcileQualifiedAdvancements,
   repeatedTeamPairKeys,
   reorderDraftDrawTeams,
   resetInheritedPredictionCutoffs,
@@ -353,6 +354,57 @@ describe("multi-round Run Desk results", () => {
     expect(
       saved.find((team) => team.id === "pick-only-11-round-2-b"),
     ).toMatchObject({ status: "ready" });
+  });
+
+  it("keeps final-round IDs, closed gates, and rolled state during reconciliation", () => {
+    const competition = event({ status: "Live", rounds: 3 });
+    const completedTeams = [
+      run({ id: "r1-a", originalTeamNumber: 1 }),
+      run({
+        id: "r1-b",
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+        drawPosition: 2,
+        originalTeamNumber: 2,
+      }),
+      run({ id: "r2-a", round: 2, rawTime: 7 }),
+      run({
+        id: "r2-b",
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+        round: 2,
+        drawPosition: 2,
+        rawTime: 9,
+      }),
+    ];
+    const generated = applyRunResult(
+      completedTeams,
+      "r2-b",
+      { status: "complete", rawTime: 9, penalties: 0 },
+      3,
+      0,
+      competition,
+      contestants,
+    );
+    const finalTeam = generated.find((team) => team.round === 3)!;
+    const cutoff = "2026-08-05T19:00:00.000Z";
+    const withRunDeskState = generated.map((team) =>
+      team.id === finalTeam.id
+        ? { ...team, predictionClosesAt: cutoff, rolled: true }
+        : team,
+    );
+
+    const reconciled = reconcileQualifiedAdvancements(
+      withRunDeskState,
+      [competition],
+      contestants,
+    );
+    expect(reconciled.find((team) => team.id === finalTeam.id)).toMatchObject({
+      round: 3,
+      status: "ready",
+      predictionClosesAt: cutoff,
+      rolled: true,
+    });
   });
 });
 
