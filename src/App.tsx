@@ -1210,14 +1210,6 @@ function Events({
           }}
         />
       )}
-      {selectedParentId && !selectedType && !editing && (
-        <CompetitionTypeSelector
-          events={events.filter((event) => event.parentEventId === selectedParentId)}
-          teams={teams}
-          onSelect={setSelectedType}
-          onCancel={() => setSelectedParentId(null)}
-        />
-      )}
       {((selectedParentId && selectedType) || editing) && selectedParent && (
         <EventForm
           event={editing ?? undefined}
@@ -1262,6 +1254,14 @@ function Events({
                   }}><Trash2 size={16} /></button>
                 </div>
               </div>
+              {selectedParentId === meet.id && !selectedType && !editing && (
+                <CompetitionTypeSelector
+                  events={competitions}
+                  teams={teams}
+                  onSelect={setSelectedType}
+                  onCancel={() => setSelectedParentId(null)}
+                />
+              )}
               <div className="competition-list">
                 {competitions.map((event) => (
                   <article className={`competition-row ${event.id === activeEventId ? "selected" : ""}`} key={event.id}>
