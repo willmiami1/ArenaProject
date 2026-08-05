@@ -6,6 +6,7 @@ import {
   officialRunTime,
   repeatedTeamPairKeys,
   reorderDraftDrawTeams,
+  resetInheritedPredictionCutoffs,
   spaceDrawTeamsApart,
   slideTimeAdjustment,
 } from "./competition";
@@ -298,6 +299,56 @@ describe("multi-round Run Desk results", () => {
     expect(
       nextTeams.filter((team) => team.round === 2 && team.status === "ready"),
     ).toHaveLength(1);
+  });
+
+  it("repairs inherited gates and saves Pick Only 11 Round 2 scores", () => {
+    const competition = event({
+      name: "Pick Only 11",
+      competitionType: "pick-only",
+      status: "Live",
+      rounds: 2,
+    });
+    const inheritedCutoff = "2026-08-05T18:00:00.000Z";
+    const teams = [
+      run({ predictionClosesAt: inheritedCutoff }),
+      run({
+        id: "pick-only-11-round-2-a",
+        round: 2,
+        status: "ready",
+        rawTime: null,
+        predictionClosesAt: inheritedCutoff,
+      }),
+      run({
+        id: "pick-only-11-round-2-b",
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+        round: 2,
+        drawPosition: 2,
+        status: "ready",
+        rawTime: null,
+      }),
+    ];
+    const repaired = resetInheritedPredictionCutoffs(teams);
+    expect(
+      repaired.find((team) => team.id === "pick-only-11-round-2-a")
+        ?.predictionClosesAt,
+    ).toBeUndefined();
+
+    const saved = applyRunResult(
+      repaired,
+      "pick-only-11-round-2-a",
+      { status: "complete", rawTime: 8.25, penalties: 0, points: 1 },
+      2,
+      0,
+      competition,
+      contestants,
+    );
+    expect(
+      saved.find((team) => team.id === "pick-only-11-round-2-a"),
+    ).toMatchObject({ status: "complete", rawTime: 8.25 });
+    expect(
+      saved.find((team) => team.id === "pick-only-11-round-2-b"),
+    ).toMatchObject({ status: "ready" });
   });
 });
 

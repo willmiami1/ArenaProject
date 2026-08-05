@@ -891,6 +891,21 @@ function entryKey(team: Team) {
   ].join("|");
 }
 
+export function resetInheritedPredictionCutoffs(teams: Team[]) {
+  const byEntryAndRound = new Map(
+    teams.map((team) => [`${entryKey(team)}|${team.round}`, team]),
+  );
+  return teams.map((team) => {
+    if (team.round <= 1 || !team.predictionClosesAt) return team;
+    const previousRound = byEntryAndRound.get(
+      `${entryKey(team)}|${team.round - 1}`,
+    );
+    return previousRound?.predictionClosesAt === team.predictionClosesAt
+      ? { ...team, predictionClosesAt: undefined }
+      : team;
+  });
+}
+
 function syncShortGoFinalists(
   teams: Team[],
   eventId: string,

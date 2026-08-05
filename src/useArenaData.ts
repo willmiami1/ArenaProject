@@ -4,6 +4,7 @@ import {
   defaultCompetitionSettings,
   reconcilePickDrawRegistrations,
   reconcileQualifiedAdvancements,
+  resetInheritedPredictionCutoffs,
 } from "./competition";
 import { normalizeHorseNames } from "./contestantHorses";
 import type { ArenaData, ArenaMeet } from "./types";
@@ -119,7 +120,11 @@ export function normalizeData(parsed: ArenaData): ArenaData {
     meets,
     events,
     contestants,
-    teams: reconcileQualifiedAdvancements(teams, events, contestants),
+    teams: reconcileQualifiedAdvancements(
+      resetInheritedPredictionCutoffs(teams),
+      events,
+      contestants,
+    ),
     registrations: reconcilePickDrawRegistrations(
       registrations,
       teams,

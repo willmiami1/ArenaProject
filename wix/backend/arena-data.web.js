@@ -215,6 +215,31 @@ async function replaceAll(collectionId, records) {
   }
 }
 
+const teamEntryKeyWithRound = (team, round = team.round) =>
+  [
+    team.eventId,
+    team.headerId,
+    team.heelerId,
+    team.headerEntryNumber || 1,
+    team.heelerEntryNumber || 1,
+    round,
+  ].join("|");
+
+function resetInheritedPredictionCutoffs(teams) {
+  const byEntryAndRound = new Map(
+    teams.map((team) => [teamEntryKeyWithRound(team), team]),
+  );
+  return teams.map((team) => {
+    if (Number(team.round || 1) <= 1 || !team.predictionClosesAt) return team;
+    const previousRound = byEntryAndRound.get(
+      teamEntryKeyWithRound(team, Number(team.round) - 1),
+    );
+    return previousRound?.predictionClosesAt === team.predictionClosesAt
+      ? { ...team, predictionClosesAt: undefined }
+      : team;
+  });
+}
+
 async function readWorkspace() {
   const [settings, staffRevision, onlineRevision] = await Promise.all([
     wixData.get(SETTINGS_COLLECTION, SETTINGS_ID, OPTIONS).catch(() => null),
@@ -260,7 +285,7 @@ async function readWorkspace() {
           ? Number(contestant.heelerHandicap)
           : 3,
     })),
-    teams,
+    teams: resetInheritedPredictionCutoffs(teams),
     registrations,
     spectators,
     spectatorPredictions,
