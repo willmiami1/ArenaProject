@@ -67,20 +67,33 @@ interface WixResponse<T> {
 function wixParentOrigin() {
   if (window.parent === window) return false;
   const configuredOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
-  if (!configuredOrigin || !document.referrer) return false;
+  if (!configuredOrigin) return false;
   try {
-    const referrer = new URL(document.referrer);
-    if (referrer.origin === configuredOrigin) return referrer.origin;
+    const referrerOrigin = document.referrer
+      ? new URL(document.referrer).origin
+      : "";
+    if (referrerOrigin === configuredOrigin) return referrerOrigin;
     const configuredRelayHost = new URL(
       window.location.href,
     ).searchParams.get("wixHostOrigin");
+    const ancestorOrigins = Array.from(
+      window.location.ancestorOrigins ?? [],
+    );
+    const parentOrigin = ancestorOrigins[0] || referrerOrigin;
+    if (!parentOrigin) return false;
+    const parent = new URL(parentOrigin);
     const wixRelay =
-      referrer.hostname === "htmlcomponentservice.com" ||
-      referrer.hostname.endsWith(".htmlcomponentservice.com") ||
-      referrer.hostname.endsWith(".filesusr.com") ||
-      referrer.hostname.endsWith(".wixstatic.com");
-    return configuredRelayHost === configuredOrigin && wixRelay
-      ? referrer.origin
+      parent.hostname === "htmlcomponentservice.com" ||
+      parent.hostname.endsWith(".htmlcomponentservice.com") ||
+      parent.hostname.endsWith(".filesusr.com") ||
+      parent.hostname.endsWith(".wixstatic.com");
+    const configuredSiteIsAncestor =
+      ancestorOrigins.length === 0 ||
+      ancestorOrigins.includes(configuredOrigin);
+    return configuredRelayHost === configuredOrigin &&
+      wixRelay &&
+      configuredSiteIsAncestor
+      ? parent.origin
       : false;
   } catch {
     return false;
@@ -113,13 +126,12 @@ function requestWix<T>(
       action === "submitRegistrationDeskSignup";
     let targetOrigin = "*";
     if (sensitiveAction) {
-      const configuredOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
       const parentOrigin = wixParentOrigin();
-      if (!configuredOrigin || !parentOrigin) {
+      if (!parentOrigin) {
         reject(new Error("Secure Wix login is not configured for this site."));
         return;
       }
-      targetOrigin = configuredOrigin;
+      targetOrigin = parentOrigin;
     }
     const requestId =
       window.crypto.randomUUID?.() ??
