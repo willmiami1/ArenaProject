@@ -172,6 +172,7 @@
 .public-pick-buttons .public-button:last-child { color: var(--public-cream); background: #59371f; }
 .public-pick-buttons .public-button:last-child:hover { color: #17130f; background: var(--public-cream); }
 .public-pick-cutoff { margin: -8px 0 0; color: var(--public-tan); font-size: 11px; font-weight: 700; }
+.public-registration-closed { margin-top: 18px!important; color: var(--public-tan)!important; font-size: 11px!important; font-weight: 700; }
 .public-spectator-leaders>section { border-top: 1px solid rgba(234,220,198,.2); }
 .public-spectator-leaders h3 { margin: 18px 0 10px; color: var(--public-tan); font-family: "Manrope",sans-serif; }
 .public-spectator-leaders section>p { color: var(--public-muted); font-size: 11px; }

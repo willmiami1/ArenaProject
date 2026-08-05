@@ -12,6 +12,10 @@ import type {
   EventStatus,
   PickDrawRole,
 } from "./types";
+import {
+  onlineRegistrationClosesAt,
+  onlineRegistrationIsOpen,
+} from "./registrationWindow";
 
 export type PublicRoute =
   | { kind: "home" }
@@ -47,6 +51,7 @@ export interface PublicCompetition {
   competitionLabel: string;
   pickDrawRole: PickDrawRole;
   registrationOpen: boolean;
+  registrationClosesAt: string;
   drawLocked: boolean;
   resultsPublished: boolean;
   entriesAllowed: number;
@@ -159,7 +164,8 @@ export function projectPublicArenaData(
       competitionType: event.competitionType,
       competitionLabel: competitionName(event.competitionType),
       pickDrawRole: event.pickDrawRole,
-      registrationOpen: event.registrationOpen,
+      registrationOpen: onlineRegistrationIsOpen(event, today),
+      registrationClosesAt: onlineRegistrationClosesAt(event).toISOString(),
       drawLocked: event.drawLocked,
       resultsPublished: event.resultsPublished,
       entriesAllowed: event.entriesAllowed,

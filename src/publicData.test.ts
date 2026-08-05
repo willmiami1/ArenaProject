@@ -20,7 +20,7 @@ const event = (overrides: Partial<ArenaEvent> = {}): ArenaEvent => ({
   id: "competition-1",
   parentEventId: "meet-1",
   name: "Roping",
-  date: "2026-08-04",
+  date: "2026-08-05",
   startTime: "18:00",
   location: "Destiny Arena",
   status: "Upcoming",
@@ -146,6 +146,33 @@ describe("aggregate public standings", () => {
 });
 
 describe("online signup", () => {
+  const beforeCutoff = new Date("2026-08-05T16:59:59");
+  const atCutoff = new Date("2026-08-05T17:00:00");
+
+  it("accepts Future or Live entries only until one hour before start", () => {
+    const request = {
+      submissionId: "cutoff-entry",
+      contestantId: "header",
+      eventId: "competition-1",
+      role: "Header" as const,
+      entries: 1,
+    };
+    expect(
+      createOnlineSignup(
+        workspace(event({ competitionType: "draw-pot", status: "Live" })),
+        request,
+        beforeCutoff,
+      ).registrations,
+    ).toHaveLength(1);
+    expect(() =>
+      createOnlineSignup(
+        workspace(event({ competitionType: "draw-pot", status: "Live" })),
+        request,
+        atCutoff,
+      ),
+    ).toThrow("one hour");
+  });
+
   it.each(["draw-pot", "round-robin"] as const)(
     "supports %s individual entries",
     (competitionType) => {

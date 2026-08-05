@@ -23,6 +23,26 @@ const PIN_PEPPER_SECRET = "ArenaContestantPinPepper";
 const ADMIN_ROLE_SECRET = "ArenaAdminRoleId";
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
+const ONLINE_REGISTRATION_LEAD_MS = 60 * 60 * 1000;
+
+const registrationClosesAt = (event) =>
+  new Date(`${event.date}T${event.startTime}:00`).getTime() -
+  ONLINE_REGISTRATION_LEAD_MS;
+
+const onlineRegistrationIsOpen = (event, now = Date.now()) =>
+  event.registrationOpen === true &&
+  event.status !== "Complete" &&
+  event.drawLocked !== true &&
+  now < registrationClosesAt(event);
+
+const assertOnlineRegistrationOpen = (event, now = Date.now()) => {
+  if (!event.registrationOpen) throw new Error("Registration is closed.");
+  if (event.status === "Complete") throw new Error("This competition is complete.");
+  if (event.drawLocked) throw new Error("The draw is locked.");
+  if (now >= registrationClosesAt(event)) {
+    throw new Error("Online registration closes one hour before the competition starts.");
+  }
+};
 
 async function resolveAdminAccess() {
   let member;
@@ -267,7 +287,8 @@ function publicProjection(workspace) {
         "round-robin": "Round Robin",
       }[event.competitionType] || "Competition",
       pickDrawRole: event.pickDrawRole,
-      registrationOpen: event.registrationOpen === true,
+      registrationOpen: onlineRegistrationIsOpen(event),
+      registrationClosesAt: new Date(registrationClosesAt(event)).toISOString(),
       drawLocked: event.drawLocked === true,
       resultsPublished: event.resultsPublished === true,
       entriesAllowed: event.entriesAllowed,
@@ -618,14 +639,10 @@ export const createContestantAccount = webMethod(
     const event = workspace.events.find(
       (item) => item.id === request.competitionId,
     );
-    if (
-      !event ||
-      event.status !== "Upcoming" ||
-      !event.registrationOpen ||
-      event.drawLocked
-    ) {
+    if (!event || event.status !== "Upcoming") {
       throw new Error("This competition is not accepting new accounts.");
     }
+    assertOnlineRegistrationOpen(event);
     const duplicateEmail = await wixData
       .query(CREDENTIALS_COLLECTION)
       .eq("emailNormalized", email)
@@ -927,9 +944,7 @@ export const loadSignupOptions = webMethod(
     const event = workspace.events.find((item) => item.id === competitionId);
     const contestant = workspace.contestants.find((item) => item.id === contestantId);
     if (!event || !contestant) throw new Error("Competition or contestant is unavailable.");
-    if (!event.registrationOpen || event.status === "Complete" || event.drawLocked) {
-      throw new Error("Online registration is closed for this competition.");
-    }
+    assertOnlineRegistrationOpen(event);
     const privateContestant = ({
       id,
       name,
@@ -1008,9 +1023,7 @@ export const submitOnlineSignup = webMethod(
       (item) => item.id === authenticatedId,
     );
     if (!event || !contestant) throw new Error("Competition or contestant not found.");
-    if (!event.registrationOpen) throw new Error("Registration is closed.");
-    if (event.status === "Complete") throw new Error("This competition is complete.");
-    if (event.drawLocked) throw new Error("The draw is locked.");
+    assertOnlineRegistrationOpen(event);
 
     const priorTeams = workspace.teams.filter(
       (team) => team.submissionId === request.submissionId,

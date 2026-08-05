@@ -9,6 +9,7 @@ import type {
   EventRegistration,
   Team,
 } from "./types";
+import { assertOnlineRegistrationOpen } from "./registrationWindow";
 
 export interface SignupRequest {
   submissionId: string;
@@ -41,9 +42,7 @@ export function createOnlineSignup(
   const event = data.events.find((item) => item.id === request.eventId);
   const contestant = data.contestants.find((item) => item.id === request.contestantId);
   if (!event || !contestant) throw new Error("Competition or contestant not found.");
-  if (!event.registrationOpen) throw new Error("Registration is closed.");
-  if (event.status === "Complete") throw new Error("This competition is complete.");
-  if (event.drawLocked) throw new Error("The draw is locked.");
+  assertOnlineRegistrationOpen(event, now);
   const existingTeams = data.teams.filter(
     (team) => team.submissionId === request.submissionId,
   );

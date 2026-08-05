@@ -181,6 +181,11 @@ function RopingCard({
           <span>{competition.entryCount} entr{competition.entryCount === 1 ? "y" : "ies"}</span>
         </div>
         <a className="public-text-link" href={href("competition", competition.id)}>Roping details <ArrowRight size={16} /></a>
+        {competition.registrationOpen && (
+          <a className="public-button compact" href={href("signup", competition.id)}>
+            Enter online
+          </a>
+        )}
       </div>
       {competition.status === "Live" && (
         <aside className="public-live-actions">
@@ -546,6 +551,9 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
         {competition.registrationOpen && competition.status !== "Complete" && !competition.drawLocked && (
           <a className="public-button primary" href={href("signup", competition.id)}>Enter this competition <ArrowRight size={18} /></a>
         )}
+        {!competition.registrationOpen && competition.status !== "Complete" && (
+          <p className="public-registration-closed">Online registration closes one hour before the competition starts.</p>
+        )}
       </section>
       {competition.status !== "Complete" && (
         <section className="public-rules">
@@ -629,7 +637,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
 
   if (!competition) return <NotFound />;
   if (!competition.registrationOpen || competition.status === "Complete" || competition.drawLocked) {
-    return <section className="public-signup"><h1>Online entry is closed</h1><p>This competition is not accepting online entries.</p><a href={href("competition", competition.id)}>Return to competition</a></section>;
+    return <section className="public-signup"><h1>Online entry is closed</h1><p>Online registration closes one hour before the competition starts.</p><a href={href("competition", competition.id)}>Return to competition</a></section>;
   }
 
   const authenticate = async (event: FormEvent) => {
@@ -757,6 +765,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     <section className="public-signup">
       <a href={href("competition", competition.id)}>← {competition.name}</a>
       <h1>Enter the arena</h1>
+      <p>Online registration closes {new Date(competition.registrationClosesAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.</p>
       <p>{authMode === "login" ? "Sign in with the email and four-digit PIN already connected to your contestant account." : "Create your contestant account, then continue directly to this competition’s entry form."}</p>
       {!options ? (
         <>
