@@ -18,6 +18,7 @@ const CREDENTIALS_COLLECTION = "ArenaContestantCredentials";
 const SETTINGS_ID = "arena-command-settings";
 const STAFF_REVISION_ID = "arena-command-staff-revision";
 const ONLINE_REVISION_ID = "arena-command-online-revision";
+const PUBLIC_SCHEDULE_ID = "arena-command-public-schedule";
 const OPTIONS = { suppressAuth: true };
 const PIN_PEPPER_SECRET = "ArenaContestantPinPepper";
 const ADMIN_ROLE_SECRET = "ArenaAdminRoleId";
@@ -734,6 +735,15 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       },
       OPTIONS,
     ),
+    wixData.save(
+      SETTINGS_COLLECTION,
+      {
+        _id: PUBLIC_SCHEDULE_ID,
+        payload: JSON.stringify(next.events || []),
+        updatedAt: new Date(),
+      },
+      OPTIONS,
+    ),
   ]);
   const staffRevision = latest.staffRevision + 1;
   return {
@@ -1011,7 +1021,11 @@ export const loadPublicArenaData = webMethod(Permissions.Anyone, async () =>
 export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
   let events;
   try {
-    events = await readPublicScheduleEvents();
+    const snapshot = await wixData
+      .get(SETTINGS_COLLECTION, PUBLIC_SCHEDULE_ID, OPTIONS)
+      .catch(() => null);
+    events = snapshot?.payload ? JSON.parse(snapshot.payload) : null;
+    if (!Array.isArray(events)) events = await readPublicScheduleEvents();
   } catch (error) {
     return {
       generatedAt: new Date().toISOString(),
