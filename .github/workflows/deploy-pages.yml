@@ -7,7 +7,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
@@ -16,6 +18,9 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,15 +39,11 @@ jobs:
           VITE_WIX_HOST_ORIGIN: ${{ vars.VITE_WIX_HOST_ORIGIN }}
         run: npm run build
 
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
       - name: Deploy
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cd dist
-          git init
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b gh-pages
-          git add .
-          git commit -m "Deploy ${GITHUB_SHA}"
-          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+        id: deployment
+        uses: actions/deploy-pages@v4
