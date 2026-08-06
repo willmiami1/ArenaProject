@@ -70,6 +70,9 @@ $w.onReady(() => {
       } else if (message.action === "promptAdminLogin") {
         await authentication.promptLogin({ mode: "login", modal: true });
         data = await getAdminAccessFromBackend();
+      } else if (message.action === "logoutAdmin") {
+        await authentication.logout();
+        data = { loggedOut: true };
       } else if (message.action === "getRegistrationDeskAccess") {
         data = await getRegistrationDeskAccessFromBackend();
       } else if (message.action === "promptRegistrationDeskLogin") {

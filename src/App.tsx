@@ -71,6 +71,7 @@ import {
   authenticateContestant,
   isWixEmbed,
   loadPublicArenaData,
+  logoutAdmin,
   setContestantPin,
   type ContestantPortalData,
 } from "./wixBridge";
@@ -304,8 +305,28 @@ function StaffApp() {
     if (wixHostOrigin) url.searchParams.set("wixHostOrigin", wixHostOrigin);
     window.location.assign(url.toString());
   };
+  const logOutAdmin = async () => {
+    try {
+      await logoutAdmin();
+      window.localStorage.removeItem("arena-command-data-v1");
+      const url = new URL(window.location.href);
+      const wixHostOrigin = url.searchParams.get("wixHostOrigin");
+      url.search = "";
+      url.searchParams.set("page", "home");
+      if (wixHostOrigin) url.searchParams.set("wixHostOrigin", wixHostOrigin);
+      window.location.assign(url.toString());
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Wix could not log out the administrator.",
+      );
+    }
+  };
   const openPublicWebsite = () => {
-    window.localStorage.setItem("arena-command-data-v1", JSON.stringify(data));
+    if (!isWixEmbed()) {
+      window.localStorage.setItem("arena-command-data-v1", JSON.stringify(data));
+    }
     const url = new URL(window.location.href);
     const wixHostOrigin = url.searchParams.get("wixHostOrigin");
     url.search = "";
@@ -409,6 +430,10 @@ function StaffApp() {
           <button onClick={openPublicWebsite}>
             <Eye size={19} />
             View Public Website
+          </button>
+          <button onClick={() => { void logOutAdmin(); }}>
+            <LogOut size={19} />
+            Log out
           </button>
         </nav>
 

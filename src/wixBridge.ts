@@ -28,6 +28,7 @@ type WixAction =
   | "createContestantAccount"
   | "getAdminAccess"
   | "promptAdminLogin"
+  | "logoutAdmin"
   | "getRegistrationDeskAccess"
   | "promptRegistrationDeskLogin"
   | "loadRegistrationDeskData"
@@ -118,6 +119,7 @@ function requestWix<T>(
       action === "createContestantAccount" ||
       action === "getAdminAccess" ||
       action === "promptAdminLogin" ||
+      action === "logoutAdmin" ||
       action === "getRegistrationDeskAccess" ||
       action === "promptRegistrationDeskLogin" ||
       action === "loadRegistrationDeskData" ||
@@ -201,6 +203,10 @@ export function getAdminAccess() {
 
 export function promptAdminLogin() {
   return requestWix<AdminAccessResult>("promptAdminLogin");
+}
+
+export function logoutAdmin() {
+  return requestWix<{ loggedOut: boolean }>("logoutAdmin");
 }
 
 export function getRegistrationDeskAccess() {
