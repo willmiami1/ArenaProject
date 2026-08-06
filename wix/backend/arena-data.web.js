@@ -1,8 +1,10 @@
 import { Permissions, webMethod } from "wix-web-module";
 import wixData from "wix-data";
+import { collections } from "wix-data.v2";
 import { getSecret } from "wix-secrets-backend";
 import { createHash, randomBytes } from "crypto";
 import { currentMember } from "wix-members-backend";
+import { elevate } from "wix-auth";
 
 const COLLECTIONS = {
   meets: "ArenaMeets",
@@ -614,6 +616,41 @@ async function savePublicScheduleSnapshot(events) {
   );
 }
 
+async function ensureSettingsCollection() {
+  try {
+    await wixData.get(SETTINGS_COLLECTION, PUBLIC_SCHEDULE_ID, OPTIONS);
+  } catch (error) {
+    if (
+      error?.code !== "WDE0025" &&
+      error?.code !== "WD_SCHEMA_DOES_NOT_EXIST"
+    ) {
+      throw error;
+    }
+    const createCollection = elevate(collections.createDataCollection);
+    await createCollection({
+      _id: SETTINGS_COLLECTION,
+      displayName: "Arena Settings",
+      permissions: {
+        read: "ADMIN",
+        insert: "ADMIN",
+        update: "ADMIN",
+        remove: "ADMIN",
+      },
+      fields: [
+        { key: "payload", displayName: "Payload", type: "TEXT" },
+        { key: "value", displayName: "Value", type: "NUMBER" },
+        { key: "activeEventId", displayName: "Active Event ID", type: "TEXT" },
+        {
+          key: "participantDatabaseVersion",
+          displayName: "Participant Database Version",
+          type: "NUMBER",
+        },
+        { key: "updatedAt", displayName: "Updated At", type: "DATETIME" },
+      ],
+    });
+  }
+}
+
 async function syncRecords(collectionId, records, removableAppIds) {
   let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
   const currentItems = [...result.items];
@@ -1105,6 +1142,7 @@ export const publishPublicSchedule = webMethod(
   Permissions.SiteMember,
   async (events) => {
     await requireArenaAdmin();
+    await ensureSettingsCollection();
     await savePublicScheduleSnapshot(events);
     return { publishedAt: new Date().toISOString(), count: events.length };
   },

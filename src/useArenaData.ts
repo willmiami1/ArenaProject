@@ -216,6 +216,8 @@ export function useArenaData() {
         if (saved) {
           skipNextSave.current = true;
           setData(normalizeData(saved));
+        } else {
+          await publishPublicSchedule(data.events);
         }
         setWixConnected(true);
         setStatus(saved ? "saved" : "saving");
