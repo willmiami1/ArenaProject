@@ -166,7 +166,7 @@ function PublicHeader() {
         <a href={href("home")} onClick={() => setOpen(false)}>Home</a>
         <a href={eventsHref} onClick={() => setOpen(false)}>Events</a>
         <a className="public-header-cta" href={href("rider-account")} onClick={() => setOpen(false)}>
-          <UsersRound size={16} /> Create Rider Account
+          <UsersRound size={16} /> CREATE A RIDER ACCOUNT
         </a>
         <a className="public-header-game" href={liveEventsHref} onClick={() => setOpen(false)}>
           <Trophy size={16} /> Play Cowboys x Steers
