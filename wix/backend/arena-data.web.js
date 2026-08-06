@@ -81,13 +81,17 @@ async function resolveAdminAccess() {
   try {
     const [roles, configuredRoleId] = await Promise.all([
       currentMember.getRoles(),
-      getSecret(ADMIN_ROLE_SECRET),
+      getSecret(ADMIN_ROLE_SECRET).catch(() => ""),
     ]);
-    if (
-      typeof configuredRoleId === "string" &&
-      configuredRoleId.trim() &&
-      roles.some((role) => role._id === configuredRoleId.trim())
-    ) {
+    const configuredId =
+      typeof configuredRoleId === "string" ? configuredRoleId.trim() : "";
+    const hasAdminRole = roles.some(
+      (role) =>
+        role._id === configuredId ||
+        role.title === "Arena Admin" ||
+        role.title === "Admin",
+    );
+    if (hasAdminRole) {
       return {
         state: "authorized",
         message: "Administrator access verified.",
@@ -139,7 +143,14 @@ async function resolveRegistrationDeskAccess() {
     const allowedRoleIds = [registrationRoleId, adminRoleId]
       .filter((roleId) => typeof roleId === "string" && roleId.trim())
       .map((roleId) => roleId.trim());
-    if (roles.some((role) => allowedRoleIds.includes(role._id))) {
+    if (
+      roles.some(
+        (role) =>
+          allowedRoleIds.includes(role._id) ||
+          role.title === "Arena Admin" ||
+          role.title === "Admin",
+      )
+    ) {
       return {
         state: "authorized",
         message: "Registration Desk access verified.",
