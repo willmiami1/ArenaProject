@@ -149,11 +149,16 @@ function requestWix<T>(
             750,
           )
         : undefined;
+    const timeoutMilliseconds =
+      action === "promptAdminLogin" ||
+      action === "promptRegistrationDeskLogin"
+        ? 5 * 60 * 1000
+        : 8000;
     const timeout = window.setTimeout(() => {
       if (retry !== undefined) window.clearInterval(retry);
       window.removeEventListener("message", handleMessage);
       reject(new Error("Wix persistence did not respond."));
-    }, 8000);
+    }, timeoutMilliseconds);
 
     function handleMessage(event: MessageEvent<WixResponse<T>>) {
       if (
