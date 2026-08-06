@@ -1,9 +1,6 @@
 name: Deploy preview to GitHub Pages
 
 on:
-  push:
-    branches:
-      - willmiami1-public-arena-website
   workflow_dispatch:
 
 permissions:
