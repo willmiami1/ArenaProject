@@ -89,6 +89,9 @@ describe("public routing", () => {
     expect(parsePublicRoute("?page=home&portal=contestant")).toEqual({ kind: "contestant" });
     expect(parsePublicRoute("?display=leaderboard&page=event&id=x")).toEqual({ kind: "leaderboard" });
     expect(parsePublicRoute("?page=competition&id=c")).toEqual({ kind: "competition", id: "c" });
+    expect(parsePublicRoute("?page=rider-account")).toEqual({
+      kind: "rider-account",
+    });
   });
 
   describe("admin access boundary", () => {

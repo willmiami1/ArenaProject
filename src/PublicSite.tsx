@@ -31,6 +31,7 @@ import {
 } from "./publicData";
 import {
   createContestantAccount,
+  createRiderAccount,
   isWixEmbed,
   loadPublicArenaData,
   loadPublicSchedule,
@@ -163,6 +164,9 @@ function PublicHeader() {
       <nav id="public-navigation" className={open ? "open" : ""} aria-label="Public navigation">
         <a href={href("home")} onClick={() => setOpen(false)}>Home</a>
         <a href={eventsHref} onClick={() => setOpen(false)}>Events</a>
+        <a className="public-header-cta" href={href("rider-account")} onClick={() => setOpen(false)}>
+          <UsersRound size={16} /> Create Rider Account
+        </a>
         <a href={operationalHref("command")} onClick={() => setOpen(false)}><ShieldCheck size={16} /> Admin login</a>
         <SocialLinks />
       </nav>
@@ -469,6 +473,77 @@ function SpectatorPage({
           </section>
         </div>
       </div>
+    </section>
+  );
+}
+
+function RiderAccountPage() {
+  const [account, setAccount] = useState<
+    ContestantAccountRequest & { confirmPin: string }
+  >({
+    name: "",
+    email: "",
+    phone: "",
+    hometown: "",
+    role: "Both",
+    headerHandicap: 3,
+    heelerHandicap: 3,
+    pin: "",
+    confirmPin: "",
+  });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [created, setCreated] = useState(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      if (account.pin !== account.confirmPin) {
+        throw new Error("PIN confirmation does not match.");
+      }
+      if (!isWixEmbed()) {
+        throw new Error("Rider account creation is available on the Destiny Ranch Arena website.");
+      }
+      const result = await createRiderAccount(account);
+      if (!result) throw new Error("Rider account could not be created.");
+      setCreated(true);
+      setMessage(`Welcome, ${result.name}. Your rider account is ready.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Rider account could not be created.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="public-signup">
+      <a href={href("home")}>← Return home</a>
+      <h1>Create Rider Account</h1>
+      <p>Create your secure rider profile now, then use the same email and four-digit PIN for eligible online entries.</p>
+      {created ? (
+        <div className="public-confirmation" role="status">
+          <CheckCircle2 size={28} />
+          <h2>Account created</h2>
+          <p>{message}</p>
+          <a className="public-button" href={eventsHref}>View event schedule</a>
+        </div>
+      ) : (
+        <form className="public-account-form" onSubmit={submit}>
+          <label>Full name<input required maxLength={100} autoComplete="name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} /></label>
+          <label>Email address<input required type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} /></label>
+          <label>Phone number<input required type="tel" autoComplete="tel" value={account.phone} onChange={(event) => setAccount({ ...account, phone: event.target.value })} /></label>
+          <label>Hometown<input maxLength={100} autoComplete="address-level2" value={account.hometown} onChange={(event) => setAccount({ ...account, hometown: event.target.value })} /></label>
+          <label>Roping position<select value={account.role} onChange={(event) => setAccount({ ...account, role: event.target.value as ContestantAccountRequest["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
+          <label>Header handicap<input required type="number" min={0} max={20} step={0.5} value={account.headerHandicap} onChange={(event) => setAccount({ ...account, headerHandicap: Number(event.target.value) })} /></label>
+          <label>Heeler handicap<input required type="number" min={0} max={20} step={0.5} value={account.heelerHandicap} onChange={(event) => setAccount({ ...account, heelerHandicap: Number(event.target.value) })} /></label>
+          <label>Four-digit PIN<input required type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={account.pin} onChange={(event) => setAccount({ ...account, pin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
+          <label>Confirm PIN<input required type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={account.confirmPin} onChange={(event) => setAccount({ ...account, confirmPin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
+          {message && <p className="public-form-message" role="alert">{message}</p>}
+          <button className="public-button" disabled={busy}>{busy ? "Creating account…" : "Create Rider Account"}</button>
+        </form>
+      )}
     </section>
   );
 }
@@ -1126,6 +1201,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
   );
   const [error, setError] = useState("");
   useEffect(() => {
+    if (route.kind === "rider-account") return;
     if (!isWixEmbed()) {
       const refresh = () => setData(loadLocalPublicData());
       window.addEventListener("focus", refresh);
@@ -1155,7 +1231,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
   }, [data, route]);
 
   useEffect(() => {
-    const title = route.kind === "events" ? "Events" : route.kind === "event" ? selected.meet?.name : route.kind === "competition" || route.kind === "signup" || route.kind === "spectator" ? selected.competition?.name : "Home";
+    const title = route.kind === "events" ? "Events" : route.kind === "rider-account" ? "Create Rider Account" : route.kind === "event" ? selected.meet?.name : route.kind === "competition" || route.kind === "signup" || route.kind === "spectator" ? selected.competition?.name : "Home";
     document.title = `${title ?? "Event"} | Destiny Ranch Arena`;
   }, [route.kind, selected.competition?.name, selected.meet?.name]);
 
@@ -1165,6 +1241,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       <PublicHeader />
       <main className="public-main">
         {route.kind === "home" ? <HomePage data={data} scheduleError={error} /> :
+          route.kind === "rider-account" ? <RiderAccountPage /> :
           error ? <section className="public-not-found"><h1>We couldn’t open the event book.</h1><p>{error}</p></section> : !data ? <div className="public-loading" role="status">Loading the event book…</div> :
           route.kind === "events" ? <><section className="public-index-head"><h1>Every run starts here.</h1><p>Upcoming entries, live ropings, and the official results book.</p></section><EventExplorer data={data} /></> :
           route.kind === "event" ? <EventPage meet={selected.meet} /> :

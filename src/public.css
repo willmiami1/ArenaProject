@@ -21,6 +21,8 @@
 .public-header nav { display: flex; align-items: center; gap: clamp(22px,3vw,42px); }
 .public-header nav a { display: inline-flex; align-items: center; gap: 7px; padding: 10px 0; font-size: 12px; font-weight: 700; border-bottom: 1px solid transparent; }
 .public-header nav a:hover { border-color: var(--public-tan); }
+.public-header nav .public-header-cta { padding: 10px 14px; color: #fff; background: var(--public-brown); border: 1px solid var(--public-brown); }
+.public-header nav .public-header-cta:hover { background: #4f2d1d; border-color: var(--public-tan); }
 .public-social-links { display: inline-flex; align-items: center; gap: 8px; }
 .public-social-links a { width: 36px; height: 36px; display: grid!important; place-items: center; padding: 0!important; color: var(--public-cream); border: 1px solid rgba(234,220,198,.28)!important; border-radius: 50%; }
 .public-social-links a:hover { color: #17130f; background: var(--public-tan); border-color: var(--public-tan)!important; }

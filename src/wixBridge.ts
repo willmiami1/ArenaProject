@@ -28,6 +28,7 @@ type WixAction =
   | "submitOnlineSignup"
   | "submitSpectatorPrediction"
   | "createContestantAccount"
+  | "createRiderAccount"
   | "getAdminAccess"
   | "promptAdminLogin"
   | "logoutAdmin"
@@ -119,6 +120,7 @@ function requestWix<T>(
       action === "submitOnlineSignup" ||
       action === "submitSpectatorPrediction" ||
       action === "createContestantAccount" ||
+      action === "createRiderAccount" ||
       action === "getAdminAccess" ||
       action === "promptAdminLogin" ||
       action === "logoutAdmin" ||
@@ -309,6 +311,13 @@ export function createContestantAccount(
     competitionId,
     ...account,
   });
+}
+
+export function createRiderAccount(account: ContestantAccountRequest) {
+  return requestWix<{ contestantId: string; name: string }>(
+    "createRiderAccount",
+    account,
+  );
 }
 
 export function authenticateContestant(email: string, pin: string) {

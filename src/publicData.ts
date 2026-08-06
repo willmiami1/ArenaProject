@@ -23,6 +23,7 @@ export type PublicRoute =
   | { kind: "event"; id: string }
   | { kind: "competition"; id: string }
   | { kind: "signup"; id: string }
+  | { kind: "rider-account" }
   | { kind: "spectator"; id: string }
   | { kind: "contestant" }
   | { kind: "staff" }
@@ -159,6 +160,7 @@ export function parsePublicRoute(search: string): PublicRoute {
   if (page === "event") return { kind: "event", id };
   if (page === "competition") return { kind: "competition", id };
   if (page === "signup") return { kind: "signup", id };
+  if (page === "rider-account") return { kind: "rider-account" };
   if (page === "spectator") return { kind: "spectator", id };
   return { kind: "home" };
 }

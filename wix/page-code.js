@@ -10,6 +10,7 @@ import {
   submitOnlineSignup,
   submitSpectatorPrediction,
   createContestantAccount,
+  createRiderAccount,
   getAdminAccess as getAdminAccessFromBackend,
   getRegistrationDeskAccess as getRegistrationDeskAccessFromBackend,
   loadRegistrationDeskData,
@@ -71,6 +72,8 @@ $w.onReady(() => {
         data = await submitSpectatorPrediction(message.data);
       } else if (message.action === "createContestantAccount") {
         data = await createContestantAccount(message.data);
+      } else if (message.action === "createRiderAccount") {
+        data = await createRiderAccount(message.data);
       } else if (message.action === "getAdminAccess") {
         data = await getAdminAccessFromBackend();
       } else if (message.action === "promptAdminLogin") {

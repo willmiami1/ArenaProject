@@ -651,6 +651,54 @@ async function ensureSettingsCollection() {
   }
 }
 
+async function ensureRiderAccountCollections() {
+  const createCollection = elevate(collections.createDataCollection);
+  const ensureCollection = async (collectionId, displayName, fields) => {
+    try {
+      await wixData.query(collectionId).limit(1).find(OPTIONS);
+    } catch (error) {
+      if (
+        error?.code !== "WDE0025" &&
+        error?.code !== "WD_SCHEMA_DOES_NOT_EXIST"
+      ) {
+        throw error;
+      }
+      await createCollection({
+        _id: collectionId,
+        displayName,
+        permissions: {
+          read: "ADMIN",
+          insert: "ADMIN",
+          update: "ADMIN",
+          remove: "ADMIN",
+        },
+        fields,
+      });
+    }
+  };
+  await ensureCollection(
+    COLLECTIONS.contestants,
+    "Arena Contestants",
+    [
+      { key: "appId", displayName: "App ID", type: "TEXT" },
+      { key: "payload", displayName: "Payload", type: "TEXT" },
+    ],
+  );
+  await ensureCollection(
+    CREDENTIALS_COLLECTION,
+    "Arena Contestant Credentials",
+    [
+      { key: "contestantId", displayName: "Contestant ID", type: "TEXT" },
+      { key: "emailNormalized", displayName: "Normalized Email", type: "TEXT" },
+      { key: "pinSalt", displayName: "PIN Salt", type: "TEXT" },
+      { key: "pinHash", displayName: "PIN Hash", type: "TEXT" },
+      { key: "failedAttempts", displayName: "Failed Attempts", type: "NUMBER" },
+      { key: "lockedUntil", displayName: "Locked Until", type: "DATETIME" },
+      { key: "updatedAt", displayName: "Updated At", type: "DATETIME" },
+    ],
+  );
+}
+
 async function syncRecords(collectionId, records, removableAppIds) {
   let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
   const currentItems = [...result.items];
@@ -1395,6 +1443,109 @@ export const createContestantAccount = webMethod(
           ? availablePartners(updatedWorkspace, event, contestant)
           : [],
     };
+  },
+);
+
+export const createRiderAccount = webMethod(
+  Permissions.Anyone,
+  async (request) => {
+    const name = String(request.name || "").trim().replace(/\s+/g, " ");
+    const email = normalizeEmail(request.email);
+    const phone = String(request.phone || "").replace(/\D/g, "");
+    const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ");
+    const role = String(request.role || "");
+    const headerHandicap = Number(request.headerHandicap);
+    const heelerHandicap = Number(request.heelerHandicap);
+    if (name.length < 2 || name.length > 100) throw new Error("Enter your full name.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      throw new Error("Enter a valid email address.");
+    }
+    if (phone.length < 10 || phone.length > 15) {
+      throw new Error("Enter a valid phone number.");
+    }
+    if (!["Header", "Heeler", "Both"].includes(role)) {
+      throw new Error("Choose your roping position.");
+    }
+    if (
+      !validPin(request.pin) ||
+      !Number.isFinite(headerHandicap) ||
+      !Number.isFinite(heelerHandicap) ||
+      headerHandicap < 0 ||
+      heelerHandicap < 0 ||
+      headerHandicap > 20 ||
+      heelerHandicap > 20
+    ) {
+      throw new Error("Enter valid handicaps and a four-digit PIN.");
+    }
+    await ensureRiderAccountCollections();
+    const duplicate = await wixData
+      .query(CREDENTIALS_COLLECTION)
+      .eq("emailNormalized", email)
+      .limit(1)
+      .find(OPTIONS);
+    if (duplicate.items.length) {
+      throw new Error("A rider account already uses that email.");
+    }
+    const contestantId = `contestant-${createHash("sha256")
+      .update(`contestant-phone:${phone}`)
+      .digest("hex")
+      .slice(0, 24)}`;
+    const existingPhone = await wixData
+      .query(COLLECTIONS.contestants)
+      .eq("appId", contestantId)
+      .limit(1)
+      .find(OPTIONS);
+    if (existingPhone.items.length) {
+      throw new Error("A rider account already uses that phone number.");
+    }
+    const contestant = {
+      id: contestantId,
+      name,
+      email,
+      phone,
+      hometown,
+      role,
+      headerHandicap,
+      heelerHandicap,
+      photo: "",
+      horses: [],
+    };
+    const credentialId = createHash("sha256")
+      .update(`contestant-credential:${email}`)
+      .digest("hex")
+      .slice(0, 32);
+    const pepper = await getSecret(PIN_PEPPER_SECRET);
+    const salt = randomBytes(16).toString("hex");
+    await wixData.insert(
+      CREDENTIALS_COLLECTION,
+      {
+        _id: credentialId,
+        contestantId,
+        emailNormalized: email,
+        pinSalt: salt,
+        pinHash: pinHash(request.pin, salt, pepper),
+        failedAttempts: 0,
+        lockedUntil: null,
+        updatedAt: new Date(),
+      },
+      OPTIONS,
+    );
+    try {
+      await wixData.insert(
+        COLLECTIONS.contestants,
+        {
+          appId: contestantId,
+          payload: JSON.stringify(contestant),
+        },
+        OPTIONS,
+      );
+    } catch (error) {
+      await wixData
+        .remove(CREDENTIALS_COLLECTION, credentialId, OPTIONS)
+        .catch(() => null);
+      throw error;
+    }
+    return { contestantId, name };
   },
 );
 
