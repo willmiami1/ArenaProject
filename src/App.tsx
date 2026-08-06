@@ -1516,15 +1516,6 @@ function Events({
                         <h3>{event.name}</h3>
                         <button
                           className={event.resultsPublished ? "selected-button publish-results-button" : "secondary publish-results-button"}
-                          disabled={
-                            !event.resultsPublished &&
-                            !teams.some(
-                              (team) =>
-                                team.eventId === event.id &&
-                                (team.status === "complete" ||
-                                  team.status === "no-time"),
-                            )
-                          }
                           onClick={() =>
                             onUpdate({
                               ...event,
