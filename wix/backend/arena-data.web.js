@@ -986,15 +986,64 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
     readAll(COLLECTIONS.meets),
     readAll(COLLECTIONS.events),
   ]);
-  return publicProjection({
-    meets,
-    events,
-    contestants: [],
-    teams: [],
-    registrations: [],
-    spectators: [],
-    spectatorPredictions: [],
-  });
+  const competitionLabel = {
+    "draw-pot": "Draw Pot",
+    "pick-only": "Pick Only",
+    "pick-and-draw": "Pick and Draw",
+    "round-robin": "Round Robin",
+    slide: "Slide",
+  };
+  const competitions = events.map((event) => ({
+    id: String(event.id || ""),
+    parentEventId: String(event.parentEventId || ""),
+    name: String(event.name || "Competition"),
+    description: "",
+    date: String(event.date || ""),
+    startTime: String(event.startTime || ""),
+    location: String(event.location || ""),
+    status: String(event.status || "Upcoming"),
+    entryFee: Number(event.entryFee || 0),
+    competitionType: String(event.competitionType || "draw-pot"),
+    competitionLabel:
+      competitionLabel[event.competitionType] || "Competition",
+    pickDrawRole: String(event.pickDrawRole || "both"),
+    registrationOpen: false,
+    registrationClosesAt: "",
+    drawLocked: Boolean(event.drawLocked),
+    resultsPublished: Boolean(event.resultsPublished),
+    entriesAllowed: Number(event.entriesAllowed || 0),
+    minDrawsAllowed: Number(event.minDrawsAllowed || 0),
+    allowRepeatPartners: Boolean(event.allowRepeatPartners),
+    handicapTotal: Number(event.handicapTotal || 0),
+    slideNumber: Number(event.slideNumber || 10),
+    maxContestantHandicap: Number(event.maxContestantHandicap || 10),
+    timeLimit: Number(event.timeLimit || 0),
+    rounds: Number(event.rounds || 1),
+    shortGoTeams: Number(event.shortGoTeams || 0),
+    incentivePayouts: Boolean(event.incentivePayouts),
+    incentiveHandicapTotal: Number(event.incentiveHandicapTotal || 7),
+    incentiveTeams: Number(event.incentiveTeams || 1),
+    incentiveAmountPerTeam: Number(event.incentiveAmountPerTeam || 0),
+    entryCount: 0,
+    results: [],
+    predictionRuns: [],
+    spectatorLeaderboards: [],
+  }));
+  return {
+    generatedAt: new Date().toISOString(),
+    competitions,
+    meets: meets.map((meet) => ({
+      id: String(meet.id || ""),
+      name: String(meet.name || "Event"),
+      date: String(meet.date || ""),
+      startTime: String(meet.startTime || ""),
+      location: String(meet.location || ""),
+      producer: String(meet.producer || ""),
+      competitions: competitions.filter(
+        (competition) => competition.parentEventId === String(meet.id || ""),
+      ),
+    })),
+  };
 });
 
 export const setContestantPin = webMethod(
