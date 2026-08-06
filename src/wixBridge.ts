@@ -22,6 +22,7 @@ type WixAction =
   | "authenticateContestant"
   | "setContestantPin"
   | "loadPublicArenaData"
+  | "loadPublicSchedule"
   | "loadSignupOptions"
   | "submitOnlineSignup"
   | "submitSpectatorPrediction"
@@ -195,6 +196,10 @@ export function requestWixData(
 
 export function loadPublicArenaData() {
   return requestWix<PublicArenaData>("loadPublicArenaData");
+}
+
+export function loadPublicSchedule() {
+  return requestWix<PublicArenaData>("loadPublicSchedule");
 }
 
 export function getAdminAccess() {

@@ -33,6 +33,7 @@ import {
   createContestantAccount,
   isWixEmbed,
   loadPublicArenaData,
+  loadPublicSchedule,
   loadSignupOptions,
   submitOnlineSignup,
   submitSpectatorPrediction,
@@ -161,6 +162,7 @@ function PublicHeader() {
       </button>
       <nav id="public-navigation" className={open ? "open" : ""} aria-label="Public navigation">
         <a href={href("home")} onClick={() => setOpen(false)}>Home</a>
+        <a href={eventsHref} onClick={() => setOpen(false)}>Events</a>
         <a href={operationalHref("command")} onClick={() => setOpen(false)}><ShieldCheck size={16} /> Admin login</a>
         <SocialLinks />
       </nav>
@@ -177,6 +179,7 @@ function PublicFooter() {
       </div>
       <nav aria-label="Footer navigation">
         <a href={href("home")}>Home</a>
+        <a href={eventsHref}>Events</a>
         <a href={operationalHref("command")}>Admin login</a>
       </nav>
       <div className="public-footer-connect">
@@ -193,8 +196,10 @@ function ReturnToEventsLink() {
 
 function RopingCard({
   competition,
+  scheduleOnly = false,
 }: {
   competition: PublicCompetition;
+  scheduleOnly?: boolean;
 }) {
   return (
     <article className={`public-event-card${competition.status === "Live" ? " live" : ""}`}>
@@ -207,21 +212,29 @@ function RopingCard({
           <Status value={competition.status} />
           <span>{competition.competitionLabel}</span>
         </div>
-        <h3><a href={href("competition", competition.id)}>{competition.name}</a></h3>
+        <h3>
+          {scheduleOnly
+            ? competition.name
+            : <a href={href("competition", competition.id)}>{competition.name}</a>}
+        </h3>
         <p><MapPin size={15} /> {competition.location}</p>
         <p><Clock3 size={15} /> {formatTime(competition.startTime)}</p>
         <div className="public-card-badges">
           {competition.registrationOpen && <span>Accepting entries</span>}
-          <span>{competition.entryCount} entr{competition.entryCount === 1 ? "y" : "ies"}</span>
+          {!scheduleOnly && (
+            <span>{competition.entryCount} entr{competition.entryCount === 1 ? "y" : "ies"}</span>
+          )}
         </div>
-        <a className="public-text-link" href={href("competition", competition.id)}>Roping details <ArrowRight size={16} /></a>
-        {competition.registrationOpen && (
+        {!scheduleOnly && (
+          <a className="public-text-link" href={href("competition", competition.id)}>Roping details <ArrowRight size={16} /></a>
+        )}
+        {!scheduleOnly && competition.registrationOpen && (
           <a className="public-button compact" href={href("signup", competition.id)}>
             Enter online
           </a>
         )}
       </div>
-      {competition.status === "Live" && (
+      {!scheduleOnly && competition.status === "Live" && (
         <aside className="public-live-actions">
           <a className="public-live-results" href={`${href("competition", competition.id)}#results`}>
             <Trophy size={22} />
@@ -460,7 +473,13 @@ function SpectatorPage({
   );
 }
 
-function EventExplorer({ data }: { data: PublicArenaData }) {
+function EventExplorer({
+  data,
+  scheduleOnly = false,
+}: {
+  data: PublicArenaData;
+  scheduleOnly?: boolean;
+}) {
   const groups = [
     { key: "live", title: "Current Events", empty: "No competitions are live right now." },
     { key: "future", title: "Future Events", empty: "The next event will be posted soon." },
@@ -471,8 +490,8 @@ function EventExplorer({ data }: { data: PublicArenaData }) {
   return (
     <section className="public-event-explorer" id="events">
       <div className="public-section-heading">
-        <div><span>Destiny Ranch Arena</span><h2>Events</h2></div>
-        <span>Choose an event book</span>
+        <div><span>Destiny Ranch Arena</span><h2>{scheduleOnly ? "Event schedule" : "Events"}</h2></div>
+        <span>{scheduleOnly ? "Published by arena staff" : "Choose an event book"}</span>
       </div>
       <nav className="public-event-tabs" aria-label="Event date groups">
         {groups.map((group) => {
@@ -503,7 +522,7 @@ function EventExplorer({ data }: { data: PublicArenaData }) {
             <section className="public-event-tab-panel" id={`events-${group.key}`} key={group.key}>
               <h3>{group.title}</h3>
               {competitions.length ? (
-                <div className="public-event-grid">{competitions.map((competition) => <RopingCard competition={competition} key={competition.id} />)}</div>
+                <div className="public-event-grid">{competitions.map((competition) => <RopingCard competition={competition} scheduleOnly={scheduleOnly} key={competition.id} />)}</div>
               ) : (
                 <p className="public-empty">{group.empty}</p>
               )}
@@ -515,7 +534,13 @@ function EventExplorer({ data }: { data: PublicArenaData }) {
   );
 }
 
-function HomePage() {
+function HomePage({
+  data,
+  scheduleError,
+}: {
+  data: PublicArenaData | null;
+  scheduleError: string;
+}) {
   const flyers = [
     { src: "./future-event-flyer-1.png", alt: "Destiny Ranch Arena future event flyer" },
     { src: "./future-event-flyer-2.png", alt: "Destiny Ranch Arena upcoming roping flyer" },
@@ -541,6 +566,18 @@ function HomePage() {
           <div><Trophy /><strong>Results worth keeping</strong><span>Published averages show every qualified round.</span></div>
         </section>
       </section>
+      {data ? (
+        <EventExplorer data={data} scheduleOnly />
+      ) : (
+        <section className="public-event-explorer" id="events">
+          <div className="public-section-heading">
+            <div><span>Destiny Ranch Arena</span><h2>Event schedule</h2></div>
+          </div>
+          <p className="public-empty" role="status">
+            {scheduleError || "Loading the event schedule…"}
+          </p>
+        </section>
+      )}
       <section className="public-flyers" aria-labelledby="future-flyers-title">
         <div className="public-flyers-heading">
           <span>Save the date</span>
@@ -1089,7 +1126,6 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
   );
   const [error, setError] = useState("");
   useEffect(() => {
-    if (route.kind === "home") return;
     if (!isWixEmbed()) {
       const refresh = () => setData(loadLocalPublicData());
       window.addEventListener("focus", refresh);
@@ -1100,7 +1136,9 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       };
     }
     let cancelled = false;
-    loadPublicArenaData()
+    const request =
+      route.kind === "home" ? loadPublicSchedule() : loadPublicArenaData();
+    request
       .then((result) => { if (!cancelled) setData(result); })
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Events could not be loaded."); });
     return () => { cancelled = true; };
@@ -1126,7 +1164,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       {/* THESIS: Arena day begins at the gate, not in a generic card grid. OWN-WORLD: ink-black ranch marks, bone paper, arena-gold signals, and squared field forms. STORY: find the next roping, understand the card, enter, and return for official results. FIRST VIEWPORT: oversized ride-your-run statement beside a stamped DR mark with the next event directly below. FORM: established ranch identity extended into a public event ledger. */}
       <PublicHeader />
       <main className="public-main">
-        {route.kind === "home" ? <HomePage /> :
+        {route.kind === "home" ? <HomePage data={data} scheduleError={error} /> :
           error ? <section className="public-not-found"><h1>We couldn’t open the event book.</h1><p>{error}</p></section> : !data ? <div className="public-loading" role="status">Loading the event book…</div> :
           route.kind === "events" ? <><section className="public-index-head"><h1>Every run starts here.</h1><p>Upcoming entries, live ropings, and the official results book.</p></section><EventExplorer data={data} /></> :
           route.kind === "event" ? <EventPage meet={selected.meet} /> :

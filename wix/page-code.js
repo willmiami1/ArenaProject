@@ -1,6 +1,7 @@
 import {
   authenticateContestant,
   loadPublicArenaData,
+  loadPublicSchedule,
   loadSignupOptions,
   loadArenaData,
   saveArenaData,
@@ -57,6 +58,8 @@ $w.onReady(() => {
         data = await setContestantPin(message.data);
       } else if (message.action === "loadPublicArenaData") {
         data = await loadPublicArenaDataWhenReady();
+      } else if (message.action === "loadPublicSchedule") {
+        data = await loadPublicSchedule();
       } else if (message.action === "loadSignupOptions") {
         data = await loadSignupOptions(message.data);
       } else if (message.action === "submitOnlineSignup") {

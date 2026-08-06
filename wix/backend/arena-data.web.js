@@ -981,6 +981,22 @@ export const loadPublicArenaData = webMethod(Permissions.Anyone, async () =>
   publicProjection(await readWorkspace({ includeSpectators: false })),
 );
 
+export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
+  const [meets, events] = await Promise.all([
+    readAll(COLLECTIONS.meets),
+    readAll(COLLECTIONS.events),
+  ]);
+  return publicProjection({
+    meets,
+    events,
+    contestants: [],
+    teams: [],
+    registrations: [],
+    spectators: [],
+    spectatorPredictions: [],
+  });
+});
+
 export const setContestantPin = webMethod(
   Permissions.SiteMember,
   async ({ contestantId, email, pin, contestant }) => {
