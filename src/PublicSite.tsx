@@ -221,7 +221,7 @@ function RopingCard({
           <span>{competition.competitionLabel}</span>
         </div>
         <h3>
-          {scheduleOnly
+          {scheduleOnly && !competition.resultsPublished
             ? competition.name
             : <a href={href("competition", competition.id)}>{competition.name}</a>}
         </h3>
@@ -235,6 +235,11 @@ function RopingCard({
         </div>
         {!scheduleOnly && (
           <a className="public-text-link" href={href("competition", competition.id)}>Roping details <ArrowRight size={16} /></a>
+        )}
+        {scheduleOnly && competition.resultsPublished && (
+          <a className="public-text-link" href={`${href("competition", competition.id)}#results`}>
+            View published results <Trophy size={16} />
+          </a>
         )}
         {!scheduleOnly && competition.registrationOpen && (
           <a className="public-button compact" href={href("signup", competition.id)}>
@@ -1217,7 +1222,12 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
     }
     let cancelled = false;
     const request =
-      route.kind === "home" ? loadPublicSchedule() : loadPublicArenaData();
+      route.kind === "home" ||
+      route.kind === "events" ||
+      route.kind === "event" ||
+      route.kind === "competition"
+        ? loadPublicSchedule()
+        : loadPublicArenaData();
     request
       .then((result) => { if (!cancelled) setData(result); })
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Events could not be loaded."); });

@@ -601,15 +601,25 @@ const mergeOnline = (incoming, latest) => {
   ];
 };
 
-async function savePublicScheduleSnapshot(events) {
+async function savePublicScheduleSnapshot(workspaceOrEvents) {
+  const events = Array.isArray(workspaceOrEvents)
+    ? workspaceOrEvents
+    : workspaceOrEvents?.events;
   if (!Array.isArray(events) || events.length > 1000) {
     throw new Error("The public schedule payload is invalid.");
   }
+  const snapshot = Array.isArray(workspaceOrEvents)
+    ? events
+    : publicProjection({
+        ...workspaceOrEvents,
+        spectators: [],
+        spectatorPredictions: [],
+      });
   await wixData.save(
     SETTINGS_COLLECTION,
     {
       _id: PUBLIC_SCHEDULE_ID,
-      payload: JSON.stringify(events),
+      payload: JSON.stringify(snapshot),
       updatedAt: new Date(),
     },
     OPTIONS,
@@ -767,7 +777,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       throw error;
     }
     await ensureSettingsCollection();
-    await savePublicScheduleSnapshot(data.events || []);
+    await savePublicScheduleSnapshot(data);
     return {
       ...data,
       revision: Number(data.revision || 0) + 1,
@@ -866,7 +876,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       },
       OPTIONS,
     ),
-    savePublicScheduleSnapshot(next.events || []),
+    savePublicScheduleSnapshot(next),
   ]);
   const staffRevision = latest.staffRevision + 1;
   return {
@@ -1148,6 +1158,7 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
       .get(SETTINGS_COLLECTION, PUBLIC_SCHEDULE_ID, OPTIONS)
       .catch(() => null);
     events = snapshot?.payload ? JSON.parse(snapshot.payload) : null;
+    if (Array.isArray(events?.competitions)) return events;
     if (!Array.isArray(events)) events = await readPublicScheduleEvents();
   } catch (error) {
     return {
