@@ -691,12 +691,43 @@ export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
     .catch(() => null);
   if (!settings) return null;
 
-  return readWorkspace();
+  try {
+    return await readWorkspace();
+  } catch (error) {
+    if (
+      error?.code === "WDE0025" ||
+      error?.code === "WDE0026" ||
+      error?.code === "WD_SCHEMA_DOES_NOT_EXIST"
+    ) {
+      return null;
+    }
+    throw error;
+  }
 });
 
 export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
   await requireArenaAdmin();
-  const latest = await readWorkspace();
+  let latest;
+  try {
+    latest = await readWorkspace();
+  } catch (error) {
+    if (
+      error?.code !== "WDE0025" &&
+      error?.code !== "WDE0026" &&
+      error?.code !== "WD_SCHEMA_DOES_NOT_EXIST"
+    ) {
+      throw error;
+    }
+    await ensureSettingsCollection();
+    await savePublicScheduleSnapshot(data.events || []);
+    return {
+      ...data,
+      revision: Number(data.revision || 0) + 1,
+      staffRevision: Number(data.staffRevision || data.revision || 0) + 1,
+      onlineRevision: Number(data.onlineRevision || 0),
+      loadedAt: new Date().toISOString(),
+    };
+  }
   const submittedStaffRevision = Number(
     data.staffRevision ?? data.revision ?? 0,
   );
