@@ -220,6 +220,33 @@ async function readOptionalAll(collectionId) {
   }
 }
 
+async function readPublicScheduleEvents() {
+  let result = await wixData
+    .query(COLLECTIONS.events)
+    .limit(1000)
+    .find(OPTIONS);
+  const items = [...result.items];
+  while (result.hasNext()) {
+    result = await result.next();
+    items.push(...result.items);
+  }
+  return items.flatMap((item) => {
+    try {
+      const event =
+        typeof item.payload === "string"
+          ? JSON.parse(item.payload)
+          : item.payload;
+      return event && typeof event === "object" ? [event] : [];
+    } catch (error) {
+      console.error("Skipping an invalid public schedule record.", {
+        recordId: item._id,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  });
+}
+
 async function replaceAll(collectionId, records) {
   let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
   const ids = result.items.map((item) => item._id);
@@ -982,7 +1009,23 @@ export const loadPublicArenaData = webMethod(Permissions.Anyone, async () =>
 );
 
 export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
-  const events = await readAll(COLLECTIONS.events);
+  let events;
+  try {
+    events = await readPublicScheduleEvents();
+  } catch (error) {
+    return {
+      generatedAt: new Date().toISOString(),
+      competitions: [],
+      meets: [],
+      scheduleError: [
+        "ArenaCompetitions could not be read.",
+        error?.code ? `Code: ${String(error.code)}.` : "",
+        error instanceof Error ? error.message : String(error),
+      ]
+        .filter(Boolean)
+        .join(" "),
+    };
+  }
   const scheduleNumber = (value, fallback = 0) => {
     const result = Number(value);
     return Number.isFinite(result) ? result : fallback;

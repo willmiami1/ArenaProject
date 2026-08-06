@@ -199,7 +199,13 @@ export function loadPublicArenaData() {
 }
 
 export function loadPublicSchedule() {
-  return requestWix<PublicArenaData>("loadPublicSchedule");
+  return requestWix<PublicArenaData & { scheduleError?: string }>(
+    "loadPublicSchedule",
+  ).then((data) => {
+    if (!data) throw new Error("Wix returned an empty event schedule.");
+    if (data.scheduleError) throw new Error(data.scheduleError);
+    return data;
+  });
 }
 
 export function getAdminAccess() {
