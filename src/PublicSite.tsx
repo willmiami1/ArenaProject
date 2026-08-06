@@ -72,6 +72,7 @@ const relayParameter = () => {
 const href = (page: string, id?: string) =>
   `?page=${encodeURIComponent(page)}${id ? `&id=${encodeURIComponent(id)}` : ""}${relayParameter()}`;
 const eventsHref = `${href("home")}#events`;
+const liveEventsHref = `${href("home")}#events-live`;
 const operationalHref = (app: "command" | "registration") => {
   if (isWixEmbed() || import.meta.env.DEV || isBrowserStoragePreview()) {
     return `?app=${app}${relayParameter()}`;
@@ -166,6 +167,9 @@ function PublicHeader() {
         <a href={eventsHref} onClick={() => setOpen(false)}>Events</a>
         <a className="public-header-cta" href={href("rider-account")} onClick={() => setOpen(false)}>
           <UsersRound size={16} /> Create Rider Account
+        </a>
+        <a className="public-header-game" href={liveEventsHref} onClick={() => setOpen(false)}>
+          <Trophy size={16} /> Play Cowboys x Steers
         </a>
         <a href={operationalHref("command")} onClick={() => setOpen(false)}><ShieldCheck size={16} /> Admin login</a>
         <SocialLinks />
