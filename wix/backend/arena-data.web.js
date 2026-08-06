@@ -982,10 +982,11 @@ export const loadPublicArenaData = webMethod(Permissions.Anyone, async () =>
 );
 
 export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
-  const [meets, events] = await Promise.all([
-    readAll(COLLECTIONS.meets),
-    readAll(COLLECTIONS.events),
-  ]);
+  const events = await readAll(COLLECTIONS.events);
+  const scheduleNumber = (value, fallback = 0) => {
+    const result = Number(value);
+    return Number.isFinite(result) ? result : fallback;
+  };
   const competitionLabel = {
     "draw-pot": "Draw Pot",
     "pick-only": "Pick Only",
@@ -1002,7 +1003,7 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
     startTime: String(event.startTime || ""),
     location: String(event.location || ""),
     status: String(event.status || "Upcoming"),
-    entryFee: Number(event.entryFee || 0),
+    entryFee: scheduleNumber(event.entryFee),
     competitionType: String(event.competitionType || "draw-pot"),
     competitionLabel:
       competitionLabel[event.competitionType] || "Competition",
@@ -1011,19 +1012,19 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
     registrationClosesAt: "",
     drawLocked: Boolean(event.drawLocked),
     resultsPublished: Boolean(event.resultsPublished),
-    entriesAllowed: Number(event.entriesAllowed || 0),
-    minDrawsAllowed: Number(event.minDrawsAllowed || 0),
+    entriesAllowed: scheduleNumber(event.entriesAllowed),
+    minDrawsAllowed: scheduleNumber(event.minDrawsAllowed),
     allowRepeatPartners: Boolean(event.allowRepeatPartners),
-    handicapTotal: Number(event.handicapTotal || 0),
-    slideNumber: Number(event.slideNumber || 10),
-    maxContestantHandicap: Number(event.maxContestantHandicap || 10),
-    timeLimit: Number(event.timeLimit || 0),
-    rounds: Number(event.rounds || 1),
-    shortGoTeams: Number(event.shortGoTeams || 0),
+    handicapTotal: scheduleNumber(event.handicapTotal),
+    slideNumber: scheduleNumber(event.slideNumber, 10),
+    maxContestantHandicap: scheduleNumber(event.maxContestantHandicap, 10),
+    timeLimit: scheduleNumber(event.timeLimit),
+    rounds: scheduleNumber(event.rounds, 1),
+    shortGoTeams: scheduleNumber(event.shortGoTeams),
     incentivePayouts: Boolean(event.incentivePayouts),
-    incentiveHandicapTotal: Number(event.incentiveHandicapTotal || 7),
-    incentiveTeams: Number(event.incentiveTeams || 1),
-    incentiveAmountPerTeam: Number(event.incentiveAmountPerTeam || 0),
+    incentiveHandicapTotal: scheduleNumber(event.incentiveHandicapTotal, 7),
+    incentiveTeams: scheduleNumber(event.incentiveTeams, 1),
+    incentiveAmountPerTeam: scheduleNumber(event.incentiveAmountPerTeam),
     entryCount: 0,
     results: [],
     predictionRuns: [],
@@ -1032,17 +1033,7 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
   return {
     generatedAt: new Date().toISOString(),
     competitions,
-    meets: meets.map((meet) => ({
-      id: String(meet.id || ""),
-      name: String(meet.name || "Event"),
-      date: String(meet.date || ""),
-      startTime: String(meet.startTime || ""),
-      location: String(meet.location || ""),
-      producer: String(meet.producer || ""),
-      competitions: competitions.filter(
-        (competition) => competition.parentEventId === String(meet.id || ""),
-      ),
-    })),
+    meets: [],
   };
 });
 
