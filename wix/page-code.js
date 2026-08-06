@@ -2,6 +2,7 @@ import {
   authenticateContestant,
   loadPublicArenaData,
   loadPublicSchedule,
+  publishPublicSchedule,
   loadSignupOptions,
   loadArenaData,
   saveArenaData,
@@ -60,6 +61,8 @@ $w.onReady(() => {
         data = await loadPublicArenaDataWhenReady();
       } else if (message.action === "loadPublicSchedule") {
         data = await loadPublicSchedule();
+      } else if (message.action === "publishPublicSchedule") {
+        data = await publishPublicSchedule(message.data);
       } else if (message.action === "loadSignupOptions") {
         data = await loadSignupOptions(message.data);
       } else if (message.action === "submitOnlineSignup") {

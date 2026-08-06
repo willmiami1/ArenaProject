@@ -9,7 +9,11 @@ import {
 } from "./competition";
 import { normalizeHorseNames } from "./contestantHorses";
 import type { ArenaData, ArenaMeet } from "./types";
-import { isWixEmbed, requestWixData } from "./wixBridge";
+import {
+  isWixEmbed,
+  publishPublicSchedule,
+  requestWixData,
+} from "./wixBridge";
 
 const STORAGE_KEY = "arena-command-data-v1";
 const PARTICIPANT_DATABASE_VERSION = 4;
@@ -218,6 +222,11 @@ export function useArenaData() {
       } catch (error) {
         if (cancelled) return;
         console.error("Could not connect to Wix Data.", error);
+        try {
+          await publishPublicSchedule(data.events);
+        } catch (publishError) {
+          console.error("Could not publish the public event schedule.", publishError);
+        }
         setStatus("error");
       } finally {
         if (!cancelled) setReady(true);

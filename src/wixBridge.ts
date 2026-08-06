@@ -23,6 +23,7 @@ type WixAction =
   | "setContestantPin"
   | "loadPublicArenaData"
   | "loadPublicSchedule"
+  | "publishPublicSchedule"
   | "loadSignupOptions"
   | "submitOnlineSignup"
   | "submitSpectatorPrediction"
@@ -206,6 +207,13 @@ export function loadPublicSchedule() {
     if (data.scheduleError) throw new Error(data.scheduleError);
     return data;
   });
+}
+
+export function publishPublicSchedule(events: ArenaData["events"]) {
+  return requestWix<{ publishedAt: string; count: number }>(
+    "publishPublicSchedule",
+    events,
+  );
 }
 
 export function getAdminAccess() {

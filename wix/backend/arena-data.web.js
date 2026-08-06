@@ -599,6 +599,21 @@ const mergeOnline = (incoming, latest) => {
   ];
 };
 
+async function savePublicScheduleSnapshot(events) {
+  if (!Array.isArray(events) || events.length > 1000) {
+    throw new Error("The public schedule payload is invalid.");
+  }
+  await wixData.save(
+    SETTINGS_COLLECTION,
+    {
+      _id: PUBLIC_SCHEDULE_ID,
+      payload: JSON.stringify(events),
+      updatedAt: new Date(),
+    },
+    OPTIONS,
+  );
+}
+
 async function syncRecords(collectionId, records, removableAppIds) {
   let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
   const currentItems = [...result.items];
@@ -735,15 +750,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       },
       OPTIONS,
     ),
-    wixData.save(
-      SETTINGS_COLLECTION,
-      {
-        _id: PUBLIC_SCHEDULE_ID,
-        payload: JSON.stringify(next.events || []),
-        updatedAt: new Date(),
-      },
-      OPTIONS,
-    ),
+    savePublicScheduleSnapshot(next.events || []),
   ]);
   const staffRevision = latest.staffRevision + 1;
   return {
@@ -1093,6 +1100,15 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
     meets: [],
   };
 });
+
+export const publishPublicSchedule = webMethod(
+  Permissions.SiteMember,
+  async (events) => {
+    await requireArenaAdmin();
+    await savePublicScheduleSnapshot(events);
+    return { publishedAt: new Date().toISOString(), count: events.length };
+  },
+);
 
 export const setContestantPin = webMethod(
   Permissions.SiteMember,
