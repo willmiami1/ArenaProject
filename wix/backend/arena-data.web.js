@@ -628,7 +628,7 @@ async function savePublicScheduleSnapshot(workspaceOrEvents) {
 
 async function ensureSettingsCollection() {
   try {
-    await wixData.get(SETTINGS_COLLECTION, PUBLIC_SCHEDULE_ID, OPTIONS);
+    await wixData.query(SETTINGS_COLLECTION).limit(1).find(OPTIONS);
   } catch (error) {
     if (
       error?.code !== "WDE0025" &&
@@ -662,6 +662,7 @@ async function ensureSettingsCollection() {
 }
 
 async function ensureRiderAccountCollections() {
+  await ensureSettingsCollection();
   const createCollection = elevate(collections.createDataCollection);
   const ensureCollection = async (collectionId, displayName, fields) => {
     try {
@@ -744,11 +745,6 @@ async function syncRecords(collectionId, records, removableAppIds) {
 
 export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
   await requireArenaAdmin();
-  const settings = await wixData
-    .get(SETTINGS_COLLECTION, SETTINGS_ID, OPTIONS)
-    .catch(() => null);
-  if (!settings) return null;
-
   try {
     return await readWorkspace();
   } catch (error) {
