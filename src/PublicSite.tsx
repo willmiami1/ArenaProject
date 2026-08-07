@@ -546,8 +546,8 @@ function RiderAccountPage() {
           <label>Roping position<select value={account.role} onChange={(event) => setAccount({ ...account, role: event.target.value as ContestantAccountRequest["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
           <label>Header handicap<input required type="number" min={0} max={20} step={0.5} value={account.headerHandicap} onChange={(event) => setAccount({ ...account, headerHandicap: Number(event.target.value) })} /></label>
           <label>Heeler handicap<input required type="number" min={0} max={20} step={0.5} value={account.heelerHandicap} onChange={(event) => setAccount({ ...account, heelerHandicap: Number(event.target.value) })} /></label>
-          <label>Four-digit PIN<input required type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={account.pin} onChange={(event) => setAccount({ ...account, pin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
-          <label>Confirm PIN<input required type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={account.confirmPin} onChange={(event) => setAccount({ ...account, confirmPin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
+          <label>Four-digit PIN<input required type="password" inputMode="numeric" autoComplete="one-time-code" pattern="\d{4}" maxLength={4} value={account.pin} onChange={(event) => setAccount({ ...account, pin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
+          <label>Confirm PIN<input required type="password" inputMode="numeric" autoComplete="one-time-code" pattern="\d{4}" maxLength={4} value={account.confirmPin} onChange={(event) => setAccount({ ...account, confirmPin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
           {message && <p className="public-form-message" role="alert">{message}</p>}
           <button className="public-button" disabled={busy}>{busy ? "Creating account…" : "Create Rider Account"}</button>
         </form>
@@ -1133,7 +1133,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
           {authMode === "login" ? (
             <form onSubmit={authenticate}>
               <label>Email address<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-              <label>Four-digit PIN<input type="password" inputMode="numeric" autoComplete="current-password" pattern="\d{4}" maxLength={4} required value={pin} onChange={(event) => setPin(event.target.value)} /></label>
+              <label>Four-digit PIN<input type="password" inputMode="numeric" autoComplete="one-time-code" pattern="\d{4}" maxLength={4} required value={pin} onChange={(event) => setPin(event.target.value)} /></label>
               <button className="public-button primary" disabled={busy}>{busy ? "Checking account…" : "Continue securely"}</button>
             </form>
           ) : (
@@ -1145,8 +1145,8 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
               <label>Roping position<select value={account.role} onChange={(event) => setAccount({ ...account, role: event.target.value as ContestantAccountRequest["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
               {account.role !== "Heeler" && <label>Header handicap<input required type="number" min="0" max="20" step="0.5" value={account.headerHandicap} onChange={(event) => setAccount({ ...account, headerHandicap: Number(event.target.value) })} /></label>}
               {account.role !== "Header" && <label>Heeler handicap<input required type="number" min="0" max="20" step="0.5" value={account.heelerHandicap} onChange={(event) => setAccount({ ...account, heelerHandicap: Number(event.target.value) })} /></label>}
-              <label>Choose four-digit PIN<input required type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={account.pin} onChange={(event) => setAccount({ ...account, pin: event.target.value })} /></label>
-              <label>Confirm PIN<input required type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={account.confirmPin} onChange={(event) => setAccount({ ...account, confirmPin: event.target.value })} /></label>
+              <label>Choose four-digit PIN<input required type="password" inputMode="numeric" autoComplete="one-time-code" pattern="\d{4}" maxLength={4} value={account.pin} onChange={(event) => setAccount({ ...account, pin: event.target.value })} /></label>
+              <label>Confirm PIN<input required type="password" inputMode="numeric" autoComplete="one-time-code" pattern="\d{4}" maxLength={4} value={account.confirmPin} onChange={(event) => setAccount({ ...account, confirmPin: event.target.value })} /></label>
               <button className="public-button primary" disabled={busy}>{busy ? "Creating account…" : "Create account and continue"}</button>
             </form>
           )}
