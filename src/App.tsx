@@ -1160,7 +1160,7 @@ function LedScrollingRows({
     return () => observer.disconnect();
   }, [rowCount]);
 
-  const duration = Math.max(30, Math.round((scrollDistance * 2) / 12 + 12));
+  const duration = Math.max(26, Math.round((scrollDistance * 2) / 15 + 10));
   const scrollStyle = {
     "--led-scroll-distance": `${scrollDistance}px`,
     "--led-scroll-duration": `${duration}s`,
@@ -1246,7 +1246,7 @@ function LedLeaderboard({
     ledQualifiedRunsThroughRound(event.id, eventTeams, round),
     (team) =>
       teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants),
-  );
+  ).slice(0, 20);
   const spectatorTopThree = aggregatePublicSpectatorLeaderboard(
     Array.from({ length: round }, (_, index) =>
       spectatorLeaderboard(data, event.id, index + 1).map(
