@@ -1534,6 +1534,18 @@ export const createRiderAccount = webMethod(
       source: "online",
       submittedAt,
     };
+    const onlineRevision = await wixData
+      .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
+      .catch(() => null);
+    await wixData.save(
+      SETTINGS_COLLECTION,
+      {
+        _id: ONLINE_REVISION_ID,
+        value: Number(onlineRevision?.value || 0) + 1,
+        updatedAt: new Date(),
+      },
+      OPTIONS,
+    );
     const credentialId = createHash("sha256")
       .update(`contestant-credential:${email}`)
       .digest("hex")
@@ -1569,16 +1581,6 @@ export const createRiderAccount = webMethod(
         .catch(() => null);
       throw error;
     }
-    const workspace = await readWorkspace();
-    await wixData.save(
-      SETTINGS_COLLECTION,
-      {
-        _id: ONLINE_REVISION_ID,
-        value: workspace.onlineRevision + 1,
-        updatedAt: new Date(),
-      },
-      OPTIONS,
-    );
     return { contestantId, name };
   },
 );
