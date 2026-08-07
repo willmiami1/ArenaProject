@@ -449,6 +449,12 @@ const predictionOutcome = (team) =>
       ? "steer"
       : null;
 
+const spectatorPicksAreOpen = (team, now = Date.now()) =>
+  !team.scratched &&
+  team.status === "ready" &&
+  (!team.predictionClosesAt ||
+    Date.parse(team.predictionClosesAt) > now);
+
 function spectatorLeaderboard(workspace, eventId, round) {
   const spectators = new Map(
     workspace.spectators.map((spectator) => [spectator.id, spectator]),
@@ -572,9 +578,7 @@ function publicProjection(workspace) {
             heelerName: heeler?.name || "Unknown",
             steerNumber: team.steerNumber || "",
             closesAt: team.predictionClosesAt,
-            open:
-              !team.predictionClosesAt ||
-              Date.parse(team.predictionClosesAt) > Date.now(),
+            open: spectatorPicksAreOpen(team),
           };
         }),
       spectatorLeaderboards: Array.from(
@@ -2386,11 +2390,7 @@ export const submitSpectatorPrediction = webMethod(
     if (!event || event.status !== "Live" || !team || team.scratched) {
       throw new Error("That live run is not available.");
     }
-    if (
-      team.status !== "ready" ||
-      (team.predictionClosesAt &&
-        Date.parse(team.predictionClosesAt) <= Date.now())
-    ) {
+    if (!spectatorPicksAreOpen(team)) {
       throw new Error("Predictions are closed for this run.");
     }
     const normalizedName = name.toLowerCase();
