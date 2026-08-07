@@ -178,7 +178,7 @@ function PublicHeader({ liveCompetitionId }: { liveCompetitionId?: string }) {
           <UsersRound size={16} /> CREATE A RIDER ACCOUNT
         </a>
         <a className="public-header-game" href={spectatorGameHref}>
-          <Trophy size={16} /> Play Cowboys x Steers
+          <Trophy size={16} /> Play Cowboy x Steers During Live Competitions
         </a>
       </div>
     </header>
