@@ -68,6 +68,26 @@ interface WixResponse<T> {
   error?: string;
 }
 
+export function trustedWixRelayOrigin(
+  configuredOrigin: string,
+  configuredRelayHost: string | null,
+  ancestorOrigins: string[],
+  parentOrigin: string,
+) {
+  const parent = new URL(parentOrigin);
+  const wixRelay =
+    parent.hostname === "htmlcomponentservice.com" ||
+    parent.hostname.endsWith(".htmlcomponentservice.com") ||
+    parent.hostname.endsWith(".filesusr.com") ||
+    parent.hostname.endsWith(".wixstatic.com");
+  const configuredSiteIsAncestor = ancestorOrigins.includes(configuredOrigin);
+  const explicitRelayContext =
+    ancestorOrigins.length === 0 && configuredRelayHost === configuredOrigin;
+  return wixRelay && (configuredSiteIsAncestor || explicitRelayContext)
+    ? parent.origin
+    : false;
+}
+
 function wixParentOrigin() {
   if (window.parent === window) return false;
   const configuredOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
@@ -85,20 +105,12 @@ function wixParentOrigin() {
     );
     const parentOrigin = ancestorOrigins[0] || referrerOrigin;
     if (!parentOrigin) return false;
-    const parent = new URL(parentOrigin);
-    const wixRelay =
-      parent.hostname === "htmlcomponentservice.com" ||
-      parent.hostname.endsWith(".htmlcomponentservice.com") ||
-      parent.hostname.endsWith(".filesusr.com") ||
-      parent.hostname.endsWith(".wixstatic.com");
-    const configuredSiteIsAncestor =
-      ancestorOrigins.length === 0 ||
-      ancestorOrigins.includes(configuredOrigin);
-    return configuredRelayHost === configuredOrigin &&
-      wixRelay &&
-      configuredSiteIsAncestor
-      ? parent.origin
-      : false;
+    return trustedWixRelayOrigin(
+      configuredOrigin,
+      configuredRelayHost,
+      ancestorOrigins,
+      parentOrigin,
+    );
   } catch {
     return false;
   }
