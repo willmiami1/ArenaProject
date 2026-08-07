@@ -72,6 +72,7 @@ export interface Contestant {
   categoryNumber?: string;
   source?: "online" | "staff";
   submittedAt?: string;
+  clearPhoto?: boolean;
 }
 
 export interface Team {

@@ -2236,6 +2236,7 @@ function ContestantForm({
     horses: contestant?.horses ?? [],
   });
   const [horseName, setHorseName] = useState("");
+  const [clearPhoto, setClearPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [loginPin, setLoginPin] = useState("");
   const [confirmLoginPin, setConfirmLoginPin] = useState("");
@@ -2249,6 +2250,7 @@ function ContestantForm({
     try {
       const photo = await resizeProfilePhoto(file);
       setForm((current) => ({ ...current, photo }));
+      setClearPhoto(false);
       setPhotoError("");
     } catch {
       setPhotoError("The photo could not be loaded.");
@@ -2269,6 +2271,7 @@ function ContestantForm({
       membershipNumber: contestant?.membershipNumber ?? "",
       categoryNumber: contestant?.categoryNumber ?? "",
       photo: form.photo,
+      clearPhoto,
       horses: normalizeHorseNames(form.horses),
     };
     if (loginPin || confirmLoginPin) {
@@ -2313,7 +2316,7 @@ function ContestantForm({
             {form.photo ? "Change picture" : "Choose picture"}
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => void handlePhoto(e.target.files?.[0])} />
           </label>
-          {form.photo && <button type="button" className="remove-photo" onClick={() => setForm({ ...form, photo: "" })}>Remove</button>}
+          {form.photo && <button type="button" className="remove-photo" onClick={() => { setForm({ ...form, photo: "" }); setClearPhoto(true); }}>Remove</button>}
           {photoError && <span className="field-error">{photoError}</span>}
         </div>
       </div>
@@ -3719,7 +3722,7 @@ function resizeProfilePhoto(file: File): Promise<string> {
       const image = new Image();
       image.onerror = reject;
       image.onload = () => {
-        const maxSize = 512;
+        const maxSize = 320;
         const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
         const canvas = document.createElement("canvas");
         canvas.width = Math.round(image.width * scale);
@@ -3730,7 +3733,7 @@ function resizeProfilePhoto(file: File): Promise<string> {
           return;
         }
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", 0.82));
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
       };
       image.src = String(reader.result);
     };

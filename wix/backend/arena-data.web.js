@@ -201,6 +201,17 @@ const normalizeContestantCasing = (contestant) => ({
     (horse) => String(horse).trim().replace(/\s+/g, " ").toUpperCase(),
   ),
 });
+
+const mergeContestantPhoto = (contestant, previous) => {
+  const { clearPhoto, ...record } = contestant;
+  return {
+    ...record,
+    photo:
+      clearPhoto === true
+        ? ""
+        : String(contestant.photo || previous?.photo || ""),
+  };
+};
 const validPin = (value) => /^\d{4}$/.test(String(value || ""));
 const pinHash = (pin, salt, pepper) =>
   createHash("sha256").update(`${pepper}:${salt}:${pin}`).digest("hex");
@@ -854,7 +865,14 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       onlineChanged
         ? mergeOnline(data.contestants || [], latest.contestants)
         : data.contestants || []
-    ).map(normalizeContestantCasing),
+    ).map((contestant) =>
+      normalizeContestantCasing(
+        mergeContestantPhoto(
+          contestant,
+          latest.contestants.find((previous) => previous.id === contestant.id),
+        ),
+      ),
+    ),
     teams: onlineChanged
       ? mergeOnline(data.teams || [], latest.teams)
       : data.teams || [],
@@ -1332,7 +1350,16 @@ export const setContestantPin = webMethod(
       {
         ...(existingContestant.items[0] || {}),
         appId: contestantId,
-        payload: JSON.stringify(contestant),
+        payload: JSON.stringify(
+          normalizeContestantCasing(
+            mergeContestantPhoto(
+              contestant,
+              existingContestant.items[0]?.payload
+                ? JSON.parse(existingContestant.items[0].payload)
+                : null,
+            ),
+          ),
+        ),
       },
       OPTIONS,
     );
