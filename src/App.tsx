@@ -58,6 +58,7 @@ import { AdminAccessGate } from "./AdminAccessGate";
 import { RegistrationDeskAccessGate } from "./RegistrationDeskAccessGate";
 import { RegistrationDesk } from "./RegistrationDesk";
 import {
+  aggregatePublicSpectatorLeaderboard,
   parsePublicRoute,
   type PublicArenaData,
   type PublicSpectatorLeaderboardRow,
@@ -75,6 +76,10 @@ import {
   setContestantPin,
   type ContestantPortalData,
 } from "./wixBridge";
+import {
+  ledQualifiedRunsThroughRound,
+  resolveLedRunDeskState,
+} from "./ledDisplay";
 import {
   calculatePayouts,
   calculatePurse,
@@ -121,7 +126,7 @@ const LED_PUBLIC_DATA_RESPONSE = "arena-led-public-data-response";
 const LED_WORKSPACE_DATA_REQUEST = "arena-led-workspace-data-request";
 const LED_WORKSPACE_DATA_RESPONSE = "arena-led-workspace-data-response";
 
-function spectatorRowsForRound(
+function spectatorRowsThroughRound(
   publicData: Pick<PublicArenaData, "competitions"> | null,
   eventId: string,
   round: number,
@@ -129,9 +134,11 @@ function spectatorRowsForRound(
   const competition = publicData?.competitions.find(
     (item) => item.id === eventId,
   );
-  return (competition?.spectatorLeaderboards ?? [])
-    .filter((row) => row.round === round)
-    .slice(0, 3);
+  return aggregatePublicSpectatorLeaderboard(
+    (competition?.spectatorLeaderboards ?? []).filter(
+      (row) => row.round <= round,
+    ),
+  ).slice(0, 3);
 }
 
 function requestPublicArenaDataFromOpener() {
@@ -1041,7 +1048,7 @@ function LedSpectatorTop({
       publicData: Pick<PublicArenaData, "competitions"> | null,
     ) => {
       if (cancelled) return;
-      const nextRows = spectatorRowsForRound(publicData, eventId, round);
+      const nextRows = spectatorRowsThroughRound(publicData, eventId, round);
       setRows(nextRows.length ? nextRows : fallbackRows);
       const competition = publicData?.competitions.find(
         (item) => item.id === eventId,
@@ -1095,7 +1102,7 @@ function LedSpectatorTop({
   const effectivePicksClosed = picksClosed || relayedPicksClosed;
   return (
     <section className={`led-spectator-top${effectivePicksClosed ? " picks-closed" : ""}`}>
-      <span>Top 3 Spectator Results <small>Round {round}</small></span>
+      <span>Top 3 Spectator Results <small>Through Round {round}</small></span>
       {effectivePicksClosed && <em className="led-picks-closed">Picks are closed</em>}
       <div>
         {rows.length
@@ -1213,47 +1220,64 @@ function LedLeaderboard({
   const eventTeams = data.teams.filter(
     (team) => team.eventId === event.id && !team.scratched,
   );
-  const activeReadyTeam =
-    eventTeams.find(
-      (team) => team.id === requestedTeamId && team.status === "ready",
-    ) ??
-    [...eventTeams]
-      .filter((team) => team.status === "ready")
-      .sort(
-        (left, right) =>
-          right.round - left.round ||
-          left.drawPosition - right.drawPosition,
-      )[0];
-  const round = Math.min(
-    Math.max(activeReadyTeam?.round ?? requestedRound ?? event.rounds, 1),
-    Math.max(event.rounds, 1),
+  const ledRunDeskState = resolveLedRunDeskState(
+    event,
+    eventTeams,
+    requestedRound,
+    requestedTeamId,
   );
+  const round = ledRunDeskState.round;
   const roundTeams = eventTeams
     .filter((team) => team.round === round)
     .sort((a, b) => a.drawPosition - b.drawPosition);
-  const standings = roundTeams
-    .filter((team) => team.status === "complete" && team.rawTime !== null)
+  const standings = ledQualifiedRunsThroughRound(event.id, eventTeams, round)
     .sort(
       (a, b) =>
-        teamQualifiedTotal(a, eventTeams, undefined, event, data.contestants) -
-          teamQualifiedTotal(b, eventTeams, undefined, event, data.contestants) ||
+        teamQualifiedTotal(a, eventTeams, round + 1, event, data.contestants) -
+          teamQualifiedTotal(b, eventTeams, round + 1, event, data.contestants) ||
         a.drawPosition - b.drawPosition,
     )
     .slice(0, 10);
-  const spectatorTopThree = spectatorLeaderboard(data, event.id, round).slice(0, 3);
+  const spectatorTopThree = aggregatePublicSpectatorLeaderboard(
+    Array.from({ length: round }, (_, index) =>
+      spectatorLeaderboard(data, event.id, index + 1).map(
+        ({ name, round: resultRound, picks, correct }) => ({
+          name,
+          round: resultRound,
+          picks,
+          correct,
+        }),
+      ),
+    ).flat(),
+  ).slice(0, 3);
   const defaultCurrentTeam = roundTeams.find(
     (team) => team.status === "ready" && !team.rolled,
   ) ?? roundTeams.find((team) => team.status === "ready");
   const currentTeam =
     roundTeams.find(
-      (team) => team.id === requestedTeamId && team.status === "ready",
+      (team) =>
+        team.id === ledRunDeskState.activeTeamId &&
+        team.status === "ready",
     ) ?? defaultCurrentTeam;
   const nextTeam =
     roundTeams.find(
       (team) =>
         team.status === "ready" &&
         !team.rolled &&
+        team.id !== currentTeam?.id &&
+        team.drawPosition > (currentTeam?.drawPosition ?? 0),
+    ) ??
+    roundTeams.find(
+      (team) =>
+        team.status === "ready" &&
+        !team.rolled &&
         team.id !== currentTeam?.id,
+    ) ??
+    roundTeams.find(
+      (team) =>
+        team.status === "ready" &&
+        team.id !== currentTeam?.id &&
+        team.drawPosition > (currentTeam?.drawPosition ?? 0),
     ) ??
     roundTeams.find(
       (team) => team.status === "ready" && team.id !== currentTeam?.id,
@@ -1382,7 +1406,7 @@ function LedLeaderboard({
                 <span className="led-place">{index + 1}</span>
                 <span className="led-team">{ledRider(team.headerId, team.headerHorseName)}<i>&</i>{ledRider(team.heelerId, team.heelerHorseName)}</span>
                 <span className="led-rounds">{completedRounds} / {event.rounds}</span>
-                <span className="led-total">{teamQualifiedTotal(team, eventTeams, undefined, event, data.contestants).toFixed(2)}</span>
+                <span className="led-total">{teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants).toFixed(2)}</span>
               </div>
             );
           })}
