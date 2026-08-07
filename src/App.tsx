@@ -555,8 +555,9 @@ function StaffApp() {
             <span>Refresh from Wix</span>
           </button>
           <button
-            className="topbar-front-screen"
+            className="topbar-front-screen registration-desk-shortcut"
             onClick={openRegistrationDesk}
+            title="Open Registration Desk"
           >
             <ClipboardPen size={17} />
             <span>Registration Desk</span>
