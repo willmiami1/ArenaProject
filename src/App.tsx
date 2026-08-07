@@ -3723,6 +3723,7 @@ function App() {
     route.kind === "event" ||
     route.kind === "competition" ||
     route.kind === "signup" ||
+    route.kind === "rider-account" ||
     route.kind === "spectator"
   ) {
     return <PublicSite route={route} />;
