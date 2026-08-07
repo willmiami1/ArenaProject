@@ -1087,11 +1087,11 @@ function LedSpectatorTop({
   const effectivePicksClosed = picksClosed || relayedPicksClosed;
   return (
     <section className={`led-spectator-top${effectivePicksClosed ? " picks-closed" : ""}`}>
-      <span>Spectator Results <small>Round {round}</small></span>
+      <span>Top 3 <small>Round {round}</small></span>
       {effectivePicksClosed && <em className="led-picks-closed">Picks are closed</em>}
       <div>
         {rows.length
-          ? rows.map((row, index) => (
+          ? rows.slice(0, 3).map((row, index) => (
               <strong key={`${index}-${row.name}`}>
                 <b>{index + 1}</b>
                 <span>{row.name}<small>{row.correct} correct / {row.picks} picks</small></span>
