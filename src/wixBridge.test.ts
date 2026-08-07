@@ -3,7 +3,7 @@ import { trustedWixRelayOrigin } from "./wixBridge";
 
 describe("trusted Wix relay origin", () => {
   const siteOrigin = "https://www.destinyrancharena.com";
-  const relayOrigin = "https://abc.filesusr.com";
+  const relayOrigin = "https://www-destinyrancharena-com.filesusr.com";
 
   it("accepts a Wix relay when the configured site is in the ancestor chain", () => {
     expect(
@@ -22,13 +22,27 @@ describe("trusted Wix relay origin", () => {
     ).toBe(relayOrigin);
   });
 
+  it("accepts only the configured site's exact filesusr relay without metadata", () => {
+    expect(
+      trustedWixRelayOrigin(siteOrigin, null, [], relayOrigin),
+    ).toBe(relayOrigin);
+    expect(
+      trustedWixRelayOrigin(
+        siteOrigin,
+        null,
+        [],
+        "https://another-site.filesusr.com",
+      ),
+    ).toBe(false);
+  });
+
   it("rejects untrusted sites and non-Wix parents", () => {
     expect(
       trustedWixRelayOrigin(
         siteOrigin,
         null,
-        [relayOrigin, "https://attacker.example"],
-        relayOrigin,
+        ["https://another-site.filesusr.com", "https://attacker.example"],
+        "https://another-site.filesusr.com",
       ),
     ).toBe(false);
     expect(

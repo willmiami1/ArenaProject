@@ -68,6 +68,8 @@ interface WixResponse<T> {
   error?: string;
 }
 
+const wixRelayStorageKey = "arena-command-wix-relay-origin";
+
 export function trustedWixRelayOrigin(
   configuredOrigin: string,
   configuredRelayHost: string | null,
@@ -75,6 +77,9 @@ export function trustedWixRelayOrigin(
   parentOrigin: string,
 ) {
   const parent = new URL(parentOrigin);
+  const configuredHost = new URL(configuredOrigin).hostname.toLowerCase();
+  const siteRelayHost = `${configuredHost.replace(/\./g, "-")}.filesusr.com`;
+  const siteSpecificRelay = parent.hostname.toLowerCase() === siteRelayHost;
   const wixRelay =
     parent.hostname === "htmlcomponentservice.com" ||
     parent.hostname.endsWith(".htmlcomponentservice.com") ||
@@ -83,7 +88,8 @@ export function trustedWixRelayOrigin(
   const configuredSiteIsAncestor = ancestorOrigins.includes(configuredOrigin);
   const explicitRelayContext =
     ancestorOrigins.length === 0 && configuredRelayHost === configuredOrigin;
-  return wixRelay && (configuredSiteIsAncestor || explicitRelayContext)
+  return wixRelay &&
+    (siteSpecificRelay || configuredSiteIsAncestor || explicitRelayContext)
     ? parent.origin
     : false;
 }
@@ -96,7 +102,10 @@ function wixParentOrigin() {
     const referrerOrigin = document.referrer
       ? new URL(document.referrer).origin
       : "";
-    if (referrerOrigin === configuredOrigin) return referrerOrigin;
+    if (referrerOrigin === configuredOrigin) {
+      window.sessionStorage.setItem(wixRelayStorageKey, referrerOrigin);
+      return referrerOrigin;
+    }
     const configuredRelayHost = new URL(
       window.location.href,
     ).searchParams.get("wixHostOrigin");
@@ -104,13 +113,28 @@ function wixParentOrigin() {
       window.location.ancestorOrigins ?? [],
     );
     const parentOrigin = ancestorOrigins[0] || referrerOrigin;
-    if (!parentOrigin) return false;
-    return trustedWixRelayOrigin(
-      configuredOrigin,
-      configuredRelayHost,
-      ancestorOrigins,
-      parentOrigin,
-    );
+    const cachedRelayOrigin = window.sessionStorage.getItem(wixRelayStorageKey) ?? "";
+    const trustedOrigin =
+      (parentOrigin &&
+        trustedWixRelayOrigin(
+          configuredOrigin,
+          configuredRelayHost,
+          ancestorOrigins,
+          parentOrigin,
+        )) ||
+      (cachedRelayOrigin === configuredOrigin
+        ? configuredOrigin
+        : cachedRelayOrigin &&
+          trustedWixRelayOrigin(
+            configuredOrigin,
+            configuredRelayHost,
+            ancestorOrigins,
+            cachedRelayOrigin,
+          ));
+    if (trustedOrigin) {
+      window.sessionStorage.setItem(wixRelayStorageKey, trustedOrigin);
+    }
+    return trustedOrigin || false;
   } catch {
     return false;
   }
