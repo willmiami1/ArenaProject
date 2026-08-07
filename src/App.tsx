@@ -1773,7 +1773,7 @@ function MeetForm({
     <form className="form-panel" onSubmit={submit}>
       <div className="form-heading"><div><span className="tag neutral">Arena event</span><h3>{meet ? "Edit event" : "Create event"}</h3><p>Name and schedule the event before adding its roping competitions.</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
       <div className="form-grid">
-        <Field label="Event name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Saturday Night Jackpot" /></Field>
+        <Field label="Event name"><input required autoCapitalize="characters" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value.toUpperCase() })} placeholder="Saturday Night Jackpot" /></Field>
         <Field label="Arena"><input required value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Arena name" /></Field>
         <Field label="Producer"><input value={form.producer} onChange={(e) => setForm({ ...form, producer: e.target.value })} placeholder="Producer or organization" /></Field>
         <Field label="Event date"><input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
@@ -1927,7 +1927,7 @@ function EventForm({
       <div className="form-heading"><div><span className="tag neutral">{competitionName(form.competitionType)}</span><h3>{event ? "Edit roping" : `Add roping to ${parent.name}`}</h3><p>Configure this competition's rules, registration, scoring, and payouts.</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
       <h4 className="form-section-title">Roping details</h4>
       <div className="form-grid">
-        <Field label="Roping name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="#10.5 Draw Pot" /></Field>
+        <Field label="Roping name"><input required autoCapitalize="characters" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value.toUpperCase() })} placeholder="#10.5 Draw Pot" /></Field>
         <Field label="Front page status"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EventStatus })}><option value="Upcoming">Future</option><option value="Live">Live</option><option value="Complete">Past</option></select></Field>
         <label className="field roping-description"><span>Roping information</span><textarea maxLength={2000} rows={5} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Add public details, schedule notes, eligibility information, or anything contestants and spectators should know." /></label>
       </div>
