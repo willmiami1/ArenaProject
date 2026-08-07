@@ -223,6 +223,31 @@ export function useArenaData() {
       throw error;
     }
   }, []);
+  const saveImmediately = useCallback(async (submitted: ArenaData) => {
+    if (!isWixEmbed()) {
+      const normalized = normalizeData(submitted);
+      skipNextSave.current = true;
+      setData(normalized);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+      setStatus("local");
+      return normalized;
+    }
+    setStatus("saving");
+    try {
+      const saved = await requestWixData("save", submitted);
+      if (!saved) throw new Error("Wix did not confirm the workspace save.");
+      const normalized = mergeSavedArenaData(submitted, saved);
+      skipNextSave.current = true;
+      setData(normalized);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+      setWixConnected(true);
+      setStatus("saved");
+      return normalized;
+    } catch (error) {
+      setStatus("error");
+      throw error;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -317,5 +342,5 @@ export function useArenaData() {
     return () => window.removeEventListener("storage", syncLocalWindow);
   }, []);
 
-  return [data, setData, status, refreshFromWix] as const;
+  return [data, setData, status, refreshFromWix, saveImmediately] as const;
 }

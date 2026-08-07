@@ -208,7 +208,7 @@ const teamQualifiedTotal = (
     );
 
 function StaffApp() {
-  const [data, setData, persistenceStatus, refreshFromWix] = useArenaData();
+  const [data, setData, persistenceStatus, refreshFromWix, saveImmediately] = useArenaData();
   const [view, setView] = useState<View>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [workspaceMessage, setWorkspaceMessage] = useState("");
@@ -622,18 +622,18 @@ function StaffApp() {
             <Contestants
               contestants={data.contestants}
               onAdd={(contestant) =>
-                setData((current) => ({
-                  ...current,
-                  contestants: [...current.contestants, contestant],
-                }))
+                saveImmediately({
+                  ...data,
+                  contestants: [...data.contestants, contestant],
+                })
               }
               onUpdate={(contestant) =>
-                setData((current) => ({
-                  ...current,
-                  contestants: current.contestants.map((item) =>
+                saveImmediately({
+                  ...data,
+                  contestants: data.contestants.map((item) =>
                     item.id === contestant.id ? contestant : item,
                   ),
-                }))
+                })
               }
               onDelete={(contestantId) =>
                 setData((current) => ({
@@ -1816,8 +1816,8 @@ function Contestants({
   onImport,
 }: {
   contestants: Contestant[];
-  onAdd: (contestant: Contestant) => void;
-  onUpdate: (contestant: Contestant) => void;
+  onAdd: (contestant: Contestant) => void | Promise<unknown>;
+  onUpdate: (contestant: Contestant) => void | Promise<unknown>;
   onDelete: (contestantId: string) => void;
   onImport: (contestants: Contestant[]) => void;
 }) {
@@ -1876,9 +1876,9 @@ function Contestants({
       {(showForm || editing) && (
         <ContestantForm
           contestant={editing ?? undefined}
-          onSubmit={(rider) => {
-            if (editing) onUpdate(rider);
-            else onAdd(rider);
+          onSubmit={async (rider) => {
+            if (editing) await onUpdate(rider);
+            else await onAdd(rider);
             setEditing(null);
             setShowForm(false);
           }}
@@ -2220,7 +2220,7 @@ function ContestantForm({
   onCancel,
 }: {
   contestant?: Contestant;
-  onSubmit: (contestant: Contestant) => void;
+  onSubmit: (contestant: Contestant) => void | Promise<unknown>;
   onCancel: () => void;
 }) {
   const nameParts = contestant?.name.trim().split(/\s+/) ?? [];
@@ -2300,7 +2300,13 @@ function ContestantForm({
         return;
       }
     }
-    onSubmit(updatedContestant);
+    try {
+      await onSubmit(updatedContestant);
+    } catch (error) {
+      setLoginError(
+        error instanceof Error ? error.message : "The contestant profile could not be saved.",
+      );
+    }
   };
   return (
     <form className="form-panel" onSubmit={submit}>
