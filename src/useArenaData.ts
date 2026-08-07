@@ -313,6 +313,16 @@ const workspaceRevisionConflict = (error: unknown) =>
   error instanceof Error &&
   error.message.includes("changed in another staff session");
 
+export function staffWorkspaceIsNewer(
+  current: Pick<ArenaData, "revision" | "staffRevision">,
+  remote: Pick<ArenaData, "revision" | "staffRevision">,
+) {
+  return (
+    Number(remote.staffRevision ?? remote.revision ?? 0) >
+    Number(current.staffRevision ?? current.revision ?? 0)
+  );
+}
+
 export function remoteWorkspaceIsNewer(
   current: Pick<ArenaData, "revision" | "staffRevision" | "onlineRevision">,
   remote: Pick<ArenaData, "revision" | "staffRevision" | "onlineRevision">,
@@ -439,17 +449,23 @@ export function useArenaData() {
       setStatus("saved");
       return normalized;
     } catch (error) {
-      if (workspaceRevisionConflict(error)) {
-        if (conflictRetryCount.current >= 3) {
-          setStatus("error");
-          throw new Error(
-            "Workspace kept changing on another computer. Your changes remain on this device; wait for the other computer to finish, then try again.",
-          );
-        }
-        try {
-          const latest = await requestWixData("load");
-          if (latest) {
-            const latestNormalized = normalizeData(latest);
+      try {
+        const latest = await requestWixData("load");
+        if (latest) {
+          const latestNormalized = normalizeData(latest);
+          if (
+            workspaceRevisionConflict(error) ||
+            staffWorkspaceIsNewer(
+              persistedDataRef.current,
+              latestNormalized,
+            )
+          ) {
+            if (conflictRetryCount.current >= 3) {
+              setStatus("error");
+              throw new Error(
+                "Workspace kept changing on another computer. Your changes remain on this device; wait for the other computer to finish, then try again.",
+              );
+            }
             const rebased = mergeConcurrentSavedArenaData(
               persistedDataRef.current,
               dataRef.current,
@@ -465,15 +481,16 @@ export function useArenaData() {
               "Workspace changed on another computer. Your changes were preserved and are retrying.",
             );
           }
-        } catch (rebaseError) {
-          if (
-            rebaseError instanceof Error &&
-            rebaseError.message.includes("preserved and are retrying")
-          ) {
-            throw rebaseError;
-          }
-          console.error("Could not rebase the immediate workspace save.", rebaseError);
         }
+      } catch (rebaseError) {
+        if (
+          rebaseError instanceof Error &&
+          (rebaseError.message.includes("preserved and are retrying") ||
+            rebaseError.message.includes("kept changing on another computer"))
+        ) {
+          throw rebaseError;
+        }
+        console.error("Could not rebase the immediate workspace save.", rebaseError);
       }
       if (dataRef.current === submitted) {
         skipNextSave.current = true;
@@ -600,14 +617,20 @@ export function useArenaData() {
         console.error("Could not save arena data to Wix.", error);
         let rebased = false;
         let conflictExhausted = false;
-        if (workspaceRevisionConflict(error)) {
-          if (conflictRetryCount.current >= 3) {
-            conflictExhausted = true;
-          } else {
-            try {
-              const latest = await requestWixData("load");
-              if (latest) {
-                const latestNormalized = normalizeData(latest);
+        try {
+          const latest = await requestWixData("load");
+          if (latest) {
+            const latestNormalized = normalizeData(latest);
+            if (
+              workspaceRevisionConflict(error) ||
+              staffWorkspaceIsNewer(
+                persistedDataRef.current,
+                latestNormalized,
+              )
+            ) {
+              if (conflictRetryCount.current >= 3) {
+                conflictExhausted = true;
+              } else {
                 const current = mergeConcurrentSavedArenaData(
                   persistedDataRef.current,
                   dataRef.current,
@@ -620,10 +643,10 @@ export function useArenaData() {
                 setData(current);
                 rebased = true;
               }
-            } catch (rebaseError) {
-              console.error("Could not rebase the workspace save.", rebaseError);
             }
           }
+        } catch (rebaseError) {
+          console.error("Could not inspect the latest workspace after save failure.", rebaseError);
         }
         setStatus(rebased ? "saving" : "error");
         if (!rebased && !conflictExhausted) {

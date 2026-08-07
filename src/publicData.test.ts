@@ -30,6 +30,7 @@ import {
   mergeSavedArenaData,
   normalizeData,
   remoteWorkspaceIsNewer,
+  staffWorkspaceIsNewer,
 } from "./useArenaData";
 import {
   createSpectatorPrediction,
@@ -141,6 +142,18 @@ describe("staff save reconciliation", () => {
       remoteWorkspaceIsNewer(
         { revision: 6 },
         { revision: 5 },
+      ),
+    ).toBe(false);
+    expect(
+      staffWorkspaceIsNewer(
+        { revision: 5, staffRevision: 3 },
+        { revision: 6, staffRevision: 4 },
+      ),
+    ).toBe(true);
+    expect(
+      staffWorkspaceIsNewer(
+        { revision: 5, staffRevision: 3 },
+        { revision: 6, staffRevision: 3 },
       ),
     ).toBe(false);
   });
