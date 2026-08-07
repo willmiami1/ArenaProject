@@ -756,11 +756,36 @@ async function syncRecords(collectionId, records, removableAppIds) {
   }
 }
 
+async function removeOrphanedContestantCredentials(contestants) {
+  const contestantIds = new Set(contestants.map((contestant) => contestant.id));
+  let credentials = await wixData
+    .query(CREDENTIALS_COLLECTION)
+    .limit(1000)
+    .find(OPTIONS);
+  const orphanIds = credentials.items
+    .filter((credential) => !contestantIds.has(credential.contestantId))
+    .map((credential) => credential._id);
+  while (credentials.hasNext()) {
+    credentials = await credentials.next();
+    orphanIds.push(
+      ...credentials.items
+        .filter((credential) => !contestantIds.has(credential.contestantId))
+        .map((credential) => credential._id),
+    );
+  }
+  if (orphanIds.length) {
+    await wixData.bulkRemove(CREDENTIALS_COLLECTION, orphanIds, OPTIONS);
+  }
+}
+
 export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
   await requireArenaAdmin();
   await ensureWorkspaceCollections();
+  await ensureRiderAccountCollections();
   try {
-    return await readWorkspace();
+    const workspace = await readWorkspace();
+    await removeOrphanedContestantCredentials(workspace.contestants);
+    return workspace;
   } catch (error) {
     if (
       error?.code === "WDE0025" ||
@@ -776,6 +801,7 @@ export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
 export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
   await requireArenaAdmin();
   await ensureWorkspaceCollections();
+  await ensureRiderAccountCollections();
   let latest;
   try {
     latest = await readWorkspace();
@@ -827,38 +853,6 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     spectators: latest.spectators,
     spectatorPredictions: latest.spectatorPredictions,
   };
-  const removedContestantIds = new Set(
-    latest.contestants
-      .filter(
-        (contestant) =>
-          !next.contestants.some((current) => current.id === contestant.id),
-      )
-      .map((contestant) => contestant.id),
-  );
-  if (removedContestantIds.size) {
-    let credentials = await wixData
-      .query(CREDENTIALS_COLLECTION)
-      .limit(1000)
-      .find(OPTIONS);
-    const credentialIds = credentials.items
-      .filter((credential) =>
-        removedContestantIds.has(credential.contestantId),
-      )
-      .map((credential) => credential._id);
-    while (credentials.hasNext()) {
-      credentials = await credentials.next();
-      credentialIds.push(
-        ...credentials.items
-          .filter((credential) =>
-            removedContestantIds.has(credential.contestantId),
-          )
-          .map((credential) => credential._id),
-      );
-    }
-    if (credentialIds.length) {
-      await wixData.bulkRemove(CREDENTIALS_COLLECTION, credentialIds, OPTIONS);
-    }
-  }
   const removableIds = (records) =>
     new Set(
       records
@@ -902,6 +896,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       removableIds(latest.spectatorPredictions),
     ),
   ]);
+  await removeOrphanedContestantCredentials(next.contestants);
   await Promise.all([
     wixData.save(
       SETTINGS_COLLECTION,
@@ -1559,14 +1554,7 @@ export const createRiderAccount = webMethod(
         .find(OPTIONS),
     ]);
     if (duplicate.items.length) {
-      const credential = duplicate.items[0];
-      if (
-        credential.contestantId !== contestantId ||
-        existingPhone.items.length
-      ) {
-        throw new Error("A rider account already uses that email.");
-      }
-      await wixData.remove(CREDENTIALS_COLLECTION, credential._id, OPTIONS);
+      throw new Error("A rider account already uses that email.");
     }
     if (existingPhone.items.length) {
       throw new Error("A rider account already uses that phone number.");
