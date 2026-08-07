@@ -606,6 +606,17 @@ const spectatorPicksAreOpen = (team, now = Date.now()) =>
   (!team.predictionClosesAt ||
     Date.parse(team.predictionClosesAt) > now);
 
+const publicProfilePhoto = (photo) => {
+  if (
+    !photo ||
+    photo.length > 3_000_000 ||
+    !/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\s]+$/i.test(photo)
+  ) {
+    return undefined;
+  }
+  return photo;
+};
+
 const publicPredictionRunIsEligible = (team) =>
   !team.scratched && !team.rolled && team.status === "ready";
 
@@ -749,6 +760,8 @@ function publicProjection(workspace) {
             ),
             headerName: header?.name || "Unknown",
             heelerName: heeler?.name || "Unknown",
+            headerPhoto: publicProfilePhoto(header?.photo),
+            heelerPhoto: publicProfilePhoto(heeler?.photo),
             steerNumber: team.steerNumber || "",
             closesAt: team.predictionClosesAt,
             open: spectatorPicksAreOpen(team),
