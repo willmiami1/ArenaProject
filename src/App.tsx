@@ -3056,7 +3056,7 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel, 
   return (
     <form className="form-panel" onSubmit={submit}>
       <div className="form-heading"><div><h3>{team ? "Edit team" : rideIn ? "Add ride-in team" : "Add team"}</h3><p>{rideIn ? "Append a late team to the end of the Round 1 run order." : `Entry #${drawPosition} for ${event.name}`}</p></div><button type="button" className="icon-button" onClick={onCancel}><X size={20} /></button></div>
-      <div className="form-grid">
+      <div className="form-grid team-entry-grid">
         <Field label="Header"><select value={headerId} required onChange={(e) => { setHeaderId(e.target.value); setHeaderHorseName(""); }}>{headers.map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
         <Field label="Header horse"><select value={headerHorseName} disabled={!(headers.find((rider) => rider.id === headerId)?.horses?.length)} onChange={(e) => setHeaderHorseName(e.target.value)}><option value="">None selected</option>{headers.find((rider) => rider.id === headerId)?.horses?.map((horse) => <option key={horse} value={horse}>{horse}</option>)}</select></Field>
         <Field label="Heeler"><select value={heelerId} required onChange={(e) => { setHeelerId(e.target.value); setHeelerHorseName(""); }}>{heelers.filter((rider) => rider.id !== headerId).map((rider) => <option value={rider.id} key={rider.id}>{rider.name}</option>)}</select></Field>
