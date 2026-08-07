@@ -661,39 +661,52 @@ async function ensureSettingsCollection() {
   }
 }
 
+async function ensureCollection(collectionId, displayName, fields) {
+  const createCollection = elevate(collections.createDataCollection);
+  try {
+    await wixData.query(collectionId).limit(1).find(OPTIONS);
+  } catch (error) {
+    if (
+      error?.code !== "WDE0025" &&
+      error?.code !== "WD_SCHEMA_DOES_NOT_EXIST"
+    ) {
+      throw error;
+    }
+    await createCollection({
+      _id: collectionId,
+      displayName,
+      permissions: {
+        read: "ADMIN",
+        insert: "ADMIN",
+        update: "ADMIN",
+        remove: "ADMIN",
+      },
+      fields,
+    });
+  }
+}
+
+const payloadCollectionFields = [
+  { key: "appId", displayName: "App ID", type: "TEXT" },
+  { key: "payload", displayName: "Payload", type: "TEXT" },
+];
+
+async function ensureWorkspaceCollections() {
+  await ensureSettingsCollection();
+  for (const [key, collectionId] of Object.entries(COLLECTIONS)) {
+    const displayName = `Arena ${key
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, (letter) => letter.toUpperCase())}`;
+    await ensureCollection(collectionId, displayName, payloadCollectionFields);
+  }
+}
+
 async function ensureRiderAccountCollections() {
   await ensureSettingsCollection();
-  const createCollection = elevate(collections.createDataCollection);
-  const ensureCollection = async (collectionId, displayName, fields) => {
-    try {
-      await wixData.query(collectionId).limit(1).find(OPTIONS);
-    } catch (error) {
-      if (
-        error?.code !== "WDE0025" &&
-        error?.code !== "WD_SCHEMA_DOES_NOT_EXIST"
-      ) {
-        throw error;
-      }
-      await createCollection({
-        _id: collectionId,
-        displayName,
-        permissions: {
-          read: "ADMIN",
-          insert: "ADMIN",
-          update: "ADMIN",
-          remove: "ADMIN",
-        },
-        fields,
-      });
-    }
-  };
   await ensureCollection(
     COLLECTIONS.contestants,
     "Arena Contestants",
-    [
-      { key: "appId", displayName: "App ID", type: "TEXT" },
-      { key: "payload", displayName: "Payload", type: "TEXT" },
-    ],
+    payloadCollectionFields,
   );
   await ensureCollection(
     CREDENTIALS_COLLECTION,
@@ -745,6 +758,7 @@ async function syncRecords(collectionId, records, removableAppIds) {
 
 export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
   await requireArenaAdmin();
+  await ensureWorkspaceCollections();
   try {
     return await readWorkspace();
   } catch (error) {
@@ -761,6 +775,7 @@ export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
 
 export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
   await requireArenaAdmin();
+  await ensureWorkspaceCollections();
   let latest;
   try {
     latest = await readWorkspace();
