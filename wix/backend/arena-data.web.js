@@ -797,13 +797,16 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
   const loadedAt = Date.parse(data.loadedAt || "");
   const onlineChanged =
     Number(data.onlineRevision || 0) !== latest.onlineRevision ||
-    [...latest.teams, ...latest.registrations].some(
+    [...latest.contestants, ...latest.teams, ...latest.registrations].some(
       (record) =>
         record.source === "online" &&
         Date.parse(record.submittedAt || "") > loadedAt,
     );
   const next = {
     ...data,
+    contestants: onlineChanged
+      ? mergeOnline(data.contestants || [], latest.contestants)
+      : data.contestants || [],
     teams: onlineChanged
       ? mergeOnline(data.teams || [], latest.teams)
       : data.teams || [],
@@ -836,7 +839,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     ),
     syncRecords(
       COLLECTIONS.contestants,
-      next.contestants || [],
+      next.contestants,
       removableIds(latest.contestants),
     ),
     syncRecords(COLLECTIONS.teams, next.teams, removableIds(latest.teams)),
@@ -1376,6 +1379,7 @@ export const createContestantAccount = webMethod(
       .update(`contestant-phone:${phone}`)
       .digest("hex")
       .slice(0, 24)}`;
+    const submittedAt = new Date().toISOString();
     const contestant = {
       id: contestantId,
       name,
@@ -1386,6 +1390,8 @@ export const createContestantAccount = webMethod(
       headerHandicap,
       heelerHandicap,
       photo: "",
+      source: "online",
+      submittedAt,
     };
     const credentialId = createHash("sha256")
       .update(`contestant-credential:${email}`)
@@ -1513,6 +1519,7 @@ export const createRiderAccount = webMethod(
     if (existingPhone.items.length) {
       throw new Error("A rider account already uses that phone number.");
     }
+    const submittedAt = new Date().toISOString();
     const contestant = {
       id: contestantId,
       name,
@@ -1524,6 +1531,8 @@ export const createRiderAccount = webMethod(
       heelerHandicap,
       photo: "",
       horses: horseName ? [horseName] : [],
+      source: "online",
+      submittedAt,
     };
     const credentialId = createHash("sha256")
       .update(`contestant-credential:${email}`)
@@ -1560,6 +1569,16 @@ export const createRiderAccount = webMethod(
         .catch(() => null);
       throw error;
     }
+    const workspace = await readWorkspace();
+    await wixData.save(
+      SETTINGS_COLLECTION,
+      {
+        _id: ONLINE_REVISION_ID,
+        value: workspace.onlineRevision + 1,
+        updatedAt: new Date(),
+      },
+      OPTIONS,
+    );
     return { contestantId, name };
   },
 );

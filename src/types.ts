@@ -70,6 +70,8 @@ export interface Contestant {
   membershipNumber?: string;
   email?: string;
   categoryNumber?: string;
+  source?: "online" | "staff";
+  submittedAt?: string;
 }
 
 export interface Team {

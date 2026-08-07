@@ -184,6 +184,10 @@ export function mergeSavedArenaData(submitted: ArenaData, saved: ArenaData) {
     staffRevision: saved.staffRevision,
     onlineRevision: saved.onlineRevision,
     loadedAt: saved.loadedAt,
+    contestants: appendMissingOnlineRecords(
+      submitted.contestants,
+      saved.contestants,
+    ),
     teams: appendMissingOnlineRecords(submitted.teams, saved.teams),
     registrations: appendMissingOnlineRecords(
       submitted.registrations,

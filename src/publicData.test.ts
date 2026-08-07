@@ -149,6 +149,32 @@ describe("staff save reconciliation", () => {
       rolled: true,
     });
   });
+
+  it("keeps a rider created online when a stale workspace save returns", () => {
+    const submitted = workspace(event());
+    const rider = {
+      ...submitted.contestants[0],
+      id: "contestant-online",
+      name: "Online Rider",
+      source: "online" as const,
+      submittedAt: "2026-08-06T23:22:00.000Z",
+    };
+    const saved = {
+      ...submitted,
+      revision: 2,
+      onlineRevision: 1,
+      contestants: [...submitted.contestants, rider],
+    };
+
+    expect(mergeSavedArenaData(submitted, saved).contestants).toContainEqual(
+      expect.objectContaining({
+        id: rider.id,
+        name: rider.name,
+        source: "online",
+        submittedAt: rider.submittedAt,
+      }),
+    );
+  });
 });
 
 describe("public grouping and privacy", () => {
