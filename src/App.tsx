@@ -1246,8 +1246,7 @@ function LedLeaderboard({
     ledQualifiedRunsThroughRound(event.id, eventTeams, round),
     (team) =>
       teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants),
-  )
-    .slice(0, 10);
+  );
   const spectatorTopThree = aggregatePublicSpectatorLeaderboard(
     Array.from({ length: round }, (_, index) =>
       spectatorLeaderboard(data, event.id, index + 1).map(

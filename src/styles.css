@@ -494,7 +494,7 @@ main { grid-column: 2; min-width: 0; }
 .report-history-table .table-row { min-width: 920px; grid-template-columns: 1.1fr 1.4fr .8fr 1fr .55fr .35fr 36px; }
 .report-history-table small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
 
-.led-leaderboard { width: 100vw; min-height: 100vh; display: grid; grid-template-rows: auto auto auto 1fr auto; color: #f7fbf8; background: radial-gradient(circle at 50% -25%, #284d3c 0, #101b16 45%, #080d0b 100%); overflow: hidden; }
+.led-leaderboard { width: 100vw; height: 100vh; height: 100dvh; min-height: 0; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; color: #f7fbf8; background: radial-gradient(circle at 50% -25%, #284d3c 0, #101b16 45%, #080d0b 100%); overflow: hidden; }
 .led-empty { place-items: center; font-family: "Manrope", sans-serif; font-size: clamp(28px, 5vw, 72px); font-weight: 800; }
 .led-header { min-height: 13vh; display: grid; grid-template-columns: minmax(0, 1.8fr) auto auto auto; align-items: center; gap: 2.5vw; padding: 1.5vh 2.2vw; background: rgba(4,9,7,.72); border-bottom: 2px solid #b8893c; }
 .led-brand { min-width: 0; display: flex; align-items: center; gap: 1.2vw; }
