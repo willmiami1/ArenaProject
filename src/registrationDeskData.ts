@@ -1,6 +1,6 @@
 import { seedData } from "./data";
 import { createOnlineSignup, type SignupRequest } from "./onlineSignup";
-import { registrationDeskIsOpen } from "./registrationWindow";
+import { registrationDeskIsVisible } from "./registrationWindow";
 import { normalizeHorseNames } from "./contestantHorses";
 import type {
   ArenaData,
@@ -56,7 +56,7 @@ export function registrationDeskProjection(
   data: ArenaData,
   now = new Date(),
 ): RegistrationDeskData {
-  const events = data.events.filter(registrationDeskIsOpen);
+  const events = data.events.filter(registrationDeskIsVisible);
   const eventIds = new Set(events.map((event) => event.id));
   return {
     events: events.map(

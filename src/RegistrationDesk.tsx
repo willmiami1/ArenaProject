@@ -136,6 +136,13 @@ export function RegistrationDesk() {
   }, [data, eventId]);
 
   const event = data?.events.find((item) => item.id === eventId);
+  const entryUnavailableMessage = !event
+    ? ""
+    : !event.registrationOpen
+      ? "This live competition is visible, but registration is closed."
+      : event.drawLocked
+        ? "This live competition is visible, but entries are blocked while the draw is locked."
+        : "";
   const contestant = data?.contestants.find((item) => item.id === contestantId);
   const slide = event?.competitionType === "slide";
   const individual =
@@ -406,6 +413,10 @@ export function RegistrationDesk() {
 
   const submitEntry = (formEvent: FormEvent) => {
     formEvent.preventDefault();
+    if (entryUnavailableMessage) {
+      setMessage(entryUnavailableMessage);
+      return;
+    }
     if (!event || !contestant || !paymentMethod) return;
     setBusy(true);
     setMessage("");
@@ -451,8 +462,9 @@ export function RegistrationDesk() {
           </label>
           {!data && <p>Loading registration desk…</p>}
           {data && !data.events.length && (
-            <p>No live competitions are currently accepting registration.</p>
+            <p>No live competitions are currently available.</p>
           )}
+          {entryUnavailableMessage && <p>{entryUnavailableMessage}</p>}
         </section>
 
         {event && data && (
@@ -785,6 +797,7 @@ export function RegistrationDesk() {
                       className="primary"
                       disabled={
                         busy ||
+                        Boolean(entryUnavailableMessage) ||
                         !eligibleRoles.length ||
                         (!individual &&
                           !pickAndDraw &&

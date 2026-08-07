@@ -25,6 +25,19 @@ const data: ArenaData = {
     },
     {
       ...defaultCompetitionSettings,
+      id: "locked-live-event",
+      parentEventId: "meet",
+      name: "Locked Live Roping",
+      date: "2026-08-05",
+      startTime: "19:00",
+      location: "Arena",
+      status: "Live",
+      registrationOpen: false,
+      drawLocked: true,
+      entryFee: 50,
+    },
+    {
+      ...defaultCompetitionSettings,
       id: "upcoming-event",
       parentEventId: "meet",
       name: "Upcoming Roping",
@@ -86,13 +99,20 @@ const data: ArenaData = {
 };
 
 describe("registration desk boundary", () => {
-  it("includes only live open competitions and strips run results", () => {
+  it("includes live competitions regardless of entry state and strips run results", () => {
     const projected = registrationDeskProjection(
       data,
       new Date("2026-08-05T21:00:00"),
     );
 
-    expect(projected.events.map((event) => event.id)).toEqual(["open-event"]);
+    expect(projected.events.map((event) => event.id)).toEqual([
+      "open-event",
+      "locked-live-event",
+    ]);
+    expect(projected.events[1]).toMatchObject({
+      registrationOpen: false,
+      drawLocked: true,
+    });
     expect(projected.events[0]).not.toHaveProperty("drawHistory");
     expect(projected.events[0]).not.toHaveProperty("payoutPercentages");
     expect(projected.events[0]).not.toHaveProperty("producerFeePercent");

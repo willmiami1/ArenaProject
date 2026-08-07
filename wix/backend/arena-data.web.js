@@ -54,10 +54,7 @@ const assertOnlineRegistrationOpen = (event, now = Date.now()) => {
     throw new Error("Online registration closes one hour before the competition starts.");
   }
 };
-const registrationDeskIsOpen = (event) =>
-  event.status === "Live" &&
-  event.registrationOpen === true &&
-  event.drawLocked !== true;
+const registrationDeskIsVisible = (event) => event.status === "Live";
 
 const assertRegistrationDeskOpen = (event) => {
   if (event.status !== "Live") {
@@ -1139,7 +1136,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
 });
 
 function registrationDeskProjection(workspace) {
-  const events = workspace.events.filter(registrationDeskIsOpen);
+  const events = workspace.events.filter(registrationDeskIsVisible);
   const eventIds = new Set(events.map((event) => event.id));
   return {
     events: events.map(

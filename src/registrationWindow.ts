@@ -44,14 +44,10 @@ export function assertOnlineRegistrationOpen(
   }
 }
 
-export function registrationDeskIsOpen(
-  event: Pick<ArenaEvent, "registrationOpen" | "drawLocked" | "status">,
+export function registrationDeskIsVisible(
+  event: Pick<ArenaEvent, "status">,
 ) {
-  return (
-    event.status === "Live" &&
-    event.registrationOpen &&
-    !event.drawLocked
-  );
+  return event.status === "Live";
 }
 
 export function assertRegistrationDeskOpen(
