@@ -512,9 +512,6 @@ function RiderAccountPage() {
       if (account.pin !== account.confirmPin) {
         throw new Error("PIN confirmation does not match.");
       }
-      if (!isWixEmbed()) {
-        throw new Error("Rider account creation is available on the Destiny Ranch Arena website.");
-      }
       const result = await createRiderAccount(account);
       if (!result) throw new Error("Rider account could not be created.");
       setCreated(true);

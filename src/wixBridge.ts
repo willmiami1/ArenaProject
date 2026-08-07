@@ -144,37 +144,97 @@ export function isWixEmbed() {
   return Boolean(wixParentOrigin());
 }
 
-function requestWix<T>(
+function sensitiveWixAction(action: WixAction) {
+  return (
+    action === "authenticateContestant" ||
+    action === "setContestantPin" ||
+    action === "loadSignupOptions" ||
+    action === "submitOnlineSignup" ||
+    action === "submitSpectatorPrediction" ||
+    action === "createContestantAccount" ||
+    action === "createRiderAccount" ||
+    action === "getAdminAccess" ||
+    action === "promptAdminLogin" ||
+    action === "logoutAdmin" ||
+    action === "getRegistrationDeskAccess" ||
+    action === "promptRegistrationDeskLogin" ||
+    action === "loadRegistrationDeskData" ||
+    action === "saveRegistrationDeskContestant" ||
+    action === "setRegistrationDeskContestantPin" ||
+    action === "submitRegistrationDeskSignup"
+  );
+}
+
+function discoverWixParentOrigin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const configuredOrigin = import.meta.env.VITE_WIX_HOST_ORIGIN?.trim();
+    if (!configuredOrigin || window.parent === window) {
+      reject(new Error("Rider account creation is available on the Destiny Ranch Arena website."));
+      return;
+    }
+    const trustedSiteOrigin = configuredOrigin;
+    const requestId =
+      window.crypto.randomUUID?.() ??
+      `request-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const message = {
+      source: "arena-command-app",
+      requestId,
+      action: "loadPublicSchedule",
+    };
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener("message", handleMessage);
+      reject(new Error("The secure Wix connection did not respond. Refresh the arena website and try again."));
+    }, 8000);
+
+    function handleMessage(event: MessageEvent<WixResponse<unknown>>) {
+      if (
+        event.source !== window.parent ||
+        event.data?.source !== "arena-wix-host" ||
+        event.data.requestId !== requestId
+      ) {
+        return;
+      }
+      let trustedOrigin: string | false = false;
+      try {
+        trustedOrigin = trustedWixRelayOrigin(
+          trustedSiteOrigin,
+          null,
+          [],
+          event.origin,
+        );
+      } catch {
+        trustedOrigin = false;
+      }
+      if (!trustedOrigin) return;
+      window.clearTimeout(timeout);
+      window.removeEventListener("message", handleMessage);
+      window.sessionStorage.setItem(wixRelayStorageKey, trustedOrigin);
+      resolve(trustedOrigin);
+    }
+
+    window.addEventListener("message", handleMessage);
+    window.parent.postMessage(message, "*");
+  });
+}
+
+async function requestWix<T>(
   action: WixAction,
   data?: unknown,
 ): Promise<T | null> {
+  const sensitiveAction = sensitiveWixAction(action);
+  const targetOrigin = sensitiveAction
+    ? wixParentOrigin() || await discoverWixParentOrigin()
+    : "*";
+  return requestWixFromOrigin<T>(action, data, targetOrigin, sensitiveAction);
+}
+
+function requestWixFromOrigin<T>(
+  action: WixAction,
+  data: unknown,
+  targetOrigin: string,
+  sensitiveAction: boolean,
+): Promise<T | null> {
   return new Promise((resolve, reject) => {
-    const sensitiveAction =
-      action === "authenticateContestant" ||
-      action === "setContestantPin" ||
-      action === "loadSignupOptions" ||
-      action === "submitOnlineSignup" ||
-      action === "submitSpectatorPrediction" ||
-      action === "createContestantAccount" ||
-      action === "createRiderAccount" ||
-      action === "getAdminAccess" ||
-      action === "promptAdminLogin" ||
-      action === "logoutAdmin" ||
-      action === "getRegistrationDeskAccess" ||
-      action === "promptRegistrationDeskLogin" ||
-      action === "loadRegistrationDeskData" ||
-      action === "saveRegistrationDeskContestant" ||
-      action === "setRegistrationDeskContestantPin" ||
-      action === "submitRegistrationDeskSignup";
-    let targetOrigin = "*";
-    if (sensitiveAction) {
-      const parentOrigin = wixParentOrigin();
-      if (!parentOrigin) {
-        reject(new Error("Secure Wix login is not configured for this site."));
-        return;
-      }
-      targetOrigin = parentOrigin;
-    }
     const requestId =
       window.crypto.randomUUID?.() ??
       `request-${Date.now()}-${Math.random().toString(36).slice(2)}`;
