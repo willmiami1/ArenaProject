@@ -25,7 +25,12 @@ import {
   isBrowserStoragePreview,
   localAdminAccess,
 } from "./adminAccess";
-import { mergeSavedArenaData, normalizeData } from "./useArenaData";
+import {
+  mergeConcurrentSavedArenaData,
+  mergeSavedArenaData,
+  normalizeData,
+  remoteWorkspaceIsNewer,
+} from "./useArenaData";
 import {
   createSpectatorPrediction,
   spectatorLeaderboard,
@@ -119,6 +124,128 @@ describe("public routing", () => {
 });
 
 describe("staff save reconciliation", () => {
+  it("detects newer cross-device workspace revisions", () => {
+    expect(
+      remoteWorkspaceIsNewer(
+        { revision: 4, staffRevision: 3, onlineRevision: 1 },
+        { revision: 5, staffRevision: 4, onlineRevision: 1 },
+      ),
+    ).toBe(true);
+    expect(
+      remoteWorkspaceIsNewer(
+        { staffRevision: 3, onlineRevision: 2 },
+        { staffRevision: 3, onlineRevision: 2 },
+      ),
+    ).toBe(false);
+    expect(
+      remoteWorkspaceIsNewer(
+        { revision: 6 },
+        { revision: 5 },
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps newer local edits and merged online records after an in-flight save", () => {
+    const current = {
+      ...workspace(event()),
+      revision: 4,
+      staffRevision: 3,
+      onlineRevision: 1,
+      events: [event({ name: "Newer local edit" })],
+    };
+    const onlineRider = {
+      ...current.contestants[0],
+      id: "concurrent-online-rider",
+      name: "Concurrent Online Rider",
+      source: "online" as const,
+    };
+    const submitted = {
+      ...current,
+      events: [event({ name: "Submitted edit" })],
+    };
+    const updated = mergeConcurrentSavedArenaData(submitted, current, {
+      ...current,
+      revision: 6,
+      staffRevision: 5,
+      onlineRevision: 1,
+      loadedAt: "2026-08-07T18:40:00.000Z",
+      events: [
+        ...current.events,
+        event({ id: "event-from-other-computer", name: "Remote Event" }),
+      ],
+      contestants: [...current.contestants, onlineRider],
+    });
+
+    expect(updated).toMatchObject({
+      revision: 6,
+      staffRevision: 5,
+      onlineRevision: 1,
+      loadedAt: "2026-08-07T18:40:00.000Z",
+    });
+    expect(updated.events[0].name).toBe("Newer local edit");
+    expect(updated.events).toContainEqual(
+      expect.objectContaining({
+        id: "event-from-other-computer",
+        name: "Remote Event",
+      }),
+    );
+    expect(updated.contestants).toContainEqual(
+      expect.objectContaining({
+        id: onlineRider.id,
+        name: onlineRider.name,
+        source: "online",
+      }),
+    );
+  });
+
+  it("does not resurrect an online record deleted during an in-flight save", () => {
+    const onlineRider = {
+      ...workspace(event()).contestants[0],
+      id: "deleted-online-rider",
+      source: "online" as const,
+    };
+    const submitted = {
+      ...workspace(event()),
+      contestants: [...workspace(event()).contestants, onlineRider],
+    };
+    const current = {
+      ...submitted,
+      contestants: submitted.contestants.filter(
+        (contestant) => contestant.id !== onlineRider.id,
+      ),
+    };
+    const updated = mergeConcurrentSavedArenaData(
+      submitted,
+      current,
+      submitted,
+    );
+
+    expect(updated.contestants).not.toContainEqual(
+      expect.objectContaining({ id: onlineRider.id }),
+    );
+  });
+
+  it("combines independent local and remote fields after a staff revision conflict", () => {
+    const baseline = workspace(event({ name: "Original", status: "Upcoming" }));
+    const local = {
+      ...baseline,
+      events: [event({ name: "Local Name", status: "Upcoming" })],
+    };
+    const remote = {
+      ...baseline,
+      revision: 2,
+      staffRevision: 2,
+      events: [event({ name: "Original", status: "Live" })],
+    };
+
+    const updated = mergeConcurrentSavedArenaData(baseline, local, remote);
+
+    expect(updated.events[0]).toMatchObject({
+      name: "Local Name",
+      status: "Live",
+    });
+  });
+
   it("does not let a stale Wix response undo final-round Run Desk actions", () => {
     const competition = event({ rounds: 3, status: "Live" });
     const finalTeam = run({
