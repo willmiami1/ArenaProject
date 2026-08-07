@@ -1034,7 +1034,7 @@ function LedSpectatorTop({
     ) => {
       if (cancelled) return;
       const nextRows = spectatorRowsForRound(publicData, eventId, round);
-      setRows(publicData ? nextRows : fallbackRows);
+      setRows(nextRows.length ? nextRows : fallbackRows);
       const competition = publicData?.competitions.find(
         (item) => item.id === eventId,
       );
@@ -1058,6 +1058,7 @@ function LedSpectatorTop({
         })
         .catch((error) => {
           console.error("Could not refresh spectator leaderboard.", error);
+          if (!cancelled) setRows(fallbackRows);
         })
         .finally(() => {
           refreshing = false;
@@ -1201,12 +1202,23 @@ function LedLeaderboard({
   if (!event) {
     return <div className="led-leaderboard led-empty">No competition selected</div>;
   }
-  const round = Math.min(
-    Math.max(requestedRound ?? event.rounds, 1),
-    Math.max(event.rounds, 1),
-  );
   const eventTeams = data.teams.filter(
     (team) => team.eventId === event.id && !team.scratched,
+  );
+  const activeReadyTeam =
+    eventTeams.find(
+      (team) => team.id === requestedTeamId && team.status === "ready",
+    ) ??
+    [...eventTeams]
+      .filter((team) => team.status === "ready")
+      .sort(
+        (left, right) =>
+          right.round - left.round ||
+          left.drawPosition - right.drawPosition,
+      )[0];
+  const round = Math.min(
+    Math.max(activeReadyTeam?.round ?? requestedRound ?? event.rounds, 1),
+    Math.max(event.rounds, 1),
   );
   const roundTeams = eventTeams
     .filter((team) => team.round === round)
