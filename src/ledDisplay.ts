@@ -77,3 +77,21 @@ export function ledQualifiedRunsThroughRound(
     (team) => team.status === "complete" && team.rawTime !== null,
   );
 }
+
+export function ledShowsFinalResults(
+  event: ArenaEvent,
+  teams: Team[],
+  round: number,
+) {
+  const finalRoundTeams = teams.filter(
+    (team) =>
+      team.eventId === event.id &&
+      team.round === round &&
+      !team.scratched,
+  );
+  return (
+    round === Math.max(event.rounds, 1) &&
+    finalRoundTeams.length > 0 &&
+    finalRoundTeams.every((team) => team.status !== "ready")
+  );
+}

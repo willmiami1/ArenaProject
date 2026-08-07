@@ -503,6 +503,10 @@ main { grid-column: 2; min-width: 0; }
 .led-brand h1 { margin: .3vh 0 0; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(24px, 2.6vw, 52px); line-height: 1; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .led-round { min-width: 12vw; padding: 1.2vh 1.3vw; background: #173528; border: 1px solid #35634e; border-radius: 10px; }
 .led-round strong { display: block; margin-top: .5vh; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.1vw, 40px); text-transform: uppercase; }
+.led-round em { display: inline-block; margin-top: .6vh; padding: .3vh .55vw; border-radius: 999px; font-size: clamp(8px,.65vw,12px); font-style: normal; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.led-round em.unofficial { color: #27190a; background: #f4c972; }
+.led-round em.official { color: #092417; background: #75d6a4; }
+.led-round.final-results { border-color: #e4b860; box-shadow: 0 0 20px rgba(228,184,96,.18); }
 .led-clock { text-align: right; }
 .led-clock strong { display: block; font-family: "Manrope", sans-serif; font-size: clamp(24px, 2.5vw, 48px); line-height: 1; }
 .led-clock span { margin-top: .5vh; }

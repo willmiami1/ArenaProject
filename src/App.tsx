@@ -78,6 +78,7 @@ import {
 } from "./wixBridge";
 import {
   ledQualifiedRunsThroughRound,
+  ledShowsFinalResults,
   resolveLedRunDeskState,
 } from "./ledDisplay";
 import {
@@ -1032,6 +1033,8 @@ function LedSpectatorTop({
   picksClosed,
   usePublicRelay,
   teamId,
+  finalResults,
+  official,
 }: {
   eventId: string;
   round: number;
@@ -1039,6 +1042,8 @@ function LedSpectatorTop({
   picksClosed: boolean;
   usePublicRelay: boolean;
   teamId?: string;
+  finalResults: boolean;
+  official: boolean;
 }) {
   const [rows, setRows] = useState(fallbackRows);
   const [relayedPicksClosed, setRelayedPicksClosed] = useState(false);
@@ -1102,7 +1107,13 @@ function LedSpectatorTop({
   const effectivePicksClosed = picksClosed || relayedPicksClosed;
   return (
     <section className={`led-spectator-top${effectivePicksClosed ? " picks-closed" : ""}`}>
-      <span>Top 3 Spectator Results <small>Through Round {round}</small></span>
+      <span>
+        {finalResults ? "Final Spectator Results" : "Top 3 Spectator Results"}
+        <small>
+          {finalResults ? "All rounds" : `Through Round ${round}`} ·{" "}
+          {official ? "Official" : "Unofficial"}
+        </small>
+      </span>
       {effectivePicksClosed && <em className="led-picks-closed">Picks are closed</em>}
       <div>
         {rows.length
@@ -1259,6 +1270,8 @@ function LedLeaderboard({
         team.id === ledRunDeskState.activeTeamId &&
         team.status === "ready",
     ) ?? defaultCurrentTeam;
+  const finalResults = ledShowsFinalResults(event, eventTeams, round);
+  const officialResults = event.resultsPublished === true;
   const nextTeam =
     roundTeams.find(
       (team) =>
@@ -1341,7 +1354,13 @@ function LedLeaderboard({
           <img src="./destiny-ranch-arena-logo.png" alt="Destiny Ranch Arena" />
           <div><span>{meet?.name ?? "Destiny Ranch Arena"}</span><h1>{event.name}</h1></div>
         </div>
-        <div className="led-round"><span>Live leaderboard</span><strong>Round {round}</strong></div>
+        <div className={`led-round${finalResults ? " final-results" : ""}`}>
+          <span>{finalResults ? "Final results" : "Live leaderboard"}</span>
+          <strong>Round {round}</strong>
+          <em className={officialResults ? "official" : "unofficial"}>
+            {officialResults ? "Official results" : "Unofficial results"}
+          </em>
+        </div>
         <div className="led-clock"><strong>{clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong><span>{clock.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</span></div>
         <div className="led-header-actions">
           <button className="led-fullscreen" onClick={enterFullscreen}><Maximize2 size={24} /> Full screen</button>
@@ -1352,8 +1371,16 @@ function LedLeaderboard({
       <section className="led-current-team">
         <div className="led-current-label">
           <span className="live-dot" />
-          <span>Now roping</span>
-          <strong>{currentTeam ? `Team #${currentTeam.originalTeamNumber ?? currentTeam.drawPosition}` : "Round complete"}</strong>
+          <span>{finalResults ? "Competition complete" : "Now roping"}</span>
+          <strong>
+            {finalResults
+              ? officialResults
+                ? "Official final results"
+                : "Unofficial final results"
+              : currentTeam
+                ? `Team #${currentTeam.originalTeamNumber ?? currentTeam.drawPosition}`
+                : "Round complete"}
+          </strong>
         </div>
         {currentTeam && (
           <>
@@ -1388,10 +1415,21 @@ function LedLeaderboard({
         )}
         usePublicRelay={usePublicRelay}
         teamId={currentTeam?.id}
+        finalResults={finalResults}
+        official={officialResults}
       />
 
       <main className="led-board">
-        <div className="led-table-header"><span>Place</span><span>Team</span><span>Rounds</span><span>Total time</span></div>
+        <div className="led-table-header">
+          <span>{finalResults ? "Final place" : "Place"}</span>
+          <span>
+            {officialResults
+              ? "Contestant results · Official"
+              : "Contestant results · Unofficial"}
+          </span>
+          <span>Rounds</span>
+          <span>Total time</span>
+        </div>
         <LedScrollingRows rowCount={standings.length}>
           {standings.map((team, index) => {
             const completedRounds = eventTeams.filter(
@@ -1415,7 +1453,10 @@ function LedLeaderboard({
       </main>
 
       <footer className="led-footer">
-        <div className="led-next-label"><span className="live-dot" /><strong>Next team</strong></div>
+        <div className="led-next-label">
+          <span className="live-dot" />
+          <strong>{finalResults ? "Final results" : "Next team"}</strong>
+        </div>
         {nextTeam ? (
           <>
             <span className="led-next-draw">Team #{nextTeam.originalTeamNumber ?? nextTeam.drawPosition}</span>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultCompetitionSettings } from "./competition";
 import {
   ledQualifiedRunsThroughRound,
+  ledShowsFinalResults,
   resolveLedRunDeskState,
 } from "./ledDisplay";
 import type { ArenaEvent, Team } from "./types";
@@ -96,5 +97,22 @@ describe("LED Run Desk synchronization", () => {
         2,
       ),
     ).toEqual([]);
+  });
+
+  it("shows final results only after every final-round run is resolved", () => {
+    expect(
+      ledShowsFinalResults(
+        event,
+        [team("final-complete", 2, "complete"), team("final-ready", 2, "ready")],
+        2,
+      ),
+    ).toBe(false);
+    expect(
+      ledShowsFinalResults(
+        event,
+        [team("final-complete", 2, "complete"), team("final-no-time", 2, "no-time")],
+        2,
+      ),
+    ).toBe(true);
   });
 });
