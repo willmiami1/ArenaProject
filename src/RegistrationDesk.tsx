@@ -218,14 +218,23 @@ export function RegistrationDesk() {
     setBusy(true);
     setMessage("");
     try {
+      const normalizedProfile = {
+        ...profile,
+        name: profile.name.trim().replace(/\s+/g, " ").toUpperCase(),
+        email: profile.email.trim().toLowerCase(),
+        hometown: profile.hometown.trim().replace(/\s+/g, " ").toUpperCase(),
+        horses: (profile.horses ?? []).map((horse) =>
+          horse.trim().replace(/\s+/g, " ").toUpperCase(),
+        ),
+      };
       if (embedded) {
-        const result = await saveRegistrationDeskContestant(profile);
+        const result = await saveRegistrationDeskContestant(normalizedProfile);
         if (!result) throw new Error("The contestant profile was not saved.");
         setData(result.data);
         setContestantId(result.contestant.id);
       } else {
         const workspaceData = loadLocalRegistrationWorkspace();
-        const result = upsertRegistrationDeskContestant(workspaceData, profile);
+        const result = upsertRegistrationDeskContestant(workspaceData, normalizedProfile);
         saveLocalRegistrationWorkspace(result.data);
         setData(registrationDeskProjection(result.data));
         setContestantId(result.contestant.id);
@@ -256,26 +265,27 @@ export function RegistrationDesk() {
         </button>
       </div>
       <form className="registration-profile-form" onSubmit={saveProfile}>
-        <label>Full name<input required maxLength={100} value={profile.name} onChange={(change) => setProfile({ ...profile, name: change.target.value })} /></label>
+        <label>Full name<input required maxLength={100} autoCapitalize="characters" value={profile.name} onChange={(change) => setProfile({ ...profile, name: change.target.value.toUpperCase() })} /></label>
         <label>Roping position<select value={profile.role} onChange={(change) => setProfile({ ...profile, role: change.target.value as Contestant["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
         <label>Header handicap<input required type="number" min={0} max={20} step={0.5} value={profile.headerHandicap} onChange={(change) => setProfile({ ...profile, headerHandicap: Number(change.target.value) })} /></label>
         <label>Heeler handicap<input required type="number" min={0} max={20} step={0.5} value={profile.heelerHandicap} onChange={(change) => setProfile({ ...profile, heelerHandicap: Number(change.target.value) })} /></label>
-        <label>Email<input type="email" value={profile.email} onChange={(change) => setProfile({ ...profile, email: change.target.value })} /></label>
+        <label>Email<input type="email" value={profile.email} onChange={(change) => setProfile({ ...profile, email: change.target.value.toLowerCase() })} /></label>
         <label>Phone<input type="tel" value={profile.phone} onChange={(change) => setProfile({ ...profile, phone: change.target.value })} /></label>
-        <label>Hometown<input value={profile.hometown} onChange={(change) => setProfile({ ...profile, hometown: change.target.value })} /></label>
+        <label>Hometown<input autoCapitalize="characters" value={profile.hometown} onChange={(change) => setProfile({ ...profile, hometown: change.target.value.toUpperCase() })} /></label>
         <div className="registration-horse-editor">
           <span>Horses</span>
           <div className="horse-entry">
             <input
               maxLength={100}
               value={horseName}
-              onChange={(change) => setHorseName(change.target.value)}
+              autoCapitalize="characters"
+              onChange={(change) => setHorseName(change.target.value.toUpperCase())}
               placeholder="Horse name"
             />
             <button
               type="button"
               onClick={() => {
-                const name = horseName.trim().replace(/\s+/g, " ");
+                const name = horseName.trim().replace(/\s+/g, " ").toUpperCase();
                 if (
                   !name ||
                   (profile.horses ?? []).length >= 20 ||

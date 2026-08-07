@@ -192,6 +192,15 @@ export const getRegistrationDeskAccess = webMethod(
 );
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+const normalizeContestantCasing = (contestant) => ({
+  ...contestant,
+  name: String(contestant.name || "").trim().replace(/\s+/g, " ").toUpperCase(),
+  email: normalizeEmail(contestant.email),
+  hometown: String(contestant.hometown || "").trim().replace(/\s+/g, " ").toUpperCase(),
+  horses: (Array.isArray(contestant.horses) ? contestant.horses : []).map(
+    (horse) => String(horse).trim().replace(/\s+/g, " ").toUpperCase(),
+  ),
+});
 const validPin = (value) => /^\d{4}$/.test(String(value || ""));
 const pinHash = (pin, salt, pepper) =>
   createHash("sha256").update(`${pepper}:${salt}:${pin}`).digest("hex");
@@ -841,9 +850,11 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     );
   const next = {
     ...data,
-    contestants: onlineChanged
-      ? mergeOnline(data.contestants || [], latest.contestants)
-      : data.contestants || [],
+    contestants: (
+      onlineChanged
+        ? mergeOnline(data.contestants || [], latest.contestants)
+        : data.contestants || []
+    ).map(normalizeContestantCasing),
     teams: onlineChanged
       ? mergeOnline(data.teams || [], latest.teams)
       : data.teams || [],
@@ -1017,7 +1028,7 @@ export const saveRegistrationDeskContestant = webMethod(
   async (input) => {
     await requireRegistrationDesk();
     const workspace = await readWorkspace();
-    const name = String(input.name || "").trim().replace(/\s+/g, " ");
+    const name = String(input.name || "").trim().replace(/\s+/g, " ").toUpperCase();
     const email = normalizeEmail(input.email);
     const phone = String(input.phone || "").trim();
     const id = input.id || `desk-contestant-${Date.now()}-${randomBytes(4).toString("hex")}`;
@@ -1026,7 +1037,7 @@ export const saveRegistrationDeskContestant = webMethod(
     const horsesByName = new Map();
     (Array.isArray(input.horses) ? input.horses : []).forEach((value) => {
       if (typeof value !== "string") return;
-      const horse = value.trim().replace(/\s+/g, " ");
+      const horse = value.trim().replace(/\s+/g, " ").toUpperCase();
       const key = horse.toLowerCase();
       if (horse && !horsesByName.has(key)) horsesByName.set(key, horse);
     });
@@ -1097,7 +1108,7 @@ export const saveRegistrationDeskContestant = webMethod(
       photo: previous?.photo || "",
       phone,
       email,
-      hometown: String(input.hometown || "").trim(),
+      hometown: String(input.hometown || "").trim().replace(/\s+/g, " ").toUpperCase(),
       horses,
       membershipNumber: previous?.membershipNumber || "",
       categoryNumber: previous?.categoryNumber || "",

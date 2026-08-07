@@ -2259,13 +2259,13 @@ function ContestantForm({
     const contestantId = contestant?.id ?? uid("rider");
     const updatedContestant: Contestant = {
       id: contestantId,
-      name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
+      name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim().toUpperCase(),
       role: contestant?.role ?? "Both",
       headerHandicap: Number(form.headerHandicap),
       heelerHandicap: Number(form.heelerHandicap),
       phone: form.phone,
-      hometown: form.hometown,
-      email: form.email,
+      hometown: form.hometown.trim().replace(/\s+/g, " ").toUpperCase(),
+      email: form.email.trim().toLowerCase(),
       membershipNumber: contestant?.membershipNumber ?? "",
       categoryNumber: contestant?.categoryNumber ?? "",
       photo: form.photo,
@@ -2318,12 +2318,12 @@ function ContestantForm({
         </div>
       </div>
       <div className="form-grid">
-        <Field label="First Name"><input required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} placeholder="First name" /></Field>
-        <Field label="Last Name"><input required value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} placeholder="Last name" /></Field>
+        <Field label="First Name"><input required autoCapitalize="characters" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value.toUpperCase() })} placeholder="First name" /></Field>
+        <Field label="Last Name"><input required autoCapitalize="characters" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value.toUpperCase() })} placeholder="Last name" /></Field>
         <Field label="Header Handicap"><input required type="number" min="0" step="0.5" value={form.headerHandicap} onChange={(e) => setForm({ ...form, headerHandicap: e.target.value })} placeholder="3" /></Field>
         <Field label="Heeler Handicap"><input required type="number" min="0" step="0.5" value={form.heelerHandicap} onChange={(e) => setForm({ ...form, heelerHandicap: e.target.value })} placeholder="3" /></Field>
         <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555-0123" /></Field>
-        <Field label="Hometown"><input value={form.hometown} onChange={(e) => setForm({ ...form, hometown: e.target.value })} placeholder="City, State" /></Field>
+        <Field label="Hometown"><input autoCapitalize="characters" value={form.hometown} onChange={(e) => setForm({ ...form, hometown: e.target.value.toUpperCase() })} placeholder="City, State" /></Field>
       </div>
       <div className="horse-editor">
         <h4>Horses</h4>
@@ -2332,14 +2332,15 @@ function ContestantForm({
           <input
             maxLength={100}
             value={horseName}
-            onChange={(event) => setHorseName(event.target.value)}
+            autoCapitalize="characters"
+            onChange={(event) => setHorseName(event.target.value.toUpperCase())}
             placeholder="Horse name"
           />
           <button
             type="button"
             className="secondary"
             onClick={() => {
-              const name = horseName.trim().replace(/\s+/g, " ");
+              const name = horseName.trim().replace(/\s+/g, " ").toUpperCase();
               if (
                 !name ||
                 form.horses.length >= 20 ||
@@ -2378,7 +2379,7 @@ function ContestantForm({
         Set the email and four-digit PIN the contestant will use for online entry and the contestant portal. Leave both PIN fields blank to keep the current login unchanged.
       </p>
       <div className="form-grid contestant-account-grid">
-        <Field label="Login Email"><input type="email" autoComplete="off" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setLoginError(""); }} placeholder="rider@example.com" /></Field>
+        <Field label="Login Email"><input type="email" autoComplete="off" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value.toLowerCase() }); setLoginError(""); }} placeholder="rider@example.com" /></Field>
         <Field label={contestant ? "Set or Reset 4-digit PIN" : "Set 4-digit PIN"}><input type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="new-password" value={loginPin} onChange={(e) => { setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setLoginError(""); }} placeholder="••••" /></Field>
         <Field label="Confirm 4-digit PIN"><input type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="new-password" value={confirmLoginPin} onChange={(e) => { setConfirmLoginPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setLoginError(""); }} placeholder="••••" /></Field>
       </div>

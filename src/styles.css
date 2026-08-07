@@ -964,3 +964,7 @@ main { grid-column: 2; min-width: 0; }
   .report-table th { color: #fff !important; background: #285f46 !important; print-color-adjust: exact; }
   .report-table tr { break-inside: avoid; }
 }
+.form-panel input:not([type="email"]),
+.registration-profile-form input:not([type="email"]) { text-transform: uppercase; }
+.form-panel input[type="email"],
+.registration-profile-form input[type="email"] { text-transform: lowercase; }
