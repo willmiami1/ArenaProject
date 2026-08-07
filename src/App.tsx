@@ -118,6 +118,8 @@ const navItems: { id: View; label: string; icon: typeof Gauge }[] = [
 ];
 const LED_PUBLIC_DATA_REQUEST = "arena-led-public-data-request";
 const LED_PUBLIC_DATA_RESPONSE = "arena-led-public-data-response";
+const LED_WORKSPACE_DATA_REQUEST = "arena-led-workspace-data-request";
+const LED_WORKSPACE_DATA_RESPONSE = "arena-led-workspace-data-response";
 
 function spectatorRowsForRound(
   publicData: Pick<PublicArenaData, "competitions"> | null,
@@ -159,6 +161,38 @@ function requestPublicArenaDataFromOpener() {
     window.addEventListener("message", handleResponse);
     opener.postMessage(
       { source: LED_PUBLIC_DATA_REQUEST, requestId },
+      window.location.origin,
+    );
+  });
+}
+
+function requestWorkspaceDataFromOpener() {
+  const opener = window.opener;
+  if (!opener) return Promise.resolve<ArenaData | null>(null);
+  return new Promise<ArenaData | null>((resolve, reject) => {
+    const requestId =
+      window.crypto.randomUUID?.() ??
+      `led-workspace-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener("message", handleResponse);
+      reject(new Error("The Run Desk did not respond."));
+    }, 8000);
+    function handleResponse(event: MessageEvent) {
+      if (
+        event.source !== opener ||
+        event.origin !== window.location.origin ||
+        event.data?.source !== LED_WORKSPACE_DATA_RESPONSE ||
+        event.data?.requestId !== requestId
+      ) {
+        return;
+      }
+      window.clearTimeout(timeout);
+      window.removeEventListener("message", handleResponse);
+      resolve(event.data.workspaceData ?? null);
+    }
+    window.addEventListener("message", handleResponse);
+    opener.postMessage(
+      { source: LED_WORKSPACE_DATA_REQUEST, requestId },
       window.location.origin,
     );
   });
@@ -244,6 +278,29 @@ function StaffApp() {
     window.addEventListener("message", relayPublicResults);
     return () => window.removeEventListener("message", relayPublicResults);
   }, []);
+  useEffect(() => {
+    if (!isWixEmbed()) return;
+    const relayWorkspaceData = (event: MessageEvent) => {
+      if (
+        event.origin !== window.location.origin ||
+        event.data?.source !== LED_WORKSPACE_DATA_REQUEST ||
+        typeof event.data?.requestId !== "string" ||
+        !event.source
+      ) {
+        return;
+      }
+      (event.source as Window).postMessage(
+        {
+          source: LED_WORKSPACE_DATA_RESPONSE,
+          requestId: event.data.requestId,
+          workspaceData: data,
+        },
+        event.origin,
+      );
+    };
+    window.addEventListener("message", relayWorkspaceData);
+    return () => window.removeEventListener("message", relayWorkspaceData);
+  }, [data]);
   const displayParams = new URLSearchParams(window.location.search);
   if (displayParams.get("portal") === "contestant") {
     return <ContestantPortal />;
@@ -1095,7 +1152,7 @@ function LedScrollingRows({
 }
 
 function LedLeaderboard({
-  data,
+  data: fallbackData,
   eventId,
   requestedRound,
   requestedTeamId,
@@ -1107,11 +1164,35 @@ function LedLeaderboard({
   requestedTeamId?: string;
   usePublicRelay: boolean;
 }) {
+  const [relayedData, setRelayedData] = useState<ArenaData | null>(null);
   const [clock, setClock] = useState(new Date());
+  const data = relayedData ?? fallbackData;
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    if (!usePublicRelay) return;
+    let cancelled = false;
+    let timer = 0;
+    const refresh = async () => {
+      try {
+        const workspaceData = await requestWorkspaceDataFromOpener();
+        if (!cancelled && workspaceData) setRelayedData(workspaceData);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Could not refresh the LED workspace data.", error);
+        }
+      } finally {
+        if (!cancelled) timer = window.setTimeout(refresh, 1500);
+      }
+    };
+    void refresh();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [usePublicRelay]);
 
   const event =
     data.events.find((item) => item.id === eventId) ??
