@@ -90,7 +90,10 @@ async function resolveAdminAccess() {
       typeof configuredRoleId === "string" ? configuredRoleId.trim() : "";
     const hasAdminRole = roles.some(
       (role) =>
-        role._id === configuredId ||
+        (configuredId && role._id === configuredId) ||
+        role.key === "ADMIN" ||
+        role.roleKey === "ADMIN" ||
+        role.title === "Owner" ||
         role.title === "Arena Admin" ||
         role.title === "Admin",
     );
@@ -150,6 +153,9 @@ async function resolveRegistrationDeskAccess() {
       roles.some(
         (role) =>
           allowedRoleIds.includes(role._id) ||
+          role.key === "ADMIN" ||
+          role.roleKey === "ADMIN" ||
+          role.title === "Owner" ||
           role.title === "Arena Admin" ||
           role.title === "Admin",
       )

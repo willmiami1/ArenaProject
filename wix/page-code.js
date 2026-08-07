@@ -22,6 +22,27 @@ import { authentication } from "wix-members-frontend";
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+const ADMIN_SESSION_RETRY_DELAYS_MS = [250, 500, 1000, 1500, 2500];
+
+async function getAccessWhenSessionIsReady(getAccess) {
+  let access = await getAccess();
+  for (const delay of ADMIN_SESSION_RETRY_DELAYS_MS) {
+    if (access?.state !== "login-required") return access;
+    await wait(delay);
+    access = await getAccess();
+  }
+  if (access?.state === "login-required") {
+    throw new Error(
+      "Wix login completed, but the member session is not available yet. Wait a moment and try again.",
+    );
+  }
+  return access;
+}
+
+async function promptLogin(getAccess) {
+  await authentication.promptLogin({ mode: "login", modal: false });
+  return getAccessWhenSessionIsReady(getAccess);
+}
 
 async function loadPublicArenaDataWhenReady() {
   let lastError;
@@ -77,16 +98,14 @@ $w.onReady(() => {
       } else if (message.action === "getAdminAccess") {
         data = await getAdminAccessFromBackend();
       } else if (message.action === "promptAdminLogin") {
-        await authentication.promptLogin({ mode: "login", modal: true });
-        data = await getAdminAccessFromBackend();
+        data = await promptLogin(getAdminAccessFromBackend);
       } else if (message.action === "logoutAdmin") {
         await authentication.logout();
         data = { loggedOut: true };
       } else if (message.action === "getRegistrationDeskAccess") {
         data = await getRegistrationDeskAccessFromBackend();
       } else if (message.action === "promptRegistrationDeskLogin") {
-        await authentication.promptLogin({ mode: "login", modal: true });
-        data = await getRegistrationDeskAccessFromBackend();
+        data = await promptLogin(getRegistrationDeskAccessFromBackend);
       } else if (message.action === "loadRegistrationDeskData") {
         data = await loadRegistrationDeskData();
       } else if (message.action === "saveRegistrationDeskContestant") {
