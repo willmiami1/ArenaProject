@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   CalendarDays,
@@ -527,10 +527,13 @@ function RiderAccountPage() {
     confirmPin: "",
   });
   const [busy, setBusy] = useState(false);
+  const accountSubmissionInFlight = useRef(false);
   const [message, setMessage] = useState("");
   const [created, setCreated] = useState(false);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (accountSubmissionInFlight.current) return;
+    accountSubmissionInFlight.current = true;
     setBusy(true);
     setMessage("");
     try {
@@ -546,6 +549,7 @@ function RiderAccountPage() {
         error instanceof Error ? error.message : "Rider account could not be created.",
       );
     } finally {
+      accountSubmissionInFlight.current = false;
       setBusy(false);
     }
   };
@@ -964,6 +968,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   const [submissionId, setSubmissionId] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const accountSubmissionInFlight = useRef(false);
   const slide = competition?.competitionType === "slide";
   const individual =
     competition?.competitionType === "draw-pot" ||
@@ -1043,6 +1048,8 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
 
   const createAccount = async (event: FormEvent) => {
     event.preventDefault();
+    if (accountSubmissionInFlight.current) return;
+    accountSubmissionInFlight.current = true;
     setBusy(true);
     setMessage("");
     try {
@@ -1111,6 +1118,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
         error instanceof Error ? error.message : "Account could not be created.",
       );
     } finally {
+      accountSubmissionInFlight.current = false;
       setBusy(false);
     }
   };

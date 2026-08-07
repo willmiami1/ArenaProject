@@ -28,6 +28,8 @@ const REGISTRATION_ROLE_SECRET = "ArenaRegistrationRoleId";
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
 const ONLINE_REGISTRATION_LEAD_MS = 60 * 60 * 1000;
+const ACCOUNT_RECONCILIATION_ATTEMPTS = 6;
+const REVISION_WRITE_ATTEMPTS = 3;
 
 const registrationClosesAt = (event) =>
   new Date(`${event.date}T${event.startTime}:00`).getTime() -
@@ -229,6 +231,151 @@ const constantTimeEqual = (left, right) => {
   }
   return difference === 0;
 };
+
+const arenaRecordStorageId = (collectionId, recordId) =>
+  createHash("sha256")
+    .update(`${collectionId}:${recordId}`)
+    .digest("hex")
+    .slice(0, 32);
+
+async function readOptionalItem(collectionId, itemId) {
+  try {
+    return await wixData.get(collectionId, itemId, OPTIONS);
+  } catch (error) {
+    if (error?.code === "WDE0025" || error?.code === "WDE0026") return null;
+    throw error;
+  }
+}
+
+const publicContestantAccountResult = (workspace, event, contestant) => {
+  const contestants = workspace.contestants.some(
+    (item) => item.id === contestant.id,
+  )
+    ? workspace.contestants
+    : [...workspace.contestants, contestant];
+  return {
+    contestant: {
+      id: contestant.id,
+      name: contestant.name,
+      role: contestant.role,
+      headerHandicap: contestant.headerHandicap,
+      heelerHandicap: contestant.heelerHandicap,
+      horses: contestant.horses || [],
+    },
+    partners:
+      event.competitionType === "pick-only" ||
+      event.competitionType === "slide" ||
+      event.competitionType === "pick-and-draw"
+        ? availablePartners({ ...workspace, contestants }, event, contestant)
+        : [],
+  };
+};
+
+async function findMatchingContestantAccount({
+  credentialId,
+  contestantId,
+  email,
+  phone,
+  pin,
+}) {
+  const profileId = arenaRecordStorageId(
+    COLLECTIONS.contestants,
+    contestantId,
+  );
+  let credential = await readOptionalItem(
+    CREDENTIALS_COLLECTION,
+    credentialId,
+  );
+  if (!credential) {
+    const credentials = await wixData
+      .query(CREDENTIALS_COLLECTION)
+      .eq("emailNormalized", email)
+      .limit(1)
+      .find(OPTIONS);
+    credential = credentials.items[0] || null;
+  }
+  if (!credential) return null;
+  if (
+    credential.contestantId !== contestantId ||
+    credential.emailNormalized !== email
+  ) {
+    return null;
+  }
+  const authenticatedId = await verifyContestantCredentials(email, pin);
+  if (authenticatedId !== contestantId) return null;
+
+  for (
+    let attempt = 1;
+    attempt <= ACCOUNT_RECONCILIATION_ATTEMPTS;
+    attempt += 1
+  ) {
+    let profile = await readOptionalItem(COLLECTIONS.contestants, profileId);
+    if (!profile) {
+      const profiles = await wixData
+        .query(COLLECTIONS.contestants)
+        .eq("appId", contestantId)
+        .limit(1)
+        .find(OPTIONS);
+      profile = profiles.items[0] || null;
+    }
+    if (profile) {
+      if (profile.appId !== contestantId) return null;
+      try {
+        const contestant =
+          typeof profile.payload === "string"
+            ? JSON.parse(profile.payload)
+            : profile.payload;
+        if (
+          contestant?.id !== contestantId ||
+          normalizeEmail(contestant.email) !== email ||
+          String(contestant.phone || "").replace(/\D/g, "") !== phone
+        ) {
+          return null;
+        }
+        return contestant;
+      } catch {
+        return null;
+      }
+    }
+    if (attempt < ACCOUNT_RECONCILIATION_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 50));
+    }
+  }
+  return null;
+}
+
+async function bumpRevision(revisionId, context) {
+  let lastError;
+  for (let attempt = 1; attempt <= REVISION_WRITE_ATTEMPTS; attempt += 1) {
+    try {
+      const current = await readOptionalItem(SETTINGS_COLLECTION, revisionId);
+      await wixData.save(
+        SETTINGS_COLLECTION,
+        {
+          ...(current || {}),
+          _id: revisionId,
+          value: Number(current?.value || 0) + 1,
+          updatedAt: new Date(),
+        },
+        OPTIONS,
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < REVISION_WRITE_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 50));
+      }
+    }
+  }
+  console.error("Arena revision update failed after a durable write.", {
+    ...context,
+    revisionId,
+    attempts: REVISION_WRITE_ATTEMPTS,
+    code: lastError?.code || "",
+    message:
+      lastError instanceof Error ? lastError.message : String(lastError),
+  });
+}
 
 async function readAll(collectionId) {
   let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
@@ -1155,15 +1302,10 @@ export const saveRegistrationDeskContestant = webMethod(
       },
       OPTIONS,
     );
-    await wixData.save(
-      SETTINGS_COLLECTION,
-      {
-        _id: STAFF_REVISION_ID,
-        value: workspace.staffRevision + 1,
-        updatedAt: new Date(),
-      },
-      OPTIONS,
-    );
+    await bumpRevision(STAFF_REVISION_ID, {
+      action: "saveRegistrationDeskContestant",
+      contestantId: id,
+    });
     return {
       contestant,
       data: registrationDeskProjection(await readWorkspace()),
@@ -1402,8 +1544,8 @@ export const createContestantAccount = webMethod(
     const phone = String(request.phone || "").replace(/\D/g, "");
     const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ").toUpperCase();
     const role = String(request.role || "");
-    const headerHandicap = Number(request.headerHandicap || 3);
-    const heelerHandicap = Number(request.heelerHandicap || 3);
+    const headerHandicap = role === "Heeler" ? 0 : Number(request.headerHandicap);
+    const heelerHandicap = role === "Header" ? 0 : Number(request.heelerHandicap);
     if (name.length < 2 || name.length > 100) {
       throw new Error("Enter your full name.");
     }
@@ -1430,11 +1572,32 @@ export const createContestantAccount = webMethod(
     ) {
       throw new Error("Enter valid handicaps and a four-digit PIN.");
     }
+    const contestantId = `contestant-${createHash("sha256")
+      .update(`contestant-phone:${phone}`)
+      .digest("hex")
+      .slice(0, 24)}`;
+    const credentialId = createHash("sha256")
+      .update(`contestant-credential:${email}`)
+      .digest("hex")
+      .slice(0, 32);
     const workspace = await readWorkspace();
     const event = workspace.events.find(
       (item) => item.id === request.competitionId,
     );
-    if (!event || event.status !== "Upcoming") {
+    if (!event) {
+      throw new Error("This competition is not accepting new accounts.");
+    }
+    const matchingAccount = await findMatchingContestantAccount({
+      credentialId,
+      contestantId,
+      email,
+      phone,
+      pin: request.pin,
+    });
+    if (matchingAccount) {
+      return publicContestantAccountResult(workspace, event, matchingAccount);
+    }
+    if (event.status !== "Upcoming") {
       throw new Error("This competition is not accepting new accounts.");
     }
     assertOnlineRegistrationOpen(event);
@@ -1461,10 +1624,6 @@ export const createContestantAccount = webMethod(
     ) {
       throw new Error("A contestant account already uses that phone number.");
     }
-    const contestantId = `contestant-${createHash("sha256")
-      .update(`contestant-phone:${phone}`)
-      .digest("hex")
-      .slice(0, 24)}`;
     const submittedAt = new Date().toISOString();
     const contestant = {
       id: contestantId,
@@ -1479,10 +1638,6 @@ export const createContestantAccount = webMethod(
       source: "online",
       submittedAt,
     };
-    const credentialId = createHash("sha256")
-      .update(`contestant-credential:${email}`)
-      .digest("hex")
-      .slice(0, 32);
     const pepper = await getSecret(PIN_PEPPER_SECRET);
     const salt = randomBytes(16).toString("hex");
     try {
@@ -1500,8 +1655,25 @@ export const createContestantAccount = webMethod(
         },
         OPTIONS,
       );
-    } catch {
-      throw new Error("A contestant account already uses that email.");
+    } catch (error) {
+      const retryAccount = await findMatchingContestantAccount({
+        credentialId,
+        contestantId,
+        email,
+        phone,
+        pin: request.pin,
+      });
+      if (retryAccount) {
+        return publicContestantAccountResult(workspace, event, retryAccount);
+      }
+      const conflictingCredential = await readOptionalItem(
+        CREDENTIALS_COLLECTION,
+        credentialId,
+      );
+      if (conflictingCredential) {
+        throw new Error("A contestant account already uses that email.");
+      }
+      throw error;
     }
     try {
       const inserted = await insertUniqueArenaRecord(
@@ -1517,35 +1689,12 @@ export const createContestantAccount = webMethod(
         .catch(() => null);
       throw error;
     }
-    await wixData.save(
-      SETTINGS_COLLECTION,
-      {
-        _id: ONLINE_REVISION_ID,
-        value: workspace.onlineRevision + 1,
-        updatedAt: new Date(),
-      },
-      OPTIONS,
-    );
-    const updatedWorkspace = {
-      ...workspace,
-      contestants: [...workspace.contestants, contestant],
-    };
-    return {
-      contestant: {
-        id: contestant.id,
-        name: contestant.name,
-        role: contestant.role,
-        headerHandicap: contestant.headerHandicap,
-        heelerHandicap: contestant.heelerHandicap,
-        horses: contestant.horses || [],
-      },
-      partners:
-        event.competitionType === "pick-only" ||
-        event.competitionType === "slide" ||
-        event.competitionType === "pick-and-draw"
-          ? availablePartners(updatedWorkspace, event, contestant)
-          : [],
-    };
+    await bumpRevision(ONLINE_REVISION_ID, {
+      action: "createContestantAccount",
+      contestantId,
+      competitionId: request.competitionId,
+    });
+    return publicContestantAccountResult(workspace, event, contestant);
   },
 );
 
@@ -2320,17 +2469,17 @@ async function createSignupRecords(request, authenticatedId, source) {
         insertUniqueArenaRecord(COLLECTIONS.registrations, registration),
       ),
     ]);
-    await wixData.save(
-      SETTINGS_COLLECTION,
+    await bumpRevision(
+      source === "online" ? ONLINE_REVISION_ID : STAFF_REVISION_ID,
       {
-        _id: source === "online" ? ONLINE_REVISION_ID : STAFF_REVISION_ID,
-        value:
+        action:
           source === "online"
-            ? workspace.onlineRevision + 1
-            : workspace.staffRevision + 1,
-        updatedAt: new Date(),
+            ? "submitOnlineSignup"
+            : "submitRegistrationDeskSignup",
+        contestantId: contestant.id,
+        competitionId: event.id,
+        submissionId: request.submissionId,
       },
-      OPTIONS,
     );
     return {
       submissionId: request.submissionId,

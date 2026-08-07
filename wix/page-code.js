@@ -22,6 +22,10 @@ import { authentication } from "wix-members-frontend";
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+const ADMIN_LOGOUT_ACTIONS = new Set([
+  "logoutAdmin",
+  "logoutRegistrationDesk",
+]);
 const ADMIN_SESSION_RETRY_DELAYS_MS = [250, 500, 1000, 1500, 2500];
 
 async function getAccessWhenSessionIsReady(getAccess) {
@@ -99,9 +103,6 @@ $w.onReady(() => {
         data = await getAdminAccessFromBackend();
       } else if (message.action === "promptAdminLogin") {
         data = await promptLogin(getAdminAccessFromBackend);
-      } else if (message.action === "logoutAdmin") {
-        await authentication.logout();
-        data = { loggedOut: true };
       } else if (message.action === "getRegistrationDeskAccess") {
         data = await getRegistrationDeskAccessFromBackend();
       } else if (message.action === "promptRegistrationDeskLogin") {
@@ -114,6 +115,9 @@ $w.onReady(() => {
         data = await setRegistrationDeskContestantPin(message.data);
       } else if (message.action === "submitRegistrationDeskSignup") {
         data = await submitRegistrationDeskSignup(message.data);
+      } else if (ADMIN_LOGOUT_ACTIONS.has(message.action)) {
+        await authentication.logout();
+        data = { loggedOut: true };
       } else {
         throw new Error("Unsupported Arena Command action.");
       }
@@ -124,12 +128,15 @@ $w.onReady(() => {
         data,
       });
     } catch (error) {
-      console.error("Arena Command persistence failed.", error);
+      console.error("Arena Command action failed.", {
+        action: message.action,
+        message: error instanceof Error ? error.message : String(error),
+      });
       embed.postMessage({
         source: "arena-wix-host",
         requestId: message.requestId,
         ok: false,
-        error: error?.message || "Wix Data request failed.",
+        error: error?.message || "The requested Arena action failed.",
       });
     } finally {
       pendingRequests.delete(message.requestId);
