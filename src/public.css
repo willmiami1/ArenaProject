@@ -336,3 +336,5 @@
 @media (prefers-reduced-motion:reduce) {
   .public-site *,.public-site *::before,.public-site *::after { scroll-behavior: auto!important; transition: none!important; }
 }
+.public-account-form input:not([type="email"]) { text-transform: uppercase; }
+.public-account-form input[type="email"] { text-transform: lowercase; }
