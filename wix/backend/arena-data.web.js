@@ -1222,7 +1222,7 @@ export const setRegistrationDeskContestantPin = webMethod(
 );
 
 export const loadPublicArenaData = webMethod(Permissions.Anyone, async () =>
-  publicProjection(await readWorkspace({ includeSpectators: false })),
+  publicProjection(await readWorkspace()),
 );
 
 export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
