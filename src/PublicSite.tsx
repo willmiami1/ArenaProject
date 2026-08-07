@@ -538,11 +538,11 @@ function RiderAccountPage() {
         </div>
       ) : (
         <form className="public-account-form" onSubmit={submit}>
-          <label>Full name<input required maxLength={100} autoComplete="name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} /></label>
-          <label>Email address<input required type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} /></label>
+          <label>Full name<input required maxLength={100} autoComplete="name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value.toUpperCase() })} /></label>
+          <label>Email address<input required type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value.toLowerCase() })} /></label>
           <label>Phone number<input required type="tel" autoComplete="tel" value={account.phone} onChange={(event) => setAccount({ ...account, phone: event.target.value })} /></label>
-          <label>Hometown<input maxLength={100} autoComplete="address-level2" value={account.hometown} onChange={(event) => setAccount({ ...account, hometown: event.target.value })} /></label>
-          <label>Horse name (optional)<input maxLength={100} value={account.horseName ?? ""} onChange={(event) => setAccount({ ...account, horseName: event.target.value })} /></label>
+          <label>Hometown<input maxLength={100} autoComplete="address-level2" value={account.hometown} onChange={(event) => setAccount({ ...account, hometown: event.target.value.toUpperCase() })} /></label>
+          <label>Horse name (optional)<input maxLength={100} value={account.horseName ?? ""} onChange={(event) => setAccount({ ...account, horseName: event.target.value.toUpperCase() })} /></label>
           <label>Roping position<select value={account.role} onChange={(event) => setAccount({ ...account, role: event.target.value as ContestantAccountRequest["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
           <label>Header handicap<input required type="number" min={0} max={20} step={0.5} value={account.headerHandicap} onChange={(event) => setAccount({ ...account, headerHandicap: Number(event.target.value) })} /></label>
           <label>Heeler handicap<input required type="number" min={0} max={20} step={0.5} value={account.heelerHandicap} onChange={(event) => setAccount({ ...account, heelerHandicap: Number(event.target.value) })} /></label>
@@ -1138,10 +1138,10 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
             </form>
           ) : (
             <form className="public-account-form" onSubmit={createAccount}>
-              <label>Full name<input required maxLength={100} autoComplete="name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} /></label>
-              <label>Email address<input required type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} /></label>
+              <label>Full name<input required maxLength={100} autoComplete="name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value.toUpperCase() })} /></label>
+              <label>Email address<input required type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value.toLowerCase() })} /></label>
               <label>Phone number<input required type="tel" autoComplete="tel" value={account.phone} onChange={(event) => setAccount({ ...account, phone: event.target.value })} /></label>
-              <label>Hometown<input autoComplete="address-level2" value={account.hometown} onChange={(event) => setAccount({ ...account, hometown: event.target.value })} /></label>
+              <label>Hometown<input autoComplete="address-level2" value={account.hometown} onChange={(event) => setAccount({ ...account, hometown: event.target.value.toUpperCase() })} /></label>
               <label>Roping position<select value={account.role} onChange={(event) => setAccount({ ...account, role: event.target.value as ContestantAccountRequest["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
               {account.role !== "Heeler" && <label>Header handicap<input required type="number" min="0" max="20" step="0.5" value={account.headerHandicap} onChange={(event) => setAccount({ ...account, headerHandicap: Number(event.target.value) })} /></label>}
               {account.role !== "Header" && <label>Heeler handicap<input required type="number" min="0" max="20" step="0.5" value={account.heelerHandicap} onChange={(event) => setAccount({ ...account, heelerHandicap: Number(event.target.value) })} /></label>}

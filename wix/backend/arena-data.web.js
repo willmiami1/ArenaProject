@@ -1349,10 +1349,10 @@ export const createContestantAccount = webMethod(
     if (!validAppId(request.competitionId)) {
       throw new Error("Competition is unavailable.");
     }
-    const name = String(request.name || "").trim().replace(/\s+/g, " ");
+    const name = String(request.name || "").trim().replace(/\s+/g, " ").toUpperCase();
     const email = normalizeEmail(request.email);
     const phone = String(request.phone || "").replace(/\D/g, "");
-    const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ");
+    const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ").toUpperCase();
     const role = String(request.role || "");
     const headerHandicap = Number(request.headerHandicap || 3);
     const heelerHandicap = Number(request.heelerHandicap || 3);
@@ -1504,11 +1504,11 @@ export const createContestantAccount = webMethod(
 export const createRiderAccount = webMethod(
   Permissions.Anyone,
   async (request) => {
-    const name = String(request.name || "").trim().replace(/\s+/g, " ");
+    const name = String(request.name || "").trim().replace(/\s+/g, " ").toUpperCase();
     const email = normalizeEmail(request.email);
     const phone = String(request.phone || "").replace(/\D/g, "");
-    const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ");
-    const horseName = String(request.horseName || "").trim().replace(/\s+/g, " ");
+    const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ").toUpperCase();
+    const horseName = String(request.horseName || "").trim().replace(/\s+/g, " ").toUpperCase();
     const role = String(request.role || "");
     const headerHandicap = Number(request.headerHandicap);
     const heelerHandicap = Number(request.heelerHandicap);

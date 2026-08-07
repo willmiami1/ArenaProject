@@ -11,6 +11,7 @@ const validAccount: ContestantAccountRequest = {
   email: " JANE@Example.COM ",
   phone: "(555) 234-5678",
   hometown: "  Fort   Worth ",
+  horseName: "  Blue   Moon ",
   role: "Both",
   headerHandicap: 5.5,
   heelerHandicap: 6,
@@ -20,10 +21,11 @@ const validAccount: ContestantAccountRequest = {
 describe("contestant account validation", () => {
   it("normalizes valid public account details", () => {
     expect(validateContestantAccount(validAccount)).toMatchObject({
-      name: "Jane Roper",
+      name: "JANE ROPER",
       email: "jane@example.com",
       phone: "5552345678",
-      hometown: "Fort Worth",
+      hometown: "FORT WORTH",
+      horseName: "BLUE MOON",
       headerHandicap: 5.5,
       heelerHandicap: 6,
     });

@@ -20,10 +20,11 @@ export const normalizedContestantPhone = (value: string) =>
 export function validateContestantAccount(
   request: ContestantAccountRequest,
 ) {
-  const name = request.name.trim().replace(/\s+/g, " ");
+  const name = request.name.trim().replace(/\s+/g, " ").toUpperCase();
   const email = normalizedContestantEmail(request.email);
   const phone = normalizedContestantPhone(request.phone);
-  const hometown = request.hometown.trim().replace(/\s+/g, " ");
+  const hometown = request.hometown.trim().replace(/\s+/g, " ").toUpperCase();
+  const horseName = request.horseName?.trim().replace(/\s+/g, " ").toUpperCase();
   if (name.length < 2 || name.length > 100) {
     throw new Error("Enter your full name.");
   }
@@ -59,6 +60,7 @@ export function validateContestantAccount(
     email,
     phone,
     hometown,
+    horseName,
     headerHandicap,
     heelerHandicap,
   };
@@ -96,6 +98,7 @@ export function createLocalContestantAccount(
     headerHandicap: validated.headerHandicap,
     heelerHandicap: validated.heelerHandicap,
     photo: "",
+    horses: validated.horseName ? [validated.horseName] : [],
   };
   return { contestant, contestants: [...data.contestants, contestant] };
 }
