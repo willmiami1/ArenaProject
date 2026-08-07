@@ -148,32 +148,36 @@ function SocialLinks() {
 function PublicHeader() {
   const [open, setOpen] = useState(false);
   return (
-    <header className="public-header">
-      <a className="public-brand" href={href("home")} aria-label="Destiny Ranch Arena home">
-        <img src="./destiny-ranch-arena-logo.png" alt="" />
-        <strong>Destiny Ranch Arena</strong>
-      </a>
-      <button
-        className="public-menu"
-        aria-label={open ? "Close navigation" : "Open navigation"}
-        aria-expanded={open}
-        aria-controls="public-navigation"
-        onClick={() => setOpen((value) => !value)}
-      >
-        {open ? <X /> : <Menu />}
-      </button>
-      <nav id="public-navigation" className={open ? "open" : ""} aria-label="Public navigation">
-        <a href={href("home")} onClick={() => setOpen(false)}>Home</a>
-        <a href={eventsHref} onClick={() => setOpen(false)}>Events</a>
-        <a className="public-header-cta" href={href("rider-account")} onClick={() => setOpen(false)}>
+    <header className="public-header public-main-header">
+      <div className="public-header-row">
+        <a className="public-brand" href={href("home")} aria-label="Destiny Ranch Arena home">
+          <img src="./destiny-ranch-arena-logo.png" alt="" />
+          <strong>Destiny Ranch Arena</strong>
+        </a>
+        <button
+          className="public-menu"
+          aria-label={open ? "Close navigation" : "Open navigation"}
+          aria-expanded={open}
+          aria-controls="public-navigation"
+          onClick={() => setOpen((value) => !value)}
+        >
+          {open ? <X /> : <Menu />}
+        </button>
+        <nav id="public-navigation" className={open ? "open" : ""} aria-label="Public navigation">
+          <a href={href("home")} onClick={() => setOpen(false)}>Home</a>
+          <a href={eventsHref} onClick={() => setOpen(false)}>Events</a>
+          <a href={operationalHref("command")} onClick={() => setOpen(false)}><ShieldCheck size={16} /> Admin login</a>
+          <SocialLinks />
+        </nav>
+      </div>
+      <div className="public-header-actions" aria-label="Rider and spectator actions">
+        <a className="public-header-cta" href={href("rider-account")}>
           <UsersRound size={16} /> CREATE A RIDER ACCOUNT
         </a>
-        <a className="public-header-game" href={liveEventsHref} onClick={() => setOpen(false)}>
+        <a className="public-header-game" href={liveEventsHref}>
           <Trophy size={16} /> Play Cowboys x Steers
         </a>
-        <a href={operationalHref("command")} onClick={() => setOpen(false)}><ShieldCheck size={16} /> Admin login</a>
-        <SocialLinks />
-      </nav>
+      </div>
     </header>
   );
 }

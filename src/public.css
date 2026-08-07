@@ -15,16 +15,20 @@
 .public-site button,.public-site a,.public-site input,.public-site select { touch-action: manipulation; }
 .public-site a { color: inherit; text-decoration: none; }
 .public-header { position: sticky; z-index: 20; top: 0; min-height: 86px; display: flex; align-items: center; justify-content: space-between; width: 100%; margin: auto; padding: 12px max(22px,calc((100vw - 1400px)/2 + 72px)); background: rgba(11,9,7,.96); border-bottom: 1px solid rgba(234,220,198,.2); box-shadow: 0 8px 24px rgba(0,0,0,.28); backdrop-filter: blur(12px); }
+.public-main-header { display: grid; gap: 8px; }
+.public-header-row { display: flex; align-items: center; justify-content: space-between; min-width: 0; }
 .public-brand { display: flex; align-items: center; gap: 13px; }
 .public-brand img { width: 76px; height: 54px; object-fit: contain; background: #090b09; border-radius: 2px; }
 .public-brand strong { display: block; color: var(--public-cream); font-family: "Manrope",sans-serif; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
 .public-header nav { display: flex; align-items: center; gap: clamp(22px,3vw,42px); }
 .public-header nav a { display: inline-flex; align-items: center; gap: 7px; padding: 10px 0; font-size: 12px; font-weight: 700; border-bottom: 1px solid transparent; }
 .public-header nav a:hover { border-color: var(--public-tan); }
-.public-header nav .public-header-cta { padding: 10px 14px; color: #fff; background: var(--public-brown); border: 1px solid var(--public-brown); }
-.public-header nav .public-header-cta:hover { background: #4f2d1d; border-color: var(--public-tan); }
-.public-header nav .public-header-game { padding: 10px 14px; color: var(--public-cream); border: 1px solid var(--public-tan); }
-.public-header nav .public-header-game:hover { color: #17130f; background: var(--public-tan); }
+.public-header-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.public-header-actions a { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 14px; font-size: 11px; font-weight: 800; text-align: center; text-transform: uppercase; letter-spacing: .04em; }
+.public-header-actions .public-header-cta { color: #fff; background: var(--public-brown); border: 1px solid var(--public-brown); }
+.public-header-actions .public-header-cta:hover { background: #4f2d1d; border-color: var(--public-tan); }
+.public-header-actions .public-header-game { color: var(--public-cream); border: 1px solid var(--public-tan); }
+.public-header-actions .public-header-game:hover { color: #17130f; background: var(--public-tan); }
 .public-social-links { display: inline-flex; align-items: center; gap: 8px; }
 .public-social-links a { width: 36px; height: 36px; display: grid!important; place-items: center; padding: 0!important; color: var(--public-cream); border: 1px solid rgba(234,220,198,.28)!important; border-radius: 50%; }
 .public-social-links a:hover { color: #17130f; background: var(--public-tan); border-color: var(--public-tan)!important; }
@@ -251,6 +255,7 @@
   .public-header nav>a { min-height: 48px; padding: 13px 14px; border: 0; }
   .public-header .public-social-links { padding: 8px 14px; }
   .public-header .public-social-links a { padding: 0; }
+  .public-header-actions a { min-height: 44px; }
   .public-main { padding-inline: clamp(22px,4vw,38px); }
   .public-hero { min-height: auto; grid-template-columns: 1fr; gap: 48px; padding-top: 70px; }
   .public-hero-media { width: min(620px,calc(100% - 32px)); justify-self: center; }
@@ -271,6 +276,8 @@
   .public-brand img { width: 60px; height: 43px; }
   .public-brand strong { max-width: 135px; font-size: 12px; line-height: 1.2; white-space: normal; }
   .public-header nav { right: 16px; left: 16px; }
+  .public-header-actions { gap: 6px; }
+  .public-header-actions a { padding: 8px 6px; font-size: 9px; line-height: 1.25; letter-spacing: .02em; }
   .public-main { padding: 0 max(16px,env(safe-area-inset-right)) 72px max(16px,env(safe-area-inset-left)); }
   .public-hero { gap: 36px; margin-bottom: 42px; padding: 44px 0 58px; }
   .public-hero h1 { font-size: clamp(42px,13.2vw,62px); line-height: .98; }
