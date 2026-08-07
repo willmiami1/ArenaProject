@@ -145,8 +145,11 @@ function SocialLinks() {
   );
 }
 
-function PublicHeader() {
+function PublicHeader({ liveCompetitionId }: { liveCompetitionId?: string }) {
   const [open, setOpen] = useState(false);
+  const spectatorGameHref = liveCompetitionId
+    ? href("spectator", liveCompetitionId)
+    : liveEventsHref;
   return (
     <header className="public-header public-main-header">
       <div className="public-header-row">
@@ -174,7 +177,7 @@ function PublicHeader() {
         <a className="public-header-cta" href={href("rider-account")}>
           <UsersRound size={16} /> CREATE A RIDER ACCOUNT
         </a>
-        <a className="public-header-game" href={liveEventsHref}>
+        <a className="public-header-game" href={spectatorGameHref}>
           <Trophy size={16} /> Play Cowboys x Steers
         </a>
       </div>
@@ -251,7 +254,7 @@ function RopingCard({
           </a>
         )}
       </div>
-      {!scheduleOnly && competition.status === "Live" && (
+      {competition.status === "Live" && (
         <aside className="public-live-actions">
           <a className="public-live-results" href={`${href("competition", competition.id)}#results`}>
             <Trophy size={22} />
@@ -259,7 +262,7 @@ function RopingCard({
             <span>{competition.resultsPublished ? "View live standings" : "Standings pending"}</span>
           </a>
           <a className="public-button compact" href={href("spectator", competition.id)}>
-            Spectator picks
+            Play Cowboys x Steers
           </a>
         </aside>
       )}
@@ -1274,7 +1277,11 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
   return (
     <div className="public-site">
       {/* THESIS: Arena day begins at the gate, not in a generic card grid. OWN-WORLD: ink-black ranch marks, bone paper, arena-gold signals, and squared field forms. STORY: find the next roping, understand the card, enter, and return for official results. FIRST VIEWPORT: oversized ride-your-run statement beside a stamped DR mark with the next event directly below. FORM: established ranch identity extended into a public event ledger. */}
-      <PublicHeader />
+      <PublicHeader
+        liveCompetitionId={(data?.competitions ?? data?.meets.flatMap((meet) => meet.competitions) ?? []).find(
+          (competition) => competition.status === "Live",
+        )?.id}
+      />
       <main className="public-main">
         {route.kind === "home" ? <HomePage data={data} scheduleError={error} /> :
           route.kind === "rider-account" ? <RiderAccountPage /> :
