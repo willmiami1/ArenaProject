@@ -486,11 +486,26 @@ function SpectatorPage({
   );
 }
 
+type PublicAccountDraft = Omit<ContestantAccountRequest, "name"> & {
+  firstName: string;
+  lastName: string;
+  confirmPin: string;
+};
+
+const contestantAccountRequest = ({
+  firstName,
+  lastName,
+  confirmPin: _confirmPin,
+  ...account
+}: PublicAccountDraft): ContestantAccountRequest => ({
+  ...account,
+  name: `${firstName.trim()} ${lastName.trim()}`,
+});
+
 function RiderAccountPage() {
-  const [account, setAccount] = useState<
-    ContestantAccountRequest & { confirmPin: string }
-  >({
-    name: "",
+  const [account, setAccount] = useState<PublicAccountDraft>({
+    firstName: "",
+    lastName: "",
     email: "",
     phone: "",
     hometown: "",
@@ -512,7 +527,7 @@ function RiderAccountPage() {
       if (account.pin !== account.confirmPin) {
         throw new Error("PIN confirmation does not match.");
       }
-      const result = await createRiderAccount(account);
+      const result = await createRiderAccount(contestantAccountRequest(account));
       if (!result) throw new Error("Rider account could not be created.");
       setCreated(true);
       setMessage(`Welcome, ${result.name}. Your rider account is ready.`);
@@ -538,7 +553,8 @@ function RiderAccountPage() {
         </div>
       ) : (
         <form className="public-account-form" onSubmit={submit}>
-          <label>Full name<input required maxLength={100} autoComplete="name" autoCapitalize="characters" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value.toUpperCase() })} /></label>
+          <label>First name<input required maxLength={50} autoComplete="given-name" autoCapitalize="characters" value={account.firstName} onChange={(event) => setAccount({ ...account, firstName: event.target.value.toUpperCase() })} /></label>
+          <label>Last name<input required maxLength={50} autoComplete="family-name" autoCapitalize="characters" value={account.lastName} onChange={(event) => setAccount({ ...account, lastName: event.target.value.toUpperCase() })} /></label>
           <label>Email address<input required type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value.toLowerCase() })} /></label>
           <label>Phone number<input required type="tel" autoComplete="tel" value={account.phone} onChange={(event) => setAccount({ ...account, phone: event.target.value })} /></label>
           <label>Hometown<input maxLength={100} autoComplete="address-level2" autoCapitalize="characters" value={account.hometown} onChange={(event) => setAccount({ ...account, hometown: event.target.value.toUpperCase() })} /></label>
@@ -917,10 +933,9 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   const [authMode, setAuthMode] = useState<"login" | "create">("login");
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
-  const [account, setAccount] = useState<
-    ContestantAccountRequest & { confirmPin: string }
-  >({
-    name: "",
+  const [account, setAccount] = useState<PublicAccountDraft>({
+    firstName: "",
+    lastName: "",
     email: "",
     phone: "",
     hometown: "",
@@ -1026,7 +1041,10 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       }
       let result: SignupOptions | null;
       if (isWixEmbed()) {
-        result = await createContestantAccount(competition.id, account);
+        result = await createContestantAccount(
+          competition.id,
+          contestantAccountRequest(account),
+        );
       } else {
         const saved = window.localStorage.getItem(localWorkspaceKey);
         const workspace = saved
@@ -1036,7 +1054,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
         workspace.spectatorPredictions ??= [];
         const created = createLocalContestantAccount(
           workspace,
-          account,
+          contestantAccountRequest(account),
           `contestant-${window.crypto.randomUUID?.() ?? Date.now()}`,
         );
         workspace.contestants = created.contestants;
@@ -1138,7 +1156,8 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
             </form>
           ) : (
             <form className="public-account-form" onSubmit={createAccount}>
-              <label>Full name<input required maxLength={100} autoComplete="name" autoCapitalize="characters" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value.toUpperCase() })} /></label>
+              <label>First name<input required maxLength={50} autoComplete="given-name" autoCapitalize="characters" value={account.firstName} onChange={(event) => setAccount({ ...account, firstName: event.target.value.toUpperCase() })} /></label>
+              <label>Last name<input required maxLength={50} autoComplete="family-name" autoCapitalize="characters" value={account.lastName} onChange={(event) => setAccount({ ...account, lastName: event.target.value.toUpperCase() })} /></label>
               <label>Email address<input required type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value.toLowerCase() })} /></label>
               <label>Phone number<input required type="tel" autoComplete="tel" value={account.phone} onChange={(event) => setAccount({ ...account, phone: event.target.value })} /></label>
               <label>Hometown<input autoComplete="address-level2" autoCapitalize="characters" value={account.hometown} onChange={(event) => setAccount({ ...account, hometown: event.target.value.toUpperCase() })} /></label>
