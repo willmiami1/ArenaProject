@@ -1,5 +1,6 @@
 import type {
   ArenaData,
+  ArenaEvent,
   Spectator,
   SpectatorPrediction,
   Team,
@@ -18,8 +19,37 @@ export interface SpectatorLeaderboardRow {
 export function predictionIsOpen(team: Team, now = new Date()) {
   return (
     team.status === "ready" &&
+    !team.rolled &&
     (!team.predictionClosesAt ||
       Date.parse(team.predictionClosesAt) > now.getTime())
+  );
+}
+
+export function predictionRunsForEvent(event: ArenaEvent, teams: Team[]) {
+  const eligible = teams
+    .filter(
+      (team) =>
+        team.eventId === event.id &&
+        !team.scratched &&
+        !team.rolled &&
+        team.status === "ready",
+    )
+    .sort(
+      (left, right) =>
+        left.round - right.round ||
+        left.drawPosition - right.drawPosition,
+    );
+  const activeRound = Number(event.activeRound || 0);
+  return activeRound > 0
+    ? eligible.filter((team) => team.round === activeRound)
+    : eligible;
+}
+
+export function activePredictionRun(event: ArenaEvent, teams: Team[]) {
+  const eligible = predictionRunsForEvent(event, teams);
+  return (
+    eligible.find((team) => team.id === event.activeRunId) ??
+    eligible[0]
   );
 }
 
@@ -93,6 +123,9 @@ export function createSpectatorPrediction(
   }
   if (!predictionIsOpen(team, now)) {
     throw new Error("Predictions are closed for this run.");
+  }
+  if (activePredictionRun(event, data.teams)?.id !== team.id) {
+    throw new Error("That run is not active at the Run Desk.");
   }
   let spectator = data.spectators.find(
     (item) => item.name.trim().toLowerCase() === name.toLowerCase(),

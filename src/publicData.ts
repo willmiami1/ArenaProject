@@ -1,7 +1,9 @@
 import { competitionName } from "./competition";
 import { publicStandingRows } from "./standings";
 import {
+  activePredictionRun,
   predictionIsOpen,
+  predictionRunsForEvent,
   spectatorLeaderboard,
 } from "./spectatorPredictions";
 import type {
@@ -71,6 +73,7 @@ export interface PublicCompetition {
   incentiveAmountPerTeam: number;
   entryCount: number;
   results: PublicStandingRow[];
+  activePredictionRunId?: string;
   predictionRuns: PublicPredictionRun[];
   spectatorLeaderboards: PublicSpectatorLeaderboardRow[];
 }
@@ -200,6 +203,8 @@ export function projectPublicArenaData(
           registration.status !== "scratched",
       )
       .reduce((sum, registration) => sum + registration.entries, 0);
+    const predictionTeams = predictionRunsForEvent(event, data.teams);
+    const activeRun = activePredictionRun(event, data.teams);
     return {
       id: event.id,
       parentEventId: event.parentEventId,
@@ -232,18 +237,8 @@ export function projectPublicArenaData(
       incentiveAmountPerTeam: event.incentiveAmountPerTeam ?? 0,
       entryCount: fixedEntries + individualEntries,
       results: publicStandingRows(event, data.teams, data.contestants),
-      predictionRuns: data.teams
-        .filter(
-          (team) =>
-            team.eventId === event.id &&
-            !team.scratched &&
-            team.status === "ready",
-        )
-        .sort(
-          (left, right) =>
-            left.round - right.round ||
-            left.drawPosition - right.drawPosition,
-        )
+      activePredictionRunId: activeRun?.id,
+      predictionRuns: predictionTeams
         .map((team) => ({
           id: team.id,
           round: team.round,

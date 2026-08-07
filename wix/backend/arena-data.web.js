@@ -604,9 +604,39 @@ const predictionOutcome = (team) =>
 
 const spectatorPicksAreOpen = (team, now = Date.now()) =>
   !team.scratched &&
+  !team.rolled &&
   team.status === "ready" &&
   (!team.predictionClosesAt ||
     Date.parse(team.predictionClosesAt) > now);
+
+const publicPredictionRunIsEligible = (team) =>
+  !team.scratched && !team.rolled && team.status === "ready";
+
+const publicPredictionRunsForEvent = (event, teams) => {
+  const eligible = teams
+    .filter(
+      (team) =>
+        team.eventId === event.id &&
+        publicPredictionRunIsEligible(team),
+    )
+    .sort(
+      (left, right) =>
+        Number(left.round) - Number(right.round) ||
+        Number(left.drawPosition) - Number(right.drawPosition),
+    );
+  const activeRound = Number(event.activeRound || 0);
+  return activeRound > 0
+    ? eligible.filter((team) => Number(team.round) === activeRound)
+    : eligible;
+};
+
+const activePublicPredictionRun = (event, teams) => {
+  const eligible = publicPredictionRunsForEvent(event, teams);
+  return (
+    eligible.find((team) => team.id === event.activeRunId) ??
+    eligible[0]
+  );
+};
 
 function spectatorLeaderboard(workspace, eventId, round) {
   const spectators = new Map(
@@ -705,18 +735,11 @@ function publicProjection(workspace) {
           )
           .reduce((sum, registration) => sum + Number(registration.entries || 0), 0),
       results: publishedResults(event, workspace.teams, workspace.contestants),
-      predictionRuns: workspace.teams
-        .filter(
-          (team) =>
-            team.eventId === event.id &&
-            !team.scratched &&
-            team.status === "ready",
-        )
-        .sort(
-          (left, right) =>
-            Number(left.round) - Number(right.round) ||
-            Number(left.drawPosition) - Number(right.drawPosition),
-        )
+      activePredictionRunId: activePublicPredictionRun(
+        event,
+        workspace.teams,
+      )?.id,
+      predictionRuns: publicPredictionRunsForEvent(event, workspace.teams)
         .map((team) => {
           const header = contestantsById.get(team.headerId);
           const heeler = contestantsById.get(team.heelerId);
@@ -1440,6 +1463,7 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
     incentiveAmountPerTeam: scheduleNumber(event.incentiveAmountPerTeam),
     entryCount: 0,
     results: [],
+    activePredictionRunId: undefined,
     predictionRuns: [],
     spectatorLeaderboards: [],
   }));
@@ -2547,6 +2571,9 @@ export const submitSpectatorPrediction = webMethod(
     }
     if (!spectatorPicksAreOpen(team)) {
       throw new Error("Predictions are closed for this run.");
+    }
+    if (activePublicPredictionRun(event, workspace.teams)?.id !== team.id) {
+      throw new Error("That run is not active at the Run Desk.");
     }
     const normalizedName = name.toLowerCase();
     const existingSpectator = workspace.spectators.find(

@@ -285,7 +285,10 @@ function SpectatorPage({
   const [busy, setBusy] = useState(false);
   const [roundAnnouncement, setRoundAnnouncement] = useState("");
   const selectedRun =
-    competition?.predictionRuns.find((run) => run.open || !run.closesAt) ??
+    competition?.predictionRuns.find(
+      (run) => run.id === competition.activePredictionRunId,
+    ) ??
+    competition?.predictionRuns.find((run) => run.open) ??
     competition?.predictionRuns[0];
   const activeRound =
     selectedRun?.round ??
@@ -321,9 +324,7 @@ function SpectatorPage({
     return <NotFound />;
   }
   const teamId = selectedRun?.id ?? "";
-  const selectedRunOpen = Boolean(
-    selectedRun && (selectedRun.open || !selectedRun.closesAt),
-  );
+  const selectedRunOpen = Boolean(selectedRun?.open);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const submittedValue = ((event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value;
@@ -1257,17 +1258,50 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       };
     }
     let cancelled = false;
-    const request =
-      route.kind === "home" ||
-      route.kind === "events" ||
-      route.kind === "event" ||
-      route.kind === "competition"
-        ? loadPublicSchedule()
-        : loadPublicArenaData();
-    request
-      .then((result) => { if (!cancelled) setData(result); })
-      .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Events could not be loaded."); });
-    return () => { cancelled = true; };
+    let refreshing = false;
+    let hasUsableData = data !== null;
+    const refresh = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const result =
+          route.kind === "home" ||
+          route.kind === "events" ||
+          route.kind === "event" ||
+          route.kind === "competition"
+            ? await loadPublicSchedule()
+            : await loadPublicArenaData();
+        if (!cancelled) {
+          hasUsableData = true;
+          setData(result);
+          setError("");
+        }
+      } catch (reason) {
+        if (!cancelled && !hasUsableData) {
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Events could not be loaded.",
+          );
+        }
+      } finally {
+        refreshing = false;
+      }
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    void refresh();
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    const interval =
+      route.kind === "spectator" ? window.setInterval(refresh, 1500) : undefined;
+    return () => {
+      cancelled = true;
+      if (interval !== undefined) window.clearInterval(interval);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [route.kind]);
 
   const selected = useMemo(() => {

@@ -3103,7 +3103,9 @@ function RunDesk({
   onRollTeam: (teamId: string, rolled: boolean) => void;
   onSetPredictionCutoff: (teamId: string, predictionClosesAt?: string) => void;
 }) {
-  const [selectedRound, setSelectedRound] = useState(1);
+  const [selectedRound, setSelectedRound] = useState(
+    () => event?.activeRound ?? 1,
+  );
   const [showRideInForm, setShowRideInForm] = useState(false);
   const [rideInMessage, setRideInMessage] = useState("");
   const [timeSheetPreview, setTimeSheetPreview] = useState<{
@@ -3128,7 +3130,9 @@ function RunDesk({
   const nextTeam =
     eventTeams.find((team) => team.status === "ready" && !team.rolled) ??
     eventTeams.find((team) => team.status === "ready");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => event?.activeRunId ?? null,
+  );
   const selected = eventTeams.find((team) => team.id === selectedId) ?? nextTeam;
   const spectatorPicksClosed = Boolean(
     selected?.predictionClosesAt &&
@@ -3137,6 +3141,39 @@ function RunDesk({
   const [rawTime, setRawTime] = useState("");
   const [penalties, setPenalties] = useState("0");
   const [notes, setNotes] = useState("");
+  useEffect(() => {
+    const nextRound = Math.min(
+      Math.max(Number(event?.activeRound || 1), 1),
+      roundCount,
+    );
+    setSelectedRound(nextRound);
+    setSelectedId(event?.activeRunId ?? null);
+    const nextRoundTeams = allEventTeams.filter(
+      (team) => team.round === nextRound,
+    );
+    const nextSelected =
+      nextRoundTeams.find((team) => team.id === event?.activeRunId) ??
+      nextRoundTeams.find((team) => team.status === "ready" && !team.rolled) ??
+      nextRoundTeams.find((team) => team.status === "ready");
+    setRawTime(nextSelected?.rawTime?.toString() ?? "");
+    setPenalties(nextSelected?.penalties.toString() ?? "0");
+    setNotes(nextSelected?.notes ?? "");
+  }, [event?.activeRound, event?.activeRunId, event?.id, roundCount]);
+  const selectActiveRun = (teamId: string | null, round = activeRound) => {
+    setSelectedRound(round);
+    setSelectedId(teamId);
+    if (
+      event &&
+      (event.activeRunId !== (teamId ?? undefined) ||
+        event.activeRound !== round)
+    ) {
+      onUpdateEvent({
+        ...event,
+        activeRunId: teamId ?? undefined,
+        activeRound: round,
+      });
+    }
+  };
   const isEditingResult = Boolean(selected && selected.status !== "ready");
   const contestant = (id: string) =>
     contestants.find((item) => item.id === id);
@@ -3295,16 +3332,32 @@ function RunDesk({
   }, [eventTeams, event, contestants]);
 
   const chooseTeam = (team: Team) => {
-    setSelectedId(team.id);
+    selectActiveRun(team.id);
     setRawTime(team.rawTime?.toString() ?? "");
     setPenalties(team.penalties.toString());
     setNotes(team.notes);
   };
   const toggleRolled = (team: Team) => {
     if (team.status !== "ready") return;
-    onRollTeam(team.id, !team.rolled);
+    const willRoll = !team.rolled;
+    onRollTeam(team.id, willRoll);
     if (team.id === selected?.id) {
-      setSelectedId(null);
+      const followingTeam = willRoll
+        ? eventTeams.find(
+            (candidate) =>
+              candidate.id !== team.id &&
+              candidate.status === "ready" &&
+              !candidate.rolled &&
+              candidate.drawPosition > team.drawPosition,
+          ) ??
+          eventTeams.find(
+            (candidate) =>
+              candidate.id !== team.id &&
+              candidate.status === "ready" &&
+              !candidate.rolled,
+          )
+        : team;
+      selectActiveRun(followingTeam?.id ?? null);
       setRawTime("");
       setPenalties("0");
       setNotes("");
@@ -3348,7 +3401,7 @@ function RunDesk({
       points: status === "complete" && !exceededLimit ? 1 : 0,
       rolled: false,
     });
-    setSelectedId(followingTeam?.id ?? null);
+    selectActiveRun(followingTeam?.id ?? null);
     setRawTime("");
     setPenalties("0");
     setNotes("");
@@ -3364,14 +3417,17 @@ function RunDesk({
       points: 0,
       rolled: false,
     });
-    setSelectedId(selected.id);
+    selectActiveRun(selected.id);
     setRawTime("");
     setPenalties("0");
     setNotes("");
   };
   const changeRound = (round: number) => {
-    setSelectedRound(round);
-    setSelectedId(null);
+    const roundTeams = allEventTeams.filter((team) => team.round === round);
+    const nextRoundTeam =
+      roundTeams.find((team) => team.status === "ready" && !team.rolled) ??
+      roundTeams.find((team) => team.status === "ready");
+    selectActiveRun(nextRoundTeam?.id ?? null, round);
     setRawTime("");
     setPenalties("0");
     setNotes("");
@@ -3426,7 +3482,7 @@ function RunDesk({
       heelerEntryNumber: pairingRun,
     };
     onAddRideIn(rideInTeam);
-    setSelectedId(rideInTeam.id);
+    selectActiveRun(rideInTeam.id, 1);
     setShowRideInForm(false);
     setRideInMessage(
       `Ride-in team added as Draw #${team.drawPosition} in Round 1.`,

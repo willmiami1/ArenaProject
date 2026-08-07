@@ -232,6 +232,45 @@ describe("public grouping and privacy", () => {
       heelerPhoto: undefined,
     });
   });
+
+  it("projects the Run Desk active team and excludes rolled teams", () => {
+    const projected = projectPublicArenaData(
+      workspace(
+        event({
+          status: "Live",
+          activeRunId: "active-team",
+          activeRound: 1,
+        }),
+        [
+          run({
+            id: "rolled-team",
+            status: "ready",
+            rawTime: null,
+            rolled: true,
+          }),
+          run({
+            id: "active-team",
+            drawPosition: 2,
+            status: "ready",
+            rawTime: null,
+          }),
+          run({
+            id: "future-round-team",
+            round: 2,
+            status: "ready",
+            rawTime: null,
+          }),
+        ],
+      ),
+      today,
+    );
+    const competition = projected.competitions[0];
+
+    expect(competition.activePredictionRunId).toBe("active-team");
+    expect(competition.predictionRuns.map((prediction) => prediction.id)).toEqual([
+      "active-team",
+    ]);
+  });
 });
 
 describe("aggregate public standings", () => {
@@ -1209,6 +1248,63 @@ describe("workspace compatibility", () => {
           now,
         ),
       ).not.toThrow();
+    });
+
+    it("removes rolled teams and rejects stale prediction requests", () => {
+      const competition = event({ status: "Live", activeRunId: "team-1" });
+      const rolledRun = run({
+        status: "ready",
+        rawTime: null,
+        rolled: true,
+      });
+      const data = workspace(competition, [rolledRun]);
+
+      expect(projectPublicArenaData(data, now).competitions[0]).toMatchObject({
+        activePredictionRunId: undefined,
+        predictionRuns: [],
+      });
+      expect(() =>
+        createSpectatorPrediction(
+          data,
+          {
+            name: "Taylor Fan",
+            eventId: competition.id,
+            teamId: rolledRun.id,
+            choice: "cowboys",
+          },
+          now,
+        ),
+      ).toThrow("closed");
+    });
+
+    it("rejects predictions for ready teams that are not active at Run Desk", () => {
+      const competition = event({
+        status: "Live",
+        activeRunId: "active-team",
+        activeRound: 1,
+      });
+      const data = workspace(competition, [
+        run({ id: "active-team", status: "ready", rawTime: null }),
+        run({
+          id: "future-team",
+          drawPosition: 2,
+          status: "ready",
+          rawTime: null,
+        }),
+      ]);
+
+      expect(() =>
+        createSpectatorPrediction(
+          data,
+          {
+            name: "Taylor Fan",
+            eventId: competition.id,
+            teamId: "future-team",
+            choice: "cowboys",
+          },
+          now,
+        ),
+      ).toThrow("not active");
     });
 
     it("scores Cowboys on a qualified run and Steer on a no-time", () => {

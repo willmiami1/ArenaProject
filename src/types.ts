@@ -55,6 +55,8 @@ export interface ArenaEvent {
   producerFeePercent: number;
   payoutPercentages: number[];
   drawHistory: DrawSnapshot[];
+  activeRunId?: string;
+  activeRound?: number;
 }
 
 export interface Contestant {
