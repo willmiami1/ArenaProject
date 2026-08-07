@@ -827,6 +827,38 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     spectators: latest.spectators,
     spectatorPredictions: latest.spectatorPredictions,
   };
+  const removedContestantIds = new Set(
+    latest.contestants
+      .filter(
+        (contestant) =>
+          !next.contestants.some((current) => current.id === contestant.id),
+      )
+      .map((contestant) => contestant.id),
+  );
+  if (removedContestantIds.size) {
+    let credentials = await wixData
+      .query(CREDENTIALS_COLLECTION)
+      .limit(1000)
+      .find(OPTIONS);
+    const credentialIds = credentials.items
+      .filter((credential) =>
+        removedContestantIds.has(credential.contestantId),
+      )
+      .map((credential) => credential._id);
+    while (credentials.hasNext()) {
+      credentials = await credentials.next();
+      credentialIds.push(
+        ...credentials.items
+          .filter((credential) =>
+            removedContestantIds.has(credential.contestantId),
+          )
+          .map((credential) => credential._id),
+      );
+    }
+    if (credentialIds.length) {
+      await wixData.bulkRemove(CREDENTIALS_COLLECTION, credentialIds, OPTIONS);
+    }
+  }
   const removableIds = (records) =>
     new Set(
       records
@@ -1510,23 +1542,32 @@ export const createRiderAccount = webMethod(
       throw new Error("Enter valid handicaps and a four-digit PIN.");
     }
     await ensureRiderAccountCollections();
-    const duplicate = await wixData
-      .query(CREDENTIALS_COLLECTION)
-      .eq("emailNormalized", email)
-      .limit(1)
-      .find(OPTIONS);
-    if (duplicate.items.length) {
-      throw new Error("A rider account already uses that email.");
-    }
     const contestantId = `contestant-${createHash("sha256")
       .update(`contestant-phone:${phone}`)
       .digest("hex")
       .slice(0, 24)}`;
-    const existingPhone = await wixData
-      .query(COLLECTIONS.contestants)
-      .eq("appId", contestantId)
-      .limit(1)
-      .find(OPTIONS);
+    const [duplicate, existingPhone] = await Promise.all([
+      wixData
+        .query(CREDENTIALS_COLLECTION)
+        .eq("emailNormalized", email)
+        .limit(1)
+        .find(OPTIONS),
+      wixData
+        .query(COLLECTIONS.contestants)
+        .eq("appId", contestantId)
+        .limit(1)
+        .find(OPTIONS),
+    ]);
+    if (duplicate.items.length) {
+      const credential = duplicate.items[0];
+      if (
+        credential.contestantId !== contestantId ||
+        existingPhone.items.length
+      ) {
+        throw new Error("A rider account already uses that email.");
+      }
+      await wixData.remove(CREDENTIALS_COLLECTION, credential._id, OPTIONS);
+    }
     if (existingPhone.items.length) {
       throw new Error("A rider account already uses that phone number.");
     }
