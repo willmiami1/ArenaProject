@@ -1271,7 +1271,8 @@ function LedLeaderboard({
         team.status === "ready",
     ) ?? defaultCurrentTeam;
   const finalResults = ledShowsFinalResults(event, eventTeams, round);
-  const officialResults = event.resultsPublished === true;
+  // The live scoreboard remains provisional even after results are published.
+  const officialResults = false;
   const nextTeam =
     roundTeams.find(
       (team) =>
