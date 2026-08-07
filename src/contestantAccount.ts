@@ -5,6 +5,7 @@ export interface ContestantAccountRequest {
   email: string;
   phone: string;
   hometown: string;
+  horseName?: string;
   role: Contestant["role"];
   headerHandicap: number;
   heelerHandicap: number;

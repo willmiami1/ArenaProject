@@ -1464,6 +1464,7 @@ export const createRiderAccount = webMethod(
     const email = normalizeEmail(request.email);
     const phone = String(request.phone || "").replace(/\D/g, "");
     const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ");
+    const horseName = String(request.horseName || "").trim().replace(/\s+/g, " ");
     const role = String(request.role || "");
     const headerHandicap = Number(request.headerHandicap);
     const heelerHandicap = Number(request.heelerHandicap);
@@ -1473,6 +1474,9 @@ export const createRiderAccount = webMethod(
     }
     if (phone.length < 10 || phone.length > 15) {
       throw new Error("Enter a valid phone number.");
+    }
+    if (horseName.length > 100) {
+      throw new Error("Horse name must be 100 characters or fewer.");
     }
     if (!["Header", "Heeler", "Both"].includes(role)) {
       throw new Error("Choose your roping position.");
@@ -1519,7 +1523,7 @@ export const createRiderAccount = webMethod(
       headerHandicap,
       heelerHandicap,
       photo: "",
-      horses: [],
+      horses: horseName ? [horseName] : [],
     };
     const credentialId = createHash("sha256")
       .update(`contestant-credential:${email}`)
