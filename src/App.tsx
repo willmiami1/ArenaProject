@@ -556,6 +556,13 @@ function StaffApp() {
           </button>
           <button
             className="topbar-front-screen"
+            onClick={openRegistrationDesk}
+          >
+            <ClipboardPen size={17} />
+            <span>Registration Desk</span>
+          </button>
+          <button
+            className="topbar-front-screen"
             onClick={openPublicWebsite}
           >
             <Eye size={17} />
