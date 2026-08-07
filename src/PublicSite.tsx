@@ -285,7 +285,7 @@ function SpectatorPage({
   const [busy, setBusy] = useState(false);
   const [roundAnnouncement, setRoundAnnouncement] = useState("");
   const selectedRun =
-    competition?.predictionRuns.find((run) => run.open) ??
+    competition?.predictionRuns.find((run) => run.open || !run.closesAt) ??
     competition?.predictionRuns[0];
   const activeRound =
     selectedRun?.round ??
@@ -321,6 +321,9 @@ function SpectatorPage({
     return <NotFound />;
   }
   const teamId = selectedRun?.id ?? "";
+  const selectedRunOpen = Boolean(
+    selectedRun && (selectedRun.open || !selectedRun.closesAt),
+  );
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const submittedValue = ((event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value;
@@ -405,10 +408,10 @@ function SpectatorPage({
               placeholder="Name or avatar"
             />
           </label>
-          {selectedRun?.open && selectedRun.closesAt && (
+          {selectedRunOpen && selectedRun?.closesAt && (
             <p className="public-pick-cutoff">Picks close {new Date(selectedRun.closesAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>
           )}
-          {selectedRun && !selectedRun.open && (
+          {selectedRun && !selectedRunOpen && (
             <p className="public-pick-cutoff">Spectator picks are closed for this team.</p>
           )}
           {selectedRun && (
@@ -459,10 +462,10 @@ function SpectatorPage({
           )}
           {!selectedRun && <p className="public-empty">Waiting for the next cowboy team.</p>}
           <div className="public-pick-buttons">
-            <button className="public-button" type="submit" value="cowboys" disabled={busy || !teamId || !selectedRun?.open}>
+            <button className="public-button" type="submit" value="cowboys" disabled={busy || !teamId || !selectedRunOpen}>
               {busy ? "Saving…" : "Choose Cowboys"}
             </button>
-            <button className="public-button" type="submit" value="steer" disabled={busy || !teamId || !selectedRun?.open}>
+            <button className="public-button" type="submit" value="steer" disabled={busy || !teamId || !selectedRunOpen}>
               {busy ? "Saving…" : "Choose Steer"}
             </button>
           </div>
