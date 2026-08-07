@@ -4,6 +4,7 @@ import {
   ledQualifiedRunsThroughRound,
   ledShowsFinalResults,
   resolveLedRunDeskState,
+  sortLedStandings,
 } from "./ledDisplay";
 import type { ArenaEvent, Team } from "./types";
 
@@ -97,6 +98,18 @@ describe("LED Run Desk synchronization", () => {
         2,
       ),
     ).toEqual([]);
+  });
+
+  it("ranks more completed rounds ahead of a lower incomplete aggregate", () => {
+    const oneRound = { ...team("one-round", 1, "complete"), rawTime: 6 };
+    const twoRounds = { ...team("two-rounds", 2, "complete"), rawTime: 14 };
+
+    expect(
+      sortLedStandings(
+        [oneRound, twoRounds],
+        (run) => run.rawTime ?? Number.POSITIVE_INFINITY,
+      ).map((run) => run.id),
+    ).toEqual(["two-rounds", "one-round"]);
   });
 
   it("shows final results only after every final-round run is resolved", () => {

@@ -80,6 +80,7 @@ import {
   ledQualifiedRunsThroughRound,
   ledShowsFinalResults,
   resolveLedRunDeskState,
+  sortLedStandings,
 } from "./ledDisplay";
 import {
   calculatePayouts,
@@ -1241,13 +1242,11 @@ function LedLeaderboard({
   const roundTeams = eventTeams
     .filter((team) => team.round === round)
     .sort((a, b) => a.drawPosition - b.drawPosition);
-  const standings = ledQualifiedRunsThroughRound(event.id, eventTeams, round)
-    .sort(
-      (a, b) =>
-        teamQualifiedTotal(a, eventTeams, round + 1, event, data.contestants) -
-          teamQualifiedTotal(b, eventTeams, round + 1, event, data.contestants) ||
-        a.drawPosition - b.drawPosition,
-    )
+  const standings = sortLedStandings(
+    ledQualifiedRunsThroughRound(event.id, eventTeams, round),
+    (team) =>
+      teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants),
+  )
     .slice(0, 10);
   const spectatorTopThree = aggregatePublicSpectatorLeaderboard(
     Array.from({ length: round }, (_, index) =>

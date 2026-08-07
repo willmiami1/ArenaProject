@@ -78,6 +78,18 @@ export function ledQualifiedRunsThroughRound(
   );
 }
 
+export function sortLedStandings(
+  teams: Team[],
+  qualifiedTotal: (team: Team) => number,
+) {
+  return [...teams].sort(
+    (left, right) =>
+      right.round - left.round ||
+      qualifiedTotal(left) - qualifiedTotal(right) ||
+      left.drawPosition - right.drawPosition,
+  );
+}
+
 export function ledShowsFinalResults(
   event: ArenaEvent,
   teams: Team[],
