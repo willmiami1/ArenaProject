@@ -208,7 +208,7 @@ const teamQualifiedTotal = (
     );
 
 function StaffApp() {
-  const [data, setData, persistenceStatus] = useArenaData();
+  const [data, setData, persistenceStatus, refreshFromWix] = useArenaData();
   const [view, setView] = useState<View>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [workspaceMessage, setWorkspaceMessage] = useState("");
@@ -334,6 +334,19 @@ function StaffApp() {
     if (wixHostOrigin) url.searchParams.set("wixHostOrigin", wixHostOrigin);
     url.hash = "events";
     window.location.assign(url.toString());
+  };
+  const refreshWorkspace = async () => {
+    setWorkspaceMessage("Refreshing the live Wix workspace...");
+    try {
+      const refreshed = await refreshFromWix();
+      setWorkspaceMessage(
+        `Loaded ${refreshed.contestants.length} contestant${refreshed.contestants.length === 1 ? "" : "s"} from Wix.`,
+      );
+    } catch (error) {
+      setWorkspaceMessage(
+        error instanceof Error ? error.message : "The Wix workspace could not be refreshed.",
+      );
+    }
   };
   const downloadWorkspace = () => {
     const backup = {
@@ -475,6 +488,15 @@ function StaffApp() {
                       : "Local preview"}
             </span>
           </div>
+          <button
+            className="topbar-front-screen"
+            disabled={persistenceStatus === "loading"}
+            onClick={() => { void refreshWorkspace(); }}
+            title="Reload contestants and events from Wix"
+          >
+            <RefreshCw size={17} />
+            <span>Refresh from Wix</span>
+          </button>
           <button
             className="topbar-front-screen"
             onClick={openPublicWebsite}

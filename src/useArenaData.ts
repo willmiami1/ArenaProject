@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { seedData } from "./data";
 import {
   assignOriginalTeamNumbers,
@@ -204,6 +204,25 @@ export function useArenaData() {
   const [ready, setReady] = useState(false);
   const [wixConnected, setWixConnected] = useState(false);
   const skipNextSave = useRef(false);
+  const refreshFromWix = useCallback(async () => {
+    if (!isWixEmbed()) {
+      throw new Error("Open Arena Command from the published Wix site to refresh live data.");
+    }
+    setStatus("loading");
+    try {
+      const saved = await requestWixData("load");
+      if (!saved) throw new Error("No Arena Command workspace was found in Wix.");
+      const normalized = normalizeData(saved);
+      skipNextSave.current = true;
+      setData(normalized);
+      setWixConnected(true);
+      setStatus("saved");
+      return normalized;
+    } catch (error) {
+      setStatus("error");
+      throw error;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -298,5 +317,5 @@ export function useArenaData() {
     return () => window.removeEventListener("storage", syncLocalWindow);
   }, []);
 
-  return [data, setData, status] as const;
+  return [data, setData, status, refreshFromWix] as const;
 }
