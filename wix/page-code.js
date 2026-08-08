@@ -120,7 +120,7 @@ $w.onReady(() => {
         const payment = unwrapPublicSignupEnvelope(
           await createPublicSignupPayment(message.data),
         );
-        if (!payment.paymentId || payment.status === "successful") {
+        if (payment.status !== "payment-created" || !payment.paymentId) {
           data = payment;
         } else {
           const checkout = await wixPayFrontend.startPayment(

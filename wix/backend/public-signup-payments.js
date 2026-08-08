@@ -475,6 +475,36 @@ async function renewEntryReservations(intent, minutes) {
   }
 }
 
+async function expireStalePaymentCreatedIntentLocked(intent, now = Date.now()) {
+  if (intent.status !== "payment-created") return intent;
+  const reservationResult = await wixData
+    .query(ENTRY_RESERVATIONS_COLLECTION)
+    .eq("intentId", intent._id)
+    .limit(1000)
+    .find(OPTIONS);
+  if (
+    !publicSignupPaymentCreatedIntentIsStale(
+      intent,
+      reservationResult.items,
+      now,
+    )
+  ) {
+    return intent;
+  }
+  await releaseEntryReservations(intent);
+  const expired = {
+    ...intent,
+    status: "expired",
+    finalizedAt: new Date(now),
+    updatedAt: new Date(now),
+  };
+  return updateWithRetry(
+    PAYMENT_INTENTS_COLLECTION,
+    expired,
+    "expire-unstarted-payment",
+  );
+}
+
 async function expireStalePaymentCreatedIntent(intent, now = Date.now()) {
   if (intent.status !== "payment-created") return intent;
   return withResourceLocks([`payment:${intent.paymentId}`], async () => {
@@ -484,32 +514,7 @@ async function expireStalePaymentCreatedIntent(intent, now = Date.now()) {
     if (!latest || latest.status !== "payment-created") {
       return latest || intent;
     }
-    const reservationResult = await wixData
-      .query(ENTRY_RESERVATIONS_COLLECTION)
-      .eq("intentId", latest._id)
-      .limit(1000)
-      .find(OPTIONS);
-    if (
-      !publicSignupPaymentCreatedIntentIsStale(
-        latest,
-        reservationResult.items,
-        now,
-      )
-    ) {
-      return latest;
-    }
-    await releaseEntryReservations(latest);
-    const expired = {
-      ...latest,
-      status: "expired",
-      finalizedAt: new Date(now),
-      updatedAt: new Date(now),
-    };
-    return updateWithRetry(
-      PAYMENT_INTENTS_COLLECTION,
-      expired,
-      "expire-unstarted-payment",
-    );
+    return expireStalePaymentCreatedIntentLocked(latest, now);
   });
 }
 
@@ -935,8 +940,9 @@ async function processPublicSignupPaymentUpdateLocked(event) {
   const paymentId = String(event?.payment?.id || "");
   if (!paymentId) return;
   await ensurePublicSignupCollections();
-  const intent = await findPaymentIntent(paymentId);
-  if (!intent) return;
+  const storedIntent = await findPaymentIntent(paymentId);
+  if (!storedIntent) return;
+  const intent = await expireStalePaymentCreatedIntentLocked(storedIntent);
   if (intent.status === "successful") {
     await releaseEntryReservations(intent).catch(() => undefined);
     return;
