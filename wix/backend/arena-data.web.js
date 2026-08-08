@@ -5,7 +5,11 @@ import { getSecret } from "wix-secrets-backend";
 import { createHash, randomBytes } from "crypto";
 import { currentMember } from "wix-members-backend";
 import { elevate } from "wix-auth";
-import { publicPredictionRunProjection } from "./public-prediction-projection";
+import {
+  effectivePublicPredictionState,
+  publicPredictionRunProjection,
+  spectatorPicksAreOpen,
+} from "./public-prediction-projection";
 import {
   PublicSignupError,
   failedCredentialMetadata,
