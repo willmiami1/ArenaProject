@@ -240,7 +240,11 @@ function RopingCard({
             <p className="public-event-description">{competition.description}</p>
           )}
         <div className="public-card-badges">
-          {competition.registrationOpen && <span>Accepting entries</span>}
+          {competition.registrationOpen && (
+            <a href={href("signup", competition.id)}>
+              Accepting entries · Log in or create account
+            </a>
+          )}
           {!scheduleOnly && (
             <span>{competition.entryCount} entr{competition.entryCount === 1 ? "y" : "ies"}</span>
           )}
