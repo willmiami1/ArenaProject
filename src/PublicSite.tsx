@@ -655,11 +655,6 @@ function HomePage({
   data: PublicArenaData | null;
   scheduleError: string;
 }) {
-  const flyers = [
-    { src: "./future-event-flyer-1.png", alt: "Destiny Ranch Arena future event flyer" },
-    { src: "./future-event-flyer-2.png", alt: "Destiny Ranch Arena upcoming roping flyer" },
-    { src: "./future-event-flyer-3.png", alt: "Destiny Ranch Arena August 7 event flyer" },
-  ];
   return (
     <>
       <section className="public-hero">
@@ -692,20 +687,6 @@ function HomePage({
           </p>
         </section>
       )}
-      <section className="public-flyers" aria-labelledby="future-flyers-title">
-        <div className="public-flyers-heading">
-          <span>Save the date</span>
-          <h2 id="future-flyers-title">Upcoming event flyers</h2>
-          <p>Open a flyer to view the full event details.</p>
-        </div>
-        <div className="public-flyer-grid">
-          {flyers.map((flyer) => (
-            <a href={flyer.src} target="_blank" rel="noreferrer" key={flyer.src}>
-              <img src={flyer.src} alt={flyer.alt} loading="lazy" />
-            </a>
-          ))}
-        </div>
-      </section>
       <section className="public-contact" aria-labelledby="arena-contact-title">
         <div className="public-contact-heading">
           <span>Visit the ranch</span>
