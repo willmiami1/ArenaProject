@@ -21,6 +21,7 @@ import {
 } from "backend/arena-data.web";
 import { authentication } from "wix-members-frontend";
 import wixPayFrontend from "wix-pay-frontend";
+import wixWindowFrontend from "wix-window-frontend";
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -123,6 +124,9 @@ $w.onReady(() => {
         if (payment.status !== "payment-created" || !payment.paymentId) {
           data = payment;
         } else {
+          await wixWindowFrontend.scrollTo(0, 0, {
+            scrollAnimation: false,
+          });
           const checkout = await wixPayFrontend.startPayment(
             payment.paymentId,
             { showThankYouPage: false },
