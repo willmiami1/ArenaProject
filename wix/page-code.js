@@ -4,10 +4,11 @@ import {
   loadPublicSchedule,
   publishPublicSchedule,
   loadSignupOptions,
+  createPublicSignupPayment,
+  getPublicSignupPaymentStatus,
   loadArenaData,
   saveArenaData,
   setContestantPin,
-  submitOnlineSignup,
   submitSpectatorPrediction,
   createContestantAccount,
   createRiderAccount,
@@ -19,6 +20,7 @@ import {
   submitRegistrationDeskSignup,
 } from "backend/arena-data.web";
 import { authentication } from "wix-members-frontend";
+import wixPayFrontend from "wix-pay-frontend";
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -27,6 +29,11 @@ const ADMIN_LOGOUT_ACTIONS = new Set([
   "logoutRegistrationDesk",
 ]);
 const ADMIN_SESSION_RETRY_DELAYS_MS = [250, 500, 1000, 1500, 2500];
+const PUBLIC_SIGNUP_ACTIONS = new Set([
+  "loadSignupOptions",
+  "startPublicSignupPayment",
+  "getPublicSignupPaymentStatus",
+]);
 
 async function getAccessWhenSessionIsReady(getAccess) {
   let access = await getAccess();
@@ -61,6 +68,22 @@ async function loadPublicArenaDataWhenReady() {
   throw lastError;
 }
 
+class ArenaRelayError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+const unwrapPublicSignupEnvelope = (envelope) => {
+  if (envelope?.ok === true) return envelope.data;
+  throw new ArenaRelayError(
+    envelope?.error?.code || "TEMPORARILY_UNAVAILABLE",
+    envelope?.error?.message ||
+      "Public registration is temporarily unavailable. Try again.",
+  );
+};
+
 $w.onReady(() => {
   const [embed] = $w("HtmlComponent");
   if (!embed) {
@@ -90,9 +113,35 @@ $w.onReady(() => {
       } else if (message.action === "publishPublicSchedule") {
         data = await publishPublicSchedule(message.data);
       } else if (message.action === "loadSignupOptions") {
-        data = await loadSignupOptions(message.data);
-      } else if (message.action === "submitOnlineSignup") {
-        data = await submitOnlineSignup(message.data);
+        data = unwrapPublicSignupEnvelope(
+          await loadSignupOptions(message.data),
+        );
+      } else if (message.action === "startPublicSignupPayment") {
+        const payment = unwrapPublicSignupEnvelope(
+          await createPublicSignupPayment(message.data),
+        );
+        if (!payment.paymentId || payment.status === "successful") {
+          data = payment;
+        } else {
+          const checkout = await wixPayFrontend.startPayment(
+            payment.paymentId,
+            { showThankYouPage: false },
+          );
+          const authoritative = unwrapPublicSignupEnvelope(
+            await getPublicSignupPaymentStatus({
+              ...message.data,
+              submissionId: payment.submissionId,
+            }),
+          );
+          data = {
+            ...authoritative,
+            checkoutStatus: checkout.status,
+          };
+        }
+      } else if (message.action === "getPublicSignupPaymentStatus") {
+        data = unwrapPublicSignupEnvelope(
+          await getPublicSignupPaymentStatus(message.data),
+        );
       } else if (message.action === "submitSpectatorPrediction") {
         data = await submitSpectatorPrediction(message.data);
       } else if (message.action === "createContestantAccount") {
@@ -136,7 +185,17 @@ $w.onReady(() => {
         source: "arena-wix-host",
         requestId: message.requestId,
         ok: false,
-        error: error?.message || "The requested Arena action failed.",
+        error:
+          error instanceof ArenaRelayError
+            ? { code: error.code, message: error.message }
+            : PUBLIC_SIGNUP_ACTIONS.has(message.action)
+              ? {
+                  code: "PAYMENT_WINDOW_FAILED",
+                  message:
+                    error?.message ||
+                    "Wix checkout could not be opened. Try again.",
+                }
+            : error?.message || "The requested Arena action failed.",
       });
     } finally {
       pendingRequests.delete(message.requestId);

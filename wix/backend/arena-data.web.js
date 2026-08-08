@@ -5,6 +5,17 @@ import { getSecret } from "wix-secrets-backend";
 import { createHash, randomBytes } from "crypto";
 import { currentMember } from "wix-members-backend";
 import { elevate } from "wix-auth";
+import { publicPredictionRunProjection } from "./public-prediction-projection";
+import {
+  PublicSignupError,
+  failedCredentialMetadata,
+  successfulCredentialMetadata,
+} from "./public-signup-contract";
+import {
+  createPublicSignupPayment as createPublicSignupPaymentIntent,
+  getPublicSignupPaymentStatus as readPublicSignupPaymentStatus,
+  loadPublicSignupOptions,
+} from "./public-signup-payments";
 
 const COLLECTIONS = {
   meets: "ArenaMeets",
@@ -15,8 +26,22 @@ const COLLECTIONS = {
   spectators: "ArenaSpectators",
   spectatorPredictions: "ArenaSpectatorPredictions",
 };
+const COLLECTION_DISPLAY_NAMES = {
+  meets: "Arena Meets",
+  events: "Arena Competitions",
+  contestants: "Arena Contestants",
+  teams: "Arena Teams",
+  registrations: "Arena Registrations",
+  spectators: "Arena Spectators",
+  spectatorPredictions: "Arena Spectator Predictions",
+};
+const PAYLOAD_FIELDS = [
+  { key: "appId", displayName: "App ID", type: "TEXT" },
+  { key: "payload", displayName: "Payload", type: "TEXT" },
+];
 const SETTINGS_COLLECTION = "ArenaSettings";
 const CREDENTIALS_COLLECTION = "ArenaContestantCredentials";
+const CREDENTIAL_LOCKS_COLLECTION = "ArenaContestantCredentialLocks";
 const SETTINGS_ID = "arena-command-settings";
 const STAFF_REVISION_ID = "arena-command-staff-revision";
 const ONLINE_REVISION_ID = "arena-command-online-revision";
@@ -148,17 +173,16 @@ async function resolveRegistrationDeskAccess() {
     const allowedRoleIds = [registrationRoleId, adminRoleId]
       .filter((roleId) => typeof roleId === "string" && roleId.trim())
       .map((roleId) => roleId.trim());
-    if (
-      roles.some(
-        (role) =>
-          allowedRoleIds.includes(role._id) ||
-          role.key === "ADMIN" ||
-          role.roleKey === "ADMIN" ||
-          role.title === "Owner" ||
-          role.title === "Arena Admin" ||
-          role.title === "Admin",
-      )
-    ) {
+    const authorized = roles.some(
+      (role) =>
+        allowedRoleIds.includes(role._id) ||
+        role.key === "ADMIN" ||
+        role.roleKey === "ADMIN" ||
+        role.title === "Owner" ||
+        role.title === "Arena Admin" ||
+        role.title === "Admin",
+    );
+    if (authorized) {
       return {
         state: "authorized",
         message: "Registration Desk access verified.",
@@ -166,8 +190,7 @@ async function resolveRegistrationDeskAccess() {
     }
     return {
       state: "denied",
-      message:
-        "Your Wix account does not have the Registration Desk role.",
+      message: "Your Wix account does not have the Registration Desk role.",
     };
   } catch {
     return {
@@ -183,7 +206,6 @@ async function requireRegistrationDesk() {
   if (access.state !== "authorized") {
     throw new Error("This action requires the Wix Registration Desk role.");
   }
-
 }
 
 export const getAdminAccess = webMethod(
@@ -197,24 +219,26 @@ export const getRegistrationDeskAccess = webMethod(
 );
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+const normalizeUppercaseText = (value) =>
+  String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
 const normalizeContestantCasing = (contestant) => ({
   ...contestant,
-  name: String(contestant.name || "").trim().replace(/\s+/g, " ").toUpperCase(),
+  name: normalizeUppercaseText(contestant.name),
+  hometown: normalizeUppercaseText(contestant.hometown),
   email: normalizeEmail(contestant.email),
-  hometown: String(contestant.hometown || "").trim().replace(/\s+/g, " ").toUpperCase(),
-  horses: (Array.isArray(contestant.horses) ? contestant.horses : []).map(
-    (horse) => String(horse).trim().replace(/\s+/g, " ").toUpperCase(),
-  ),
+  horses: Array.isArray(contestant.horses)
+    ? contestant.horses.map(normalizeUppercaseText)
+    : contestant.horses,
 });
-
-const mergeContestantPhoto = (contestant, previous) => {
-  const { clearPhoto, ...record } = contestant;
+const mergeContestantPhoto = (incoming, previous) => {
+  const { clearPhoto, ...contestant } = incoming;
+  const incomingPhoto =
+    typeof contestant.photo === "string" && contestant.photo.trim()
+      ? contestant.photo
+      : "";
   return {
-    ...record,
-    photo:
-      clearPhoto === true
-        ? ""
-        : String(contestant.photo || previous?.photo || ""),
+    ...contestant,
+    photo: clearPhoto === true ? "" : incomingPhoto || previous?.photo || "",
   };
 };
 const validPin = (value) => /^\d{4}$/.test(String(value || ""));
@@ -227,6 +251,31 @@ const constantTimeEqual = (left, right) => {
     difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
   }
   return difference === 0;
+};
+
+const publicSignupEnvelope = async (operation, callback) => {
+  try {
+    return { ok: true, data: await callback() };
+  } catch (error) {
+    if (error instanceof PublicSignupError) {
+      return {
+        ok: false,
+        error: { code: error.code, message: error.message },
+      };
+    }
+    console.error("Unexpected public signup failure.", {
+      operation,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      ok: false,
+      error: {
+        code: "TEMPORARILY_UNAVAILABLE",
+        message:
+          "Public registration is temporarily unavailable. Try again, or contact the arena if the problem continues.",
+      },
+    };
+  }
 };
 
 const arenaRecordStorageId = (collectionId, recordId) =>
@@ -257,11 +306,9 @@ const publicContestantAccountResult = (workspace, event, contestant) => {
       role: contestant.role,
       headerHandicap: contestant.headerHandicap,
       heelerHandicap: contestant.heelerHandicap,
-      horses: contestant.horses || [],
     },
     partners:
       event.competitionType === "pick-only" ||
-      event.competitionType === "slide" ||
       event.competitionType === "pick-and-draw"
         ? availablePartners({ ...workspace, contestants }, event, contestant)
         : [],
@@ -289,7 +336,7 @@ async function findMatchingContestantAccount({
       .eq("emailNormalized", email)
       .limit(1)
       .find(OPTIONS);
-    credential = credentials.items[0] || null;
+    credential = credentials.items[0];
   }
   if (!credential) return null;
   if (
@@ -313,7 +360,7 @@ async function findMatchingContestantAccount({
         .eq("appId", contestantId)
         .limit(1)
         .find(OPTIONS);
-      profile = profiles.items[0] || null;
+      profile = profiles.items[0];
     }
     if (profile) {
       if (profile.appId !== contestantId) return null;
@@ -440,31 +487,6 @@ async function replaceAll(collectionId, records) {
   }
 }
 
-const teamEntryKeyWithRound = (team, round = team.round) =>
-  [
-    team.eventId,
-    team.headerId,
-    team.heelerId,
-    team.headerEntryNumber || 1,
-    team.heelerEntryNumber || 1,
-    round,
-  ].join("|");
-
-function resetInheritedPredictionCutoffs(teams) {
-  const byEntryAndRound = new Map(
-    teams.map((team) => [teamEntryKeyWithRound(team), team]),
-  );
-  return teams.map((team) => {
-    if (Number(team.round || 1) <= 1 || !team.predictionClosesAt) return team;
-    const previousRound = byEntryAndRound.get(
-      teamEntryKeyWithRound(team, Number(team.round) - 1),
-    );
-    return previousRound?.predictionClosesAt === team.predictionClosesAt
-      ? { ...team, predictionClosesAt: undefined }
-      : team;
-  });
-}
-
 async function readWorkspace({ includeSpectators = true } = {}) {
   const [settings, staffRevision, onlineRevision] = await Promise.all([
     wixData.get(SETTINGS_COLLECTION, SETTINGS_ID, OPTIONS).catch(() => null),
@@ -497,24 +519,9 @@ async function readWorkspace({ includeSpectators = true } = {}) {
     onlineRevision: Number(onlineRevision?.value || 0),
     loadedAt: new Date().toISOString(),
     meets,
-    events: events.map((event) => ({ ...event, pickDrawRole: "both" })),
-    contestants: contestants.map((contestant) => ({
-      ...contestant,
-      horses: Array.isArray(contestant.horses)
-        ? contestant.horses
-            .map((horse) => String(horse).trim().replace(/\s+/g, " "))
-            .filter(Boolean)
-        : [],
-      headerHandicap:
-        Number(contestant.headerHandicap) > 0
-          ? Number(contestant.headerHandicap)
-          : 3,
-      heelerHandicap:
-        Number(contestant.heelerHandicap) > 0
-          ? Number(contestant.heelerHandicap)
-          : 3,
-    })),
-    teams: resetInheritedPredictionCutoffs(teams),
+    events,
+    contestants,
+    teams,
     registrations,
     spectators,
     spectatorPredictions,
@@ -524,31 +531,6 @@ async function readWorkspace({ includeSpectators = true } = {}) {
 
 const teamEntryKey = (team) =>
   `${team.headerId}|${team.heelerId}|${team.headerEntryNumber || 1}|${team.heelerEntryNumber || 1}`;
-
-const teamHandicap = (team, contestants) => {
-  const header = contestants.find((contestant) => contestant.id === team.headerId);
-  const heeler = contestants.find((contestant) => contestant.id === team.heelerId);
-  return Number(header?.headerHandicap || 3) + Number(heeler?.heelerHandicap || 3);
-};
-
-const officialRunTime = (event, team, contestants) => {
-  if (team.rawTime === null) return null;
-  const adjustment =
-    event.competitionType === "slide" && Number(team.round || 1) === 2
-      ? Math.max(
-          -4,
-          Math.min(
-            4,
-            Math.round(
-              (teamHandicap(team, contestants) -
-                Number(event.slideNumber ?? 10)) *
-                2,
-            ) / 2,
-          ),
-        )
-      : 0;
-  return Number(team.rawTime || 0) + Number(team.penalties || 0) + adjustment;
-};
 
 function publishedResults(event, teams, contestants) {
     if (event.resultsPublished !== true) return [];
@@ -566,7 +548,7 @@ function publishedResults(event, teams, contestants) {
           (run) => run.status === "complete" && run.rawTime !== null,
         );
         const total = completed.reduce(
-          (sum, run) => sum + Number(officialRunTime(event, run, contestants) || 0),
+          (sum, run) => sum + Number(run.rawTime || 0) + Number(run.penalties || 0),
           0,
         );
         const qualified =
@@ -598,53 +580,6 @@ const predictionOutcome = (team) =>
     : team.status === "no-time" || team.status === "complete"
       ? "steer"
       : null;
-
-const spectatorPicksAreOpen = (team, now = Date.now()) =>
-  !team.scratched &&
-  !team.rolled &&
-  team.status === "ready" &&
-  (!team.predictionClosesAt ||
-    Date.parse(team.predictionClosesAt) > now);
-
-const publicProfilePhoto = (photo) => {
-  if (
-    !photo ||
-    photo.length > 3_000_000 ||
-    !/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\s]+$/i.test(photo)
-  ) {
-    return undefined;
-  }
-  return photo;
-};
-
-const publicPredictionRunIsEligible = (team) =>
-  !team.scratched && !team.rolled && team.status === "ready";
-
-const publicPredictionRunsForEvent = (event, teams) => {
-  const eligible = teams
-    .filter(
-      (team) =>
-        team.eventId === event.id &&
-        publicPredictionRunIsEligible(team),
-    )
-    .sort(
-      (left, right) =>
-        Number(left.round) - Number(right.round) ||
-        Number(left.drawPosition) - Number(right.drawPosition),
-    );
-  const activeRound = Number(event.activeRound || 0);
-  return activeRound > 0
-    ? eligible.filter((team) => Number(team.round) === activeRound)
-    : eligible;
-};
-
-const activePublicPredictionRun = (event, teams) => {
-  const eligible = publicPredictionRunsForEvent(event, teams);
-  return (
-    eligible.find((team) => team.id === event.activeRunId) ??
-    eligible[0]
-  );
-};
 
 function spectatorLeaderboard(workspace, eventId, round) {
   const spectators = new Map(
@@ -700,7 +635,6 @@ function publicProjection(workspace) {
         "pick-only": "Pick Only",
         "pick-and-draw": "Pick and Draw",
         "round-robin": "Round Robin",
-        slide: "Slide",
       }[event.competitionType] || "Competition",
       pickDrawRole: event.pickDrawRole,
       registrationOpen: onlineRegistrationIsOpen(event),
@@ -708,24 +642,16 @@ function publicProjection(workspace) {
       drawLocked: event.drawLocked === true,
       resultsPublished: event.resultsPublished === true,
       entriesAllowed: event.entriesAllowed,
-      minDrawsAllowed: Number(event.minDrawsAllowed ?? 0),
       allowRepeatPartners: event.allowRepeatPartners === true,
       handicapTotal: event.handicapTotal,
-      slideNumber: Number(event.slideNumber ?? 10),
-      maxContestantHandicap: Number(event.maxContestantHandicap ?? 10),
+      maxContestantHandicap: Number(event.maxContestantHandicap ?? 99),
       timeLimit: event.timeLimit,
       rounds: event.rounds,
       shortGoTeams: event.shortGoTeams,
-      incentivePayouts: event.incentivePayouts === true,
-      incentiveHandicapTotal: Number(event.incentiveHandicapTotal ?? 7),
-      incentiveTeams: Number(
-        event.incentiveTeams ??
-          (Array.isArray(event.incentivePayoutPercentages)
-            ? Math.max(1, event.incentivePayoutPercentages.length)
-            : 1),
-      ),
-      incentiveAmountPerTeam: Number(
-        event.incentiveAmountPerTeam ?? event.incentiveAddedMoney ?? 0,
+      ...publicPredictionRunProjection(
+        event,
+        workspace.teams,
+        contestantsById,
       ),
       entryCount:
         workspace.teams.filter(
@@ -743,30 +669,6 @@ function publicProjection(workspace) {
           )
           .reduce((sum, registration) => sum + Number(registration.entries || 0), 0),
       results: publishedResults(event, workspace.teams, workspace.contestants),
-      activePredictionRunId: activePublicPredictionRun(
-        event,
-        workspace.teams,
-      )?.id,
-      predictionRuns: publicPredictionRunsForEvent(event, workspace.teams)
-        .map((team) => {
-          const header = contestantsById.get(team.headerId);
-          const heeler = contestantsById.get(team.heelerId);
-          return {
-            id: team.id,
-            round: Number(team.round || 1),
-            drawPosition: Number(team.drawPosition),
-            originalTeamNumber: Number(
-              team.originalTeamNumber || team.drawPosition,
-            ),
-            headerName: header?.name || "Unknown",
-            heelerName: heeler?.name || "Unknown",
-            headerPhoto: publicProfilePhoto(header?.photo),
-            heelerPhoto: publicProfilePhoto(heeler?.photo),
-            steerNumber: team.steerNumber || "",
-            closesAt: team.predictionClosesAt,
-            open: spectatorPicksAreOpen(team),
-          };
-        }),
       spectatorLeaderboards: Array.from(
         { length: Math.max(Number(event.rounds || 1), 1) },
         (_, index) =>
@@ -836,43 +738,7 @@ async function savePublicScheduleSnapshot(workspaceOrEvents) {
   );
 }
 
-async function ensureSettingsCollection() {
-  try {
-    await wixData.query(SETTINGS_COLLECTION).limit(1).find(OPTIONS);
-  } catch (error) {
-    if (
-      error?.code !== "WDE0025" &&
-      error?.code !== "WD_SCHEMA_DOES_NOT_EXIST"
-    ) {
-      throw error;
-    }
-    const createCollection = elevate(collections.createDataCollection);
-    await createCollection({
-      _id: SETTINGS_COLLECTION,
-      displayName: "Arena Settings",
-      permissions: {
-        read: "ADMIN",
-        insert: "ADMIN",
-        update: "ADMIN",
-        remove: "ADMIN",
-      },
-      fields: [
-        { key: "payload", displayName: "Payload", type: "TEXT" },
-        { key: "value", displayName: "Value", type: "NUMBER" },
-        { key: "activeEventId", displayName: "Active Event ID", type: "TEXT" },
-        {
-          key: "participantDatabaseVersion",
-          displayName: "Participant Database Version",
-          type: "NUMBER",
-        },
-        { key: "updatedAt", displayName: "Updated At", type: "DATETIME" },
-      ],
-    });
-  }
-}
-
 async function ensureCollection(collectionId, displayName, fields) {
-  const createCollection = elevate(collections.createDataCollection);
   try {
     await wixData.query(collectionId).limit(1).find(OPTIONS);
   } catch (error) {
@@ -882,32 +748,54 @@ async function ensureCollection(collectionId, displayName, fields) {
     ) {
       throw error;
     }
-    await createCollection({
-      _id: collectionId,
-      displayName,
-      permissions: {
-        read: "ADMIN",
-        insert: "ADMIN",
-        update: "ADMIN",
-        remove: "ADMIN",
-      },
-      fields,
-    });
+    const createCollection = elevate(collections.createDataCollection);
+    try {
+      await createCollection({
+        _id: collectionId,
+        displayName,
+        permissions: {
+          read: "ADMIN",
+          insert: "ADMIN",
+          update: "ADMIN",
+          remove: "ADMIN",
+        },
+        fields,
+      });
+    } catch (createError) {
+      try {
+        await wixData
+          .query(collectionId)
+          .limit(1)
+          .find({ ...OPTIONS, consistentRead: true });
+      } catch {
+        throw createError;
+      }
+    }
   }
 }
 
-const payloadCollectionFields = [
-  { key: "appId", displayName: "App ID", type: "TEXT" },
-  { key: "payload", displayName: "Payload", type: "TEXT" },
-];
+async function ensureSettingsCollection() {
+  await ensureCollection(SETTINGS_COLLECTION, "Arena Settings", [
+    { key: "payload", displayName: "Payload", type: "TEXT" },
+    { key: "value", displayName: "Value", type: "NUMBER" },
+    { key: "activeEventId", displayName: "Active Event ID", type: "TEXT" },
+    {
+      key: "participantDatabaseVersion",
+      displayName: "Participant Database Version",
+      type: "NUMBER",
+    },
+    { key: "updatedAt", displayName: "Updated At", type: "DATETIME" },
+  ]);
+}
 
 async function ensureWorkspaceCollections() {
   await ensureSettingsCollection();
   for (const [key, collectionId] of Object.entries(COLLECTIONS)) {
-    const displayName = `Arena ${key
-      .replace(/([A-Z])/g, " $1")
-      .replace(/^./, (letter) => letter.toUpperCase())}`;
-    await ensureCollection(collectionId, displayName, payloadCollectionFields);
+    await ensureCollection(
+      collectionId,
+      COLLECTION_DISPLAY_NAMES[key],
+      PAYLOAD_FIELDS,
+    );
   }
 }
 
@@ -916,7 +804,7 @@ async function ensureRiderAccountCollections() {
   await ensureCollection(
     COLLECTIONS.contestants,
     "Arena Contestants",
-    payloadCollectionFields,
+    PAYLOAD_FIELDS,
   );
   await ensureCollection(
     CREDENTIALS_COLLECTION,
@@ -929,6 +817,18 @@ async function ensureRiderAccountCollections() {
       { key: "failedAttempts", displayName: "Failed Attempts", type: "NUMBER" },
       { key: "lockedUntil", displayName: "Locked Until", type: "DATETIME" },
       { key: "updatedAt", displayName: "Updated At", type: "DATETIME" },
+    ],
+  );
+  await ensureCredentialLockCollection();
+}
+
+async function ensureCredentialLockCollection() {
+  await ensureCollection(
+    CREDENTIAL_LOCKS_COLLECTION,
+    "Arena Contestant Credential Locks",
+    [
+      { key: "emailNormalized", displayName: "Normalized Email", type: "TEXT" },
+      { key: "expiresAt", displayName: "Expires At", type: "DATETIME" },
     ],
   );
 }
@@ -968,23 +868,26 @@ async function syncRecords(collectionId, records, removableAppIds) {
 
 async function removeOrphanedContestantCredentials(contestants) {
   const contestantIds = new Set(contestants.map((contestant) => contestant.id));
-  let credentials = await wixData
+  let result = await wixData
     .query(CREDENTIALS_COLLECTION)
     .limit(1000)
     .find(OPTIONS);
-  const orphanIds = credentials.items
-    .filter((credential) => !contestantIds.has(credential.contestantId))
-    .map((credential) => credential._id);
-  while (credentials.hasNext()) {
-    credentials = await credentials.next();
-    orphanIds.push(
-      ...credentials.items
-        .filter((credential) => !contestantIds.has(credential.contestantId))
-        .map((credential) => credential._id),
+  const removeIds = [];
+  while (true) {
+    removeIds.push(
+      ...result.items
+        .filter((item) => !contestantIds.has(item.contestantId))
+        .map((item) => item._id),
     );
+    if (!result.hasNext()) break;
+    result = await result.next();
   }
-  if (orphanIds.length) {
-    await wixData.bulkRemove(CREDENTIALS_COLLECTION, orphanIds, OPTIONS);
+  for (let index = 0; index < removeIds.length; index += 1000) {
+    await wixData.bulkRemove(
+      CREDENTIALS_COLLECTION,
+      removeIds.slice(index, index + 1000),
+      OPTIONS,
+    );
   }
 }
 
@@ -1049,6 +952,9 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
         record.source === "online" &&
         Date.parse(record.submittedAt || "") > loadedAt,
     );
+  const latestContestantsById = new Map(
+    latest.contestants.map((contestant) => [contestant.id, contestant]),
+  );
   const next = {
     ...data,
     contestants: (
@@ -1059,7 +965,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       normalizeContestantCasing(
         mergeContestantPhoto(
           contestant,
-          latest.contestants.find((previous) => previous.id === contestant.id),
+          latestContestantsById.get(contestant.id),
         ),
       ),
     ),
@@ -1095,7 +1001,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     ),
     syncRecords(
       COLLECTIONS.contestants,
-      next.contestants,
+      next.contestants || [],
       removableIds(latest.contestants),
     ),
     syncRecords(COLLECTIONS.teams, next.teams, removableIds(latest.teams)),
@@ -1115,7 +1021,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       removableIds(latest.spectatorPredictions),
     ),
   ]);
-  await removeOrphanedContestantCredentials(next.contestants);
+  await removeOrphanedContestantCredentials(next.contestants || []);
   await Promise.all([
     wixData.save(
       SETTINGS_COLLECTION,
@@ -1138,14 +1044,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     ),
     savePublicScheduleSnapshot(next),
   ]);
-  const staffRevision = latest.staffRevision + 1;
-  return {
-    ...next,
-    revision: staffRevision + latest.onlineRevision,
-    staffRevision,
-    onlineRevision: latest.onlineRevision,
-    loadedAt: new Date().toISOString(),
-  };
+  return readWorkspace();
 });
 
 function registrationDeskProjection(workspace) {
@@ -1236,16 +1135,18 @@ export const saveRegistrationDeskContestant = webMethod(
   async (input) => {
     await requireRegistrationDesk();
     const workspace = await readWorkspace();
-    const name = String(input.name || "").trim().replace(/\s+/g, " ").toUpperCase();
+    const name = normalizeUppercaseText(input.name);
     const email = normalizeEmail(input.email);
     const phone = String(input.phone || "").trim();
-    const id = input.id || `desk-contestant-${Date.now()}-${randomBytes(4).toString("hex")}`;
+    const id =
+      input.id ||
+      `desk-contestant-${Date.now()}-${randomBytes(4).toString("hex")}`;
     const headerHandicap = Number(input.headerHandicap);
     const heelerHandicap = Number(input.heelerHandicap);
     const horsesByName = new Map();
     (Array.isArray(input.horses) ? input.horses : []).forEach((value) => {
       if (typeof value !== "string") return;
-      const horse = value.trim().replace(/\s+/g, " ").toUpperCase();
+      const horse = normalizeUppercaseText(value);
       const key = horse.toLowerCase();
       if (horse && !horsesByName.has(key)) horsesByName.set(key, horse);
     });
@@ -1306,7 +1207,9 @@ export const saveRegistrationDeskContestant = webMethod(
         "Arena Admin must update the email and PIN for contestants with a login account.",
       );
     }
-    const previous = workspace.contestants.find((contestant) => contestant.id === id);
+    const previous = workspace.contestants.find(
+      (contestant) => contestant.id === id,
+    );
     const contestant = {
       id,
       name,
@@ -1316,7 +1219,7 @@ export const saveRegistrationDeskContestant = webMethod(
       photo: previous?.photo || "",
       phone,
       email,
-      hometown: String(input.hometown || "").trim().replace(/\s+/g, " ").toUpperCase(),
+      hometown: normalizeUppercaseText(input.hometown),
       horses,
       membershipNumber: previous?.membershipNumber || "",
       categoryNumber: previous?.categoryNumber || "",
@@ -1384,18 +1287,16 @@ export const setRegistrationDeskContestantPin = webMethod(
     }
     const pepper = await getSecret(PIN_PEPPER_SECRET);
     const salt = randomBytes(16).toString("hex");
+    const nextCredential = successfulCredentialMetadata({
+      ...(existingCredential.items[0] || {}),
+      contestantId,
+      emailNormalized: email,
+      pinSalt: salt,
+      pinHash: pinHash(pin, salt, pepper),
+    });
     await wixData.save(
       CREDENTIALS_COLLECTION,
-      {
-        ...(existingCredential.items[0] || {}),
-        contestantId,
-        emailNormalized: email,
-        pinSalt: salt,
-        pinHash: pinHash(pin, salt, pepper),
-        failedAttempts: 0,
-        lockedUntil: null,
-        updatedAt: new Date(),
-      },
+      nextCredential,
       OPTIONS,
     );
     return { configured: true };
@@ -1403,7 +1304,7 @@ export const setRegistrationDeskContestantPin = webMethod(
 );
 
 export const loadPublicArenaData = webMethod(Permissions.Anyone, async () =>
-  publicProjection(await readWorkspace()),
+  publicProjection(await readWorkspace({ includeSpectators: true })),
 );
 
 export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
@@ -1473,7 +1374,6 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
     incentiveAmountPerTeam: scheduleNumber(event.incentiveAmountPerTeam),
     entryCount: 0,
     results: [],
-    activePredictionRunId: undefined,
     predictionRuns: [],
     spectatorLeaderboards: [],
   }));
@@ -1531,38 +1431,34 @@ export const setContestantPin = webMethod(
       .eq("appId", contestantId)
       .limit(1)
       .find(OPTIONS);
+    const previousPayload = existingContestant.items[0]?.payload;
+    const previousContestant =
+      typeof previousPayload === "string"
+        ? JSON.parse(previousPayload)
+        : previousPayload || null;
+    const normalizedContestant = normalizeContestantCasing(
+      mergeContestantPhoto(
+        { ...contestant, email: normalizedEmail },
+        previousContestant,
+      ),
+    );
     await wixData.save(
       COLLECTIONS.contestants,
       {
         ...(existingContestant.items[0] || {}),
         appId: contestantId,
-        payload: JSON.stringify(
-          normalizeContestantCasing(
-            mergeContestantPhoto(
-              contestant,
-              existingContestant.items[0]?.payload
-                ? JSON.parse(existingContestant.items[0].payload)
-                : null,
-            ),
-          ),
-        ),
+        payload: JSON.stringify(normalizedContestant),
       },
       OPTIONS,
     );
-    await wixData.save(
-      CREDENTIALS_COLLECTION,
-      {
-        ...(existing.items[0] || {}),
-        contestantId,
-        emailNormalized: normalizedEmail,
-        pinSalt: salt,
-        pinHash: pinHash(pin, salt, pepper),
-        failedAttempts: 0,
-        lockedUntil: null,
-        updatedAt: new Date(),
-      },
-      OPTIONS,
-    );
+    const nextCredential = successfulCredentialMetadata({
+      ...(existing.items[0] || {}),
+      contestantId,
+      emailNormalized: normalizedEmail,
+      pinSalt: salt,
+      pinHash: pinHash(pin, salt, pepper),
+    });
+    await wixData.save(CREDENTIALS_COLLECTION, nextCredential, OPTIONS);
     return { configured: true };
   },
 );
@@ -1573,10 +1469,16 @@ export const createContestantAccount = webMethod(
     if (!validAppId(request.competitionId)) {
       throw new Error("Competition is unavailable.");
     }
-    const name = String(request.name || "").trim().replace(/\s+/g, " ").toUpperCase();
+    const name = String(request.name || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
     const email = normalizeEmail(request.email);
     const phone = String(request.phone || "").replace(/\D/g, "");
-    const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ").toUpperCase();
+    const hometown = String(request.hometown || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
     const role = String(request.role || "");
     const headerHandicap = role === "Heeler" ? 0 : Number(request.headerHandicap);
     const heelerHandicap = role === "Header" ? 0 : Number(request.heelerHandicap);
@@ -1658,7 +1560,6 @@ export const createContestantAccount = webMethod(
     ) {
       throw new Error("A contestant account already uses that phone number.");
     }
-    const submittedAt = new Date().toISOString();
     const contestant = {
       id: contestantId,
       name,
@@ -1670,7 +1571,7 @@ export const createContestantAccount = webMethod(
       heelerHandicap,
       photo: "",
       source: "online",
-      submittedAt,
+      submittedAt: new Date().toISOString(),
     };
     const pepper = await getSecret(PIN_PEPPER_SECRET);
     const salt = randomBytes(16).toString("hex");
@@ -1684,7 +1585,6 @@ export const createContestantAccount = webMethod(
           pinSalt: salt,
           pinHash: pinHash(request.pin, salt, pepper),
           failedAttempts: 0,
-          lockedUntil: null,
           updatedAt: new Date(),
         },
         OPTIONS,
@@ -1735,23 +1635,32 @@ export const createContestantAccount = webMethod(
 export const createRiderAccount = webMethod(
   Permissions.Anyone,
   async (request) => {
-    const name = String(request.name || "").trim().replace(/\s+/g, " ").toUpperCase();
+    const name = String(request.name || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
     const email = normalizeEmail(request.email);
     const phone = String(request.phone || "").replace(/\D/g, "");
-    const hometown = String(request.hometown || "").trim().replace(/\s+/g, " ").toUpperCase();
-    const horseName = String(request.horseName || "").trim().replace(/\s+/g, " ").toUpperCase();
+    const hometown = String(request.hometown || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
+    const horseName = String(request.horseName || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
     const role = String(request.role || "");
     const headerHandicap = Number(request.headerHandicap);
     const heelerHandicap = Number(request.heelerHandicap);
     if (name.length < 2 || name.length > 100) throw new Error("Enter your full name.");
+    if (horseName.length > 100) {
+      throw new Error("Horse name must be 100 characters or fewer.");
+    }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
       throw new Error("Enter a valid email address.");
     }
     if (phone.length < 10 || phone.length > 15) {
       throw new Error("Enter a valid phone number.");
-    }
-    if (horseName.length > 100) {
-      throw new Error("Horse name must be 100 characters or fewer.");
     }
     if (!["Header", "Heeler", "Both"].includes(role)) {
       throw new Error("Choose your roping position.");
@@ -1772,7 +1681,7 @@ export const createRiderAccount = webMethod(
       .update(`contestant-phone:${phone}`)
       .digest("hex")
       .slice(0, 24)}`;
-    const [duplicate, existingPhone] = await Promise.all([
+    const [duplicateEmail, existingPhone] = await Promise.all([
       wixData
         .query(CREDENTIALS_COLLECTION)
         .eq("emailNormalized", email)
@@ -1784,13 +1693,12 @@ export const createRiderAccount = webMethod(
         .limit(1)
         .find(OPTIONS),
     ]);
-    if (duplicate.items.length) {
+    if (duplicateEmail.items.length) {
       throw new Error("A rider account already uses that email.");
     }
     if (existingPhone.items.length) {
       throw new Error("A rider account already uses that phone number.");
     }
-    const submittedAt = new Date().toISOString();
     const contestant = {
       id: contestantId,
       name,
@@ -1803,8 +1711,14 @@ export const createRiderAccount = webMethod(
       photo: "",
       horses: horseName ? [horseName] : [],
       source: "online",
-      submittedAt,
+      submittedAt: new Date().toISOString(),
     };
+    const credentialId = createHash("sha256")
+      .update(`contestant-credential:${email}`)
+      .digest("hex")
+      .slice(0, 32);
+    const pepper = await getSecret(PIN_PEPPER_SECRET);
+    const salt = randomBytes(16).toString("hex");
     const onlineRevision = await wixData
       .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
       .catch(() => null);
@@ -1817,12 +1731,6 @@ export const createRiderAccount = webMethod(
       },
       OPTIONS,
     );
-    const credentialId = createHash("sha256")
-      .update(`contestant-credential:${email}`)
-      .digest("hex")
-      .slice(0, 32);
-    const pepper = await getSecret(PIN_PEPPER_SECRET);
-    const salt = randomBytes(16).toString("hex");
     await wixData.insert(
       CREDENTIALS_COLLECTION,
       {
@@ -1832,7 +1740,6 @@ export const createRiderAccount = webMethod(
         pinSalt: salt,
         pinHash: pinHash(request.pin, salt, pepper),
         failedAttempts: 0,
-        lockedUntil: null,
         updatedAt: new Date(),
       },
       OPTIONS,
@@ -1859,58 +1766,7 @@ export const createRiderAccount = webMethod(
 export const authenticateContestant = webMethod(
   Permissions.Anyone,
   async ({ email, pin }) => {
-    const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail || !validPin(pin)) {
-      throw new Error("Enter your email and four-digit PIN.");
-    }
-    const credentialResult = await wixData
-      .query(CREDENTIALS_COLLECTION)
-      .eq("emailNormalized", normalizedEmail)
-      .limit(1)
-      .find(OPTIONS);
-    const credential = credentialResult.items[0];
-    const pepper = await getSecret(PIN_PEPPER_SECRET);
-    if (!credential) {
-      pinHash(pin, "missing-contestant-account", pepper);
-      throw new Error("Email or PIN is incorrect, or login is temporarily unavailable.");
-    }
-    const lockExpiresAt = credential.lockedUntil
-      ? new Date(credential.lockedUntil).getTime()
-      : 0;
-    if (lockExpiresAt > Date.now()) {
-      throw new Error("Email or PIN is incorrect, or login is temporarily unavailable.");
-    }
-    if (
-      typeof credential.pinSalt !== "string" ||
-      typeof credential.pinHash !== "string"
-    ) {
-      throw new Error("Email or PIN is incorrect, or login is temporarily unavailable.");
-    }
-    const candidate = pinHash(pin, credential.pinSalt, pepper);
-    if (!constantTimeEqual(candidate, credential.pinHash)) {
-      const failedAttempts =
-        (lockExpiresAt && lockExpiresAt <= Date.now()
-          ? 0
-          : credential.failedAttempts || 0) + 1;
-      await wixData.update(
-        CREDENTIALS_COLLECTION,
-        {
-          ...credential,
-          failedAttempts,
-          lockedUntil:
-            failedAttempts >= MAX_FAILED_ATTEMPTS
-              ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000)
-              : null,
-        },
-        OPTIONS,
-      );
-      throw new Error("Email or PIN is incorrect, or login is temporarily unavailable.");
-    }
-    await wixData.update(
-      CREDENTIALS_COLLECTION,
-      { ...credential, failedAttempts: 0, lockedUntil: null },
-      OPTIONS,
-    );
+    const contestantId = await verifyContestantCredentials(email, pin);
 
     const [meets, events, contestants, teams, registrations] = await Promise.all([
       readAll(COLLECTIONS.meets),
@@ -1920,7 +1776,7 @@ export const authenticateContestant = webMethod(
       readAll(COLLECTIONS.registrations),
     ]);
     const contestant = contestants.find(
-      (item) => item.id === credential.contestantId,
+      (item) => item.id === contestantId,
     );
     if (!contestant) throw new Error("Contestant profile is unavailable.");
     const contestantTeams = teams.filter(
@@ -1952,21 +1808,112 @@ export const authenticateContestant = webMethod(
   },
 );
 
+async function persistCredentialSecurityMetadata(credential, context) {
+  let lastError;
+  for (let attempt = 1; attempt <= REVISION_WRITE_ATTEMPTS; attempt += 1) {
+    try {
+      await wixData.update(
+        CREDENTIALS_COLLECTION,
+        credential,
+        OPTIONS,
+      );
+      return true;
+    } catch (error) {
+      lastError = error;
+      console.error("Contestant credential metadata update failed.", {
+        context,
+        attempt,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  console.error("Contestant credential metadata could not be persisted.", {
+    context,
+    message:
+      lastError instanceof Error ? lastError.message : String(lastError),
+  });
+  return false;
+}
+
+async function withCredentialSecurityLock(normalizedEmail, callback) {
+  await ensureCredentialLockCollection();
+  const lockId = arenaRecordStorageId(
+    CREDENTIAL_LOCKS_COLLECTION,
+    normalizedEmail,
+  );
+  let acquired = false;
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    try {
+      await wixData.insert(
+        CREDENTIAL_LOCKS_COLLECTION,
+        {
+          _id: lockId,
+          emailNormalized: normalizedEmail,
+          expiresAt: new Date(Date.now() + 30 * 1000),
+        },
+        OPTIONS,
+      );
+      acquired = true;
+      break;
+    } catch (error) {
+      const existing = await wixData
+        .get(CREDENTIAL_LOCKS_COLLECTION, lockId, {
+          ...OPTIONS,
+          consistentRead: true,
+        })
+        .catch(() => null);
+      if (existing && new Date(existing.expiresAt).getTime() <= Date.now()) {
+        await wixData
+          .remove(CREDENTIAL_LOCKS_COLLECTION, lockId, OPTIONS)
+          .catch(() => undefined);
+      } else if (!existing) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, attempt * 25));
+    }
+  }
+  if (!acquired) {
+    throw new PublicSignupError(
+      "AUTH_TEMPORARILY_UNAVAILABLE",
+      "Login is temporarily unavailable. Try again in a few minutes.",
+    );
+  }
+  try {
+    return await callback();
+  } finally {
+    await wixData
+      .remove(CREDENTIAL_LOCKS_COLLECTION, lockId, OPTIONS)
+      .catch(() => undefined);
+  }
+}
+
 async function verifyContestantCredentials(email, pin) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail || !validPin(pin)) {
-    throw new Error("Enter your email and four-digit PIN.");
+    throw new PublicSignupError(
+      "INVALID_CREDENTIALS",
+      "Enter your email and four-digit PIN.",
+    );
   }
+  return withCredentialSecurityLock(normalizedEmail, () =>
+    verifyContestantCredentialsUnlocked(normalizedEmail, pin),
+  );
+}
+
+async function verifyContestantCredentialsUnlocked(normalizedEmail, pin) {
   const result = await wixData
     .query(CREDENTIALS_COLLECTION)
     .eq("emailNormalized", normalizedEmail)
     .limit(1)
-    .find(OPTIONS);
+    .find({ ...OPTIONS, consistentRead: true });
   const credential = result.items[0];
   const pepper = await getSecret(PIN_PEPPER_SECRET);
   if (!credential) {
     pinHash(pin, "missing-contestant-account", pepper);
-    throw new Error("Email or PIN is incorrect, or login is temporarily unavailable.");
+    throw new PublicSignupError(
+      "INVALID_CREDENTIALS",
+      "Email or PIN is incorrect, or login is temporarily unavailable.",
+    );
   }
   const lockExpiresAt = credential.lockedUntil
     ? new Date(credential.lockedUntil).getTime()
@@ -1976,33 +1923,45 @@ async function verifyContestantCredentials(email, pin) {
     typeof credential.pinSalt !== "string" ||
     typeof credential.pinHash !== "string"
   ) {
-    throw new Error("Email or PIN is incorrect, or login is temporarily unavailable.");
+    throw new PublicSignupError(
+      "INVALID_CREDENTIALS",
+      "Email or PIN is incorrect, or login is temporarily unavailable.",
+    );
   }
   const candidate = pinHash(pin, credential.pinSalt, pepper);
   if (!constantTimeEqual(candidate, credential.pinHash)) {
-    const failedAttempts =
-      (lockExpiresAt && lockExpiresAt <= Date.now()
-        ? 0
-        : credential.failedAttempts || 0) + 1;
-    await wixData.update(
-      CREDENTIALS_COLLECTION,
-      {
-        ...credential,
-        failedAttempts,
-        lockedUntil:
-          failedAttempts >= MAX_FAILED_ATTEMPTS
-            ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000)
-            : null,
-      },
-      OPTIONS,
+    const persisted = await persistCredentialSecurityMetadata(
+      failedCredentialMetadata(
+        credential,
+        Date.now(),
+        MAX_FAILED_ATTEMPTS,
+        LOCK_MINUTES,
+      ),
+      "failed-pin-attempt",
     );
-    throw new Error("Email or PIN is incorrect, or login is temporarily unavailable.");
+    if (!persisted) {
+      throw new PublicSignupError(
+        "AUTH_TEMPORARILY_UNAVAILABLE",
+        "Login is temporarily unavailable. Try again in a few minutes.",
+      );
+    }
+    throw new PublicSignupError(
+      "INVALID_CREDENTIALS",
+      "Email or PIN is incorrect, or login is temporarily unavailable.",
+    );
   }
-  await wixData.update(
-    CREDENTIALS_COLLECTION,
-    { ...credential, failedAttempts: 0, lockedUntil: null },
-    OPTIONS,
-  );
+  if (credential.failedAttempts || credential.lockedUntil) {
+    const persisted = await persistCredentialSecurityMetadata(
+      successfulCredentialMetadata(credential),
+      "successful-pin-reset",
+    );
+    if (!persisted) {
+      throw new PublicSignupError(
+        "AUTH_TEMPORARILY_UNAVAILABLE",
+        "Login is temporarily unavailable. Try again in a few minutes.",
+      );
+    }
+  }
   return credential.contestantId;
 }
 
@@ -2010,28 +1969,15 @@ const validAppId = (value) => /^[a-zA-Z0-9_-]{1,100}$/.test(String(value || ""))
 const contestantCanRole = (contestant, role) =>
   contestant.role === "Both" || contestant.role === role;
 const handicapTotal = (header, heeler) =>
-  Number(header?.headerHandicap || 3) + Number(heeler?.heelerHandicap || 3);
+  Number(header?.headerHandicap || 0) + Number(heeler?.heelerHandicap || 0);
 const contestantWithinHandicap = (event, contestant, role) =>
-  Number(role === "Header" ? contestant?.headerHandicap || 3 : contestant?.heelerHandicap || 3) <=
-  Number(event.maxContestantHandicap ?? 10);
+  Number(role === "Header" ? contestant?.headerHandicap || 0 : contestant?.heelerHandicap || 0) <=
+  Number(event.maxContestantHandicap ?? 99);
 
 function availablePartners(workspace, event, contestant) {
   return workspace.contestants
     .filter((partner) => {
       if (partner.id === contestant.id) return false;
-      if (
-        event.competitionType === "pick-and-draw" &&
-        !workspace.registrations.some(
-          (registration) =>
-            registration.eventId === event.id &&
-            registration.contestantId === partner.id &&
-            !registration.sourceTeamId &&
-            registration.status === "entered" &&
-            Number(registration.entries) > 0,
-        )
-      ) {
-        return false;
-      }
       const canHeeler =
         contestantCanRole(contestant, "Header") &&
         contestantWithinHandicap(event, contestant, "Header") &&
@@ -2057,45 +2003,31 @@ function availablePartners(workspace, event, contestant) {
 
 export const loadSignupOptions = webMethod(
   Permissions.Anyone,
-  async ({ competitionId, email, pin }) => {
-    if (!validAppId(competitionId)) throw new Error("Competition is unavailable.");
-    const contestantId = await verifyContestantCredentials(email, pin);
-    const workspace = await readWorkspace();
-    const event = workspace.events.find((item) => item.id === competitionId);
-    const contestant = workspace.contestants.find((item) => item.id === contestantId);
-    if (!event || !contestant) throw new Error("Competition or contestant is unavailable.");
-    assertOnlineRegistrationOpen(event);
-    const privateContestant = ({
-      id,
-      name,
-      role,
-      headerHandicap,
-      heelerHandicap,
-      horses,
-    }) => ({ id, name, role, headerHandicap, heelerHandicap, horses: horses || [] });
-    return {
-      contestant: privateContestant(contestant),
-      partners:
-        event.competitionType === "pick-only" ||
-        event.competitionType === "slide" ||
-        event.competitionType === "pick-and-draw"
-          ? availablePartners(workspace, event, contestant)
-          : [],
-    };
-  },
+  async ({ email, pin }) =>
+    publicSignupEnvelope("loadSignupOptions", async () => {
+      const contestantId = await verifyContestantCredentials(email, pin);
+      return loadPublicSignupOptions(contestantId);
+    }),
+);
+
+export const createPublicSignupPayment = webMethod(
+  Permissions.Anyone,
+  async (request) =>
+    publicSignupEnvelope("createPublicSignupPayment", () =>
+      createPublicSignupPaymentIntent(request),
+    ),
+);
+
+export const getPublicSignupPaymentStatus = webMethod(
+  Permissions.Anyone,
+  async (request) =>
+    publicSignupEnvelope("getPublicSignupPaymentStatus", () =>
+      readPublicSignupPaymentStatus(request),
+    ),
 );
 
 async function insertUniqueArenaRecord(collectionId, record) {
-  const existing = await wixData
-    .query(collectionId)
-    .eq("appId", record.id)
-    .limit(1)
-    .find(OPTIONS);
-  if (existing.items.length) return false;
-  const storageId = createHash("sha256")
-    .update(`${collectionId}:${record.id}`)
-    .digest("hex")
-    .slice(0, 32);
+  const storageId = arenaRecordStorageId(collectionId, record.id);
   try {
     await wixData.insert(
       collectionId,
@@ -2112,153 +2044,185 @@ async function insertUniqueArenaRecord(collectionId, record) {
   }
 }
 
-async function createSignupRecords(request, authenticatedId, source) {
+async function createRegistrationDeskSignupRecords(request) {
+  if (
+    !validAppId(request.competitionId || request.eventId) ||
+    !validAppId(request.contestantId) ||
+    !validAppId(request.submissionId)
+  ) {
+    throw new Error("Invalid signup request.");
+  }
+  if (!["cash", "card", "tab"].includes(request.paymentMethod)) {
+    throw new Error("Choose paid in cash, paid with credit card, or open a tab.");
+  }
+  if (
+    request.paymentMethod !== "tab" &&
+    request.paymentConfirmed !== true
+  ) {
+    throw new Error("Cashier must confirm the payment before sending entries.");
+  }
+
+  const eventId = request.competitionId || request.eventId;
+  const workspace = await readWorkspace();
+  const event = workspace.events.find((item) => item.id === eventId);
+  const contestant = workspace.contestants.find(
+    (item) => item.id === request.contestantId,
+  );
+  if (!event || !contestant) {
+    throw new Error("Competition or contestant not found.");
+  }
+  assertRegistrationDeskOpen(event);
+
+  const requestedHorse = String(request.horseName || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  const normalizedPartnerIds =
+    event.competitionType === "pick-and-draw" &&
+    Array.isArray(request.partnerIds)
+      ? [...new Set(request.partnerIds)].sort()
+      : request.partnerId
+        ? [request.partnerId]
+        : [];
+  const submissionFingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        source: "staff",
+        eventId,
+        contestantId: contestant.id,
+        role: request.role || "",
+        drawRole: request.drawRole || "",
+        entries:
+          request.entries === undefined ? null : Number(request.entries),
+        partnerIds: normalizedPartnerIds,
+        horseName: requestedHorse.toLowerCase(),
+        paymentMethod: request.paymentMethod,
+      }),
+    )
+    .digest("hex");
+  const priorTeams = workspace.teams.filter(
+    (team) =>
+      team.submissionId === request.submissionId && team.source === "staff",
+  );
+  const priorRegistrations = workspace.registrations.filter(
+    (registration) =>
+      registration.submissionId === request.submissionId &&
+      registration.source === "staff",
+  );
+  const repeated = priorTeams.length > 0 || priorRegistrations.length > 0;
+  if (repeated) {
+    const priorRecords = [...priorTeams, ...priorRegistrations];
+    const belongsToRequest =
+      priorRecords.every((record) => record.eventId === event.id) &&
+      (priorTeams.some(
+        (team) =>
+          team.headerId === contestant.id || team.heelerId === contestant.id,
+      ) ||
+        priorRegistrations.some(
+          (registration) => registration.contestantId === contestant.id,
+        ));
     if (
-      !validAppId(request.competitionId || request.eventId) ||
-      !validAppId(request.contestantId) ||
-      !validAppId(request.submissionId)
-    ) {
-      throw new Error("Invalid signup request.");
-    }
-    const eventId = request.competitionId || request.eventId;
-    if (authenticatedId !== request.contestantId) {
-      throw new Error("Contestant account does not match this entry.");
-    }
-    const workspace = await readWorkspace();
-    const event = workspace.events.find((item) => item.id === eventId);
-    const contestant = workspace.contestants.find(
-      (item) => item.id === authenticatedId,
-    );
-    if (!event || !contestant) throw new Error("Competition or contestant not found.");
-    if (source === "staff") {
-      assertRegistrationDeskOpen(event);
-    } else {
-      assertOnlineRegistrationOpen(event);
-    }
-    const requestedHorse = String(request.horseName || "").trim().replace(/\s+/g, " ");
-    const normalizedPartnerIds =
-      event.competitionType === "pick-and-draw" &&
-      Array.isArray(request.partnerIds)
-        ? [...new Set(request.partnerIds)].sort()
-        : request.partnerId
-          ? [request.partnerId]
-          : [];
-    const submissionFingerprint = createHash("sha256")
-      .update(
-        JSON.stringify({
-          source,
-          eventId,
-          contestantId: authenticatedId,
-          role: request.role || "",
-          drawRole: request.drawRole || "",
-          entries:
-            request.entries === undefined ? null : Number(request.entries),
-          partnerIds: normalizedPartnerIds,
-          horseName: requestedHorse.toLowerCase(),
-          paymentMethod: source === "staff" ? request.paymentMethod || "" : "",
-        }),
+      !belongsToRequest ||
+      priorRecords.some(
+        (record) =>
+          record.submissionFingerprint &&
+          record.submissionFingerprint !== submissionFingerprint,
       )
-      .digest("hex");
-
-    const priorTeams = workspace.teams.filter(
-      (team) =>
-        team.submissionId === request.submissionId && team.source === source,
-    );
-    const priorRegistrations = workspace.registrations.filter(
-      (registration) =>
-        registration.submissionId === request.submissionId &&
-        registration.source === source,
-    );
-    const repeated = priorTeams.length > 0 || priorRegistrations.length > 0;
-    if (repeated) {
-      const priorRecords = [...priorTeams, ...priorRegistrations];
-      const belongsToRequest =
-        priorRecords.every(
-          (record) => record.eventId === event.id,
-        ) &&
-        (priorTeams.some(
-          (team) =>
-            team.headerId === authenticatedId || team.heelerId === authenticatedId,
-        ) ||
-          priorRegistrations.some(
-            (registration) => registration.contestantId === authenticatedId,
-          ));
-      if (!belongsToRequest) {
-        throw new Error("That submission ID is already in use.");
-      }
-      if (priorRecords.some((record) => !record.submissionFingerprint)) {
-        return {
-          submissionId: request.submissionId,
-          competitionId: event.id,
-          summary: `Your entry in ${event.name} is already confirmed and pending payment.`,
-          existing: true,
-        };
-      }
-      if (
-        priorRecords.some(
-          (record) => record.submissionFingerprint !== submissionFingerprint,
-        )
-      ) {
-        throw new Error("That submission ID is already in use.");
-      }
-      return {
-        submissionId: request.submissionId,
-        competitionId: event.id,
-        summary: `Your entry in ${event.name} is already confirmed and pending payment.`,
-        existing: true,
-      };
-    }
-    const horseName = requestedHorse
-      ? (contestant.horses || []).find(
-         (horse) => horse.toLowerCase() === requestedHorse.toLowerCase(),
-       )
-      : undefined;
-    if (requestedHorse && !horseName) {
-      throw new Error("Choose a horse saved on this contestant profile.");
-    }
-
-    const submittedAt = new Date().toISOString();
-    const metadata = {
-      paid: source === "staff" && request.paymentMethod !== "tab",
-      ...(source === "staff"
-        ? {
-            paymentMethod: request.paymentMethod,
-            paymentReference: request.submissionId,
-          }
-        : {}),
-      source,
-      submissionId: request.submissionId,
-      submissionFingerprint,
-      submittedAt,
-    };
-    const idPrefix = source === "online" ? "online" : "desk";
-    const registrations = [];
-    const teams = [];
-    if (
-      event.competitionType === "draw-pot" ||
-      event.competitionType === "round-robin" ||
-      (event.competitionType === "slide" &&
-        request.entries !== undefined &&
-        normalizedPartnerIds.length === 0)
     ) {
-      const entries = Number(request.entries);
-      const minimumDraws = Math.max(
-        1,
-        Number(event.minDrawsAllowed ?? 0),
+      throw new Error("That submission ID is already in use.");
+    }
+  }
+
+  const horseName = requestedHorse
+    ? (contestant.horses || []).find(
+        (horse) => horse.toLowerCase() === requestedHorse.toLowerCase(),
+      )
+    : undefined;
+  if (requestedHorse && !horseName) {
+    throw new Error("Choose a horse saved on this contestant profile.");
+  }
+  const metadata = {
+    paid: request.paymentMethod !== "tab",
+    paymentMethod: request.paymentMethod,
+    paymentReference: request.submissionId,
+    source: "staff",
+    submissionId: request.submissionId,
+    submissionFingerprint,
+    submittedAt: new Date().toISOString(),
+  };
+  const registrations = [];
+  const teams = [];
+
+  if (
+    event.competitionType === "draw-pot" ||
+    event.competitionType === "round-robin" ||
+    (event.competitionType === "slide" &&
+      request.entries !== undefined &&
+      normalizedPartnerIds.length === 0)
+  ) {
+    const entries = Number(request.entries);
+    const minimumDraws = Math.max(1, Number(event.minDrawsAllowed ?? 0));
+    if (
+      !["Header", "Heeler"].includes(request.role) ||
+      !contestantCanRole(contestant, request.role) ||
+      !Number.isInteger(entries) ||
+      entries < minimumDraws ||
+      entries > Number(event.entriesAllowed || 1)
+    ) {
+      throw new Error(
+        `This competition requires at least ${minimumDraws} draw entr${minimumDraws === 1 ? "y" : "ies"}.`,
       );
+    }
+    if (!contestantWithinHandicap(event, contestant, request.role)) {
+      throw new Error("Contestant handicap exceeds the competition limit.");
+    }
+    const entered = workspace.registrations
+      .filter(
+        (registration) =>
+          registration.eventId === event.id &&
+          registration.contestantId === contestant.id &&
+          !registration.sourceTeamId &&
+          registration.submissionId !== request.submissionId &&
+          registration.status !== "scratched",
+      )
+      .reduce(
+        (sum, registration) => sum + Number(registration.entries || 0),
+        0,
+      );
+    if (entered + entries > event.entriesAllowed) {
+      throw new Error("Entry limit exceeded.");
+    }
+    registrations.push({
+      id: `desk-registration-${request.submissionId}`,
+      eventId: event.id,
+      contestantId: contestant.id,
+      horseName,
+      role: request.role,
+      entries,
+      checkedIn: false,
+      status: "entered",
+      notes: "",
+      ...metadata,
+    });
+  } else {
+    if (normalizedPartnerIds.some((partnerId) => !validAppId(partnerId))) {
+      throw new Error("Choose an eligible partner.");
+    }
+    if (event.competitionType === "pick-and-draw") {
+      const entries = Number(request.entries ?? 0);
+      const minimumDraws = Math.max(1, Number(event.minDrawsAllowed ?? 0));
+      const drawRole = request.drawRole || request.role;
       if (
-        !["Header", "Heeler"].includes(request.role) ||
-        !contestantCanRole(contestant, request.role) ||
         !Number.isInteger(entries) ||
         entries < minimumDraws ||
-        entries > Number(event.entriesAllowed || 1)
+        entries > Number(event.entriesAllowed || 1) ||
+        (entries > 0 &&
+          (!["Header", "Heeler"].includes(drawRole) ||
+            !contestantCanRole(contestant, drawRole) ||
+            !contestantWithinHandicap(event, contestant, drawRole)))
       ) {
         throw new Error(
           `This competition requires at least ${minimumDraws} draw entr${minimumDraws === 1 ? "y" : "ies"}.`,
         );
-      }
-      if (!contestantWithinHandicap(event, contestant, request.role)) {
-        throw new Error("Contestant handicap exceeds the competition limit.");
       }
       const standaloneEntries = workspace.registrations
         .filter(
@@ -2269,282 +2233,204 @@ async function createSignupRecords(request, authenticatedId, source) {
             registration.submissionId !== request.submissionId &&
             registration.status !== "scratched",
         )
-        .reduce((sum, registration) => sum + Number(registration.entries || 0), 0);
-      if (standaloneEntries + entries > event.entriesAllowed) {
-        throw new Error("Entry limit exceeded.");
+        .reduce(
+          (sum, registration) => sum + Number(registration.entries || 0),
+          0,
+        );
+      const existingPickedTeams = workspace.teams.filter(
+        (team) =>
+          team.eventId === event.id &&
+          Number(team.round) === 1 &&
+          !team.scratched &&
+          !team.generated &&
+          team.submissionId !== request.submissionId &&
+          (team.headerId === contestant.id ||
+            team.heelerId === contestant.id),
+      ).length;
+      if (
+        standaloneEntries +
+          existingPickedTeams +
+          entries +
+          normalizedPartnerIds.length >
+        event.entriesAllowed
+      ) {
+        throw new Error("Draw entry limit exceeded.");
       }
-      registrations.push({
-        id: `${idPrefix}-registration-${request.submissionId}`,
-        eventId: event.id,
-        contestantId: contestant.id,
-        horseName,
-        role: request.role,
-        entries,
-        checkedIn: false,
-        status: "entered",
-        notes: "",
-        ...metadata,
-      });
-    } else {
-      const requestedPartnerIds = normalizedPartnerIds;
-      if (requestedPartnerIds.some((partnerId) => !validAppId(partnerId))) {
+      if (entries > 0) {
+        registrations.push({
+          id: `desk-registration-${request.submissionId}-draw`,
+          eventId: event.id,
+          contestantId: contestant.id,
+          horseName,
+          role: drawRole,
+          entries,
+          checkedIn: false,
+          status: "entered",
+          notes: "",
+          ...metadata,
+        });
+      }
+    }
+
+    if (!normalizedPartnerIds.length) {
+      if (event.competitionType !== "pick-and-draw") {
         throw new Error("Choose an eligible partner.");
       }
-      if (event.competitionType === "pick-and-draw") {
-        const entries = Number(request.entries ?? 0);
-        const minimumDraws = Math.max(
-          1,
-          Number(event.minDrawsAllowed ?? 0),
+    } else {
+      if (!["Header", "Heeler"].includes(request.role)) {
+        throw new Error("Choose your team position.");
+      }
+      const activeTeams = workspace.teams.filter(
+        (team) =>
+          team.eventId === event.id &&
+          team.round === 1 &&
+          !team.generated &&
+          !team.scratched &&
+          team.submissionId !== request.submissionId,
+      );
+      const entryCount = (contestantId) =>
+        activeTeams.filter(
+          (team) =>
+            team.headerId === contestantId ||
+            team.heelerId === contestantId,
+        ).length;
+      if (
+        entryCount(contestant.id) + normalizedPartnerIds.length >
+        event.entriesAllowed
+      ) {
+        throw new Error("Entry limit exceeded.");
+      }
+      normalizedPartnerIds.forEach((partnerId, partnerIndex) => {
+        const partner = workspace.contestants.find(
+          (item) => item.id === partnerId,
         );
-        const drawRole = request.drawRole || request.role;
-        const allowedRoles = ["Header", "Heeler"];
+        if (!partner || partner.id === contestant.id) {
+          throw new Error("Choose an eligible partner.");
+        }
+        const hasDrawRegistration = (contestantId) =>
+          [...workspace.registrations, ...registrations].some(
+            (registration) =>
+              registration.eventId === event.id &&
+              registration.contestantId === contestantId &&
+              !registration.sourceTeamId &&
+              registration.status === "entered" &&
+              Number(registration.entries) > 0,
+          );
         if (
-          !Number.isInteger(entries) ||
-          entries < minimumDraws ||
-          entries > Number(event.entriesAllowed || 1) ||
-          (entries > 0 &&
-            (!allowedRoles.includes(drawRole) ||
-              !contestantCanRole(contestant, drawRole) ||
-              !contestantWithinHandicap(event, contestant, drawRole)))
+          event.competitionType === "pick-and-draw" &&
+          (!hasDrawRegistration(contestant.id) ||
+            !hasDrawRegistration(partner.id))
         ) {
           throw new Error(
-            `This competition requires at least ${minimumDraws} draw entr${minimumDraws === 1 ? "y" : "ies"}.`,
+            "Every rider on a picked team must already be entered in the draw.",
           );
         }
-        const standaloneEntries = workspace.registrations
+        const header = request.role === "Header" ? contestant : partner;
+        const heeler = request.role === "Heeler" ? contestant : partner;
+        if (
+          !contestantCanRole(header, "Header") ||
+          !contestantCanRole(heeler, "Heeler") ||
+          !contestantWithinHandicap(event, header, "Header") ||
+          !contestantWithinHandicap(event, heeler, "Heeler")
+        ) {
+          throw new Error("A contestant handicap exceeds the competition limit.");
+        }
+        if (handicapTotal(header, heeler) > event.handicapTotal) {
+          throw new Error("Team handicap exceeds the competition limit.");
+        }
+        if (
+          !event.allowRepeatPartners &&
+          activeTeams.some(
+            (team) =>
+              team.headerId === header.id && team.heelerId === heeler.id,
+          )
+        ) {
+          throw new Error("That partnership is already entered.");
+        }
+        const partnerStandaloneEntries = workspace.registrations
           .filter(
             (registration) =>
               registration.eventId === event.id &&
-              registration.contestantId === contestant.id &&
+              registration.contestantId === partner.id &&
               !registration.sourceTeamId &&
               registration.submissionId !== request.submissionId &&
               registration.status !== "scratched",
           )
           .reduce(
-            (sum, registration) => sum + Number(registration.entries || 0),
+            (sum, registration) =>
+              sum + Number(registration.entries || 0),
             0,
           );
-        const existingPickedTeams = workspace.teams.filter(
-          (team) =>
-            team.eventId === event.id &&
-            Number(team.round) === 1 &&
-            !team.scratched &&
-            !team.generated &&
-            team.submissionId !== request.submissionId &&
-            (team.headerId === contestant.id ||
-              team.heelerId === contestant.id),
-        ).length;
         if (
-          standaloneEntries +
-            existingPickedTeams +
-            entries +
-            requestedPartnerIds.length >
+          partnerStandaloneEntries + entryCount(partner.id) + 1 >
           event.entriesAllowed
         ) {
-          throw new Error("Draw entry limit exceeded.");
+          throw new Error(`Entry limit exceeded for ${partner.name}.`);
         }
-        if (entries > 0) {
-          registrations.push({
-            id: `${idPrefix}-registration-${request.submissionId}-draw`,
-            eventId: event.id,
-            contestantId: contestant.id,
-            horseName,
-            role: drawRole,
-            entries,
-            checkedIn: false,
-            status: "entered",
-            notes: "",
-            ...metadata,
-          });
-        }
-      }
-      if (!requestedPartnerIds.length) {
-        if (event.competitionType !== "pick-and-draw") {
-          throw new Error("Choose an eligible partner.");
-        }
-      } else {
-        if (!["Header", "Heeler"].includes(request.role)) {
-          throw new Error("Choose your team position.");
-        }
-        const activeTeams = workspace.teams.filter(
-          (team) =>
-            team.eventId === event.id &&
-            team.round === 1 &&
-            !team.generated &&
-            !team.scratched &&
-            team.submissionId !== request.submissionId,
-        );
-        const entryCount = (contestantId) =>
-          activeTeams.filter(
-            (team) =>
-              team.headerId === contestantId ||
-              team.heelerId === contestantId,
-          ).length;
-        if (
-          entryCount(contestant.id) + requestedPartnerIds.length >
-          event.entriesAllowed
-        ) {
-          throw new Error("Entry limit exceeded.");
-        }
-        requestedPartnerIds.forEach((partnerId, partnerIndex) => {
-          const partner = workspace.contestants.find(
-            (item) => item.id === partnerId,
-          );
-          if (!partner || partner.id === contestant.id) {
-            throw new Error("Choose an eligible partner.");
-          }
-          const hasDrawRegistration = (contestantId) =>
-            [...workspace.registrations, ...registrations].some(
-              (registration) =>
-                registration.eventId === event.id &&
-                registration.contestantId === contestantId &&
-                !registration.sourceTeamId &&
-                registration.status === "entered" &&
-                Number(registration.entries) > 0,
-            );
-          if (
-            event.competitionType === "pick-and-draw" &&
-            (!hasDrawRegistration(contestant.id) ||
-              !hasDrawRegistration(partner.id))
-          ) {
-            throw new Error(
-              "Every rider on a picked team must already be entered in the draw.",
-            );
-          }
-          const header = request.role === "Header" ? contestant : partner;
-          const heeler = request.role === "Heeler" ? contestant : partner;
-          if (
-            !contestantCanRole(header, "Header") ||
-            !contestantCanRole(heeler, "Heeler") ||
-            !contestantWithinHandicap(event, header, "Header") ||
-            !contestantWithinHandicap(event, heeler, "Heeler")
-          ) {
-            throw new Error(
-              "A contestant handicap exceeds the competition limit.",
-            );
-          }
-          if (handicapTotal(header, heeler) > event.handicapTotal) {
-            throw new Error("Team handicap exceeds the competition limit.");
-          }
-          if (
-            !event.allowRepeatPartners &&
-            activeTeams.some(
-              (team) =>
-                team.headerId === header.id && team.heelerId === heeler.id,
-            )
-          ) {
-            throw new Error("That partnership is already entered.");
-          }
-          const partnerStandaloneEntries = workspace.registrations
-            .filter(
-              (registration) =>
-                registration.eventId === event.id &&
-                registration.contestantId === partner.id &&
-                !registration.sourceTeamId &&
-                registration.submissionId !== request.submissionId &&
-                registration.status !== "scratched",
-            )
-            .reduce(
-              (sum, registration) =>
-                sum + Number(registration.entries || 0),
-              0,
-            );
-          if (
-            partnerStandaloneEntries + entryCount(partner.id) + 1 >
-            event.entriesAllowed
-          ) {
-            throw new Error(`Entry limit exceeded for ${partner.name}.`);
-          }
-          const legacySinglePick =
-            requestedPartnerIds.length === 1 &&
-            !Array.isArray(request.partnerIds);
-          const teamId = legacySinglePick
-            ? `${idPrefix}-team-${request.submissionId}`
-            : `${idPrefix}-team-${request.submissionId}-pick-${partnerIndex + 1}`;
-          teams.push({
-            id: teamId,
-            eventId: event.id,
-            headerId: header.id,
-            heelerId: heeler.id,
-            ...(request.role === "Header"
-              ? { headerHorseName: horseName }
-              : { heelerHorseName: horseName }),
-            drawPosition: 0,
-            status: "ready",
-            rawTime: null,
-            penalties: 0,
-            notes: "",
-            round: 1,
-            checkedIn: false,
-            scratched: false,
-            generated: false,
-            points: 0,
-            ...metadata,
-          });
+        const singlePick = normalizedPartnerIds.length === 1;
+        teams.push({
+          id: singlePick
+            ? `desk-team-${request.submissionId}`
+            : `desk-team-${request.submissionId}-pick-${partnerIndex + 1}`,
+          eventId: event.id,
+          headerId: header.id,
+          heelerId: heeler.id,
+          ...(request.role === "Header"
+            ? { headerHorseName: horseName }
+            : { heelerHorseName: horseName }),
+          drawPosition: 0,
+          status: "ready",
+          rawTime: null,
+          penalties: 0,
+          notes: "",
+          round: 1,
+          checkedIn: false,
+          scratched: false,
+          generated: false,
+          points: 0,
+          ...metadata,
         });
-      }
+      });
     }
+  }
 
-    if (source === "staff") {
-      if (!["cash", "card", "tab"].includes(request.paymentMethod)) {
-        throw new Error("Choose paid in cash, paid with credit card, or open a tab.");
-      }
-      if (
-        request.paymentMethod !== "tab" &&
-        request.paymentConfirmed !== true
-      ) {
-        throw new Error("Cashier must confirm the payment before sending entries.");
-      }
-    }
-
-    await Promise.all([
-      ...teams.map((team) => insertUniqueArenaRecord(COLLECTIONS.teams, team)),
-      ...registrations.map((registration) =>
-        insertUniqueArenaRecord(COLLECTIONS.registrations, registration),
-      ),
-    ]);
-    await bumpRevision(
-      source === "online" ? ONLINE_REVISION_ID : STAFF_REVISION_ID,
-      {
-        action:
-          source === "online"
-            ? "submitOnlineSignup"
-            : "submitRegistrationDeskSignup",
-        contestantId: contestant.id,
-        competitionId: event.id,
-        submissionId: request.submissionId,
-      },
-    );
-    return {
-      submissionId: request.submissionId,
-      competitionId: event.id,
-      summary: repeated
-        ? `Your entry in ${event.name} is already confirmed and pending payment.`
-        : `Entry confirmed for ${event.name}. Payment is due with arena staff.`,
-      existing: repeated,
-    };
+  await Promise.all([
+    ...teams.map((team) =>
+      insertUniqueArenaRecord(COLLECTIONS.teams, team),
+    ),
+    ...registrations.map((registration) =>
+      insertUniqueArenaRecord(COLLECTIONS.registrations, registration),
+    ),
+  ]);
+  await bumpRevision(STAFF_REVISION_ID, {
+    action: "submitRegistrationDeskSignup",
+    contestantId: contestant.id,
+    competitionId: event.id,
+    submissionId: request.submissionId,
+  });
+  return {
+    submissionId: request.submissionId,
+    competitionId: event.id,
+    existing: repeated,
+  };
 }
 
 export const submitOnlineSignup = webMethod(
   Permissions.Anyone,
-  async (request) => {
-    const authenticatedId = await verifyContestantCredentials(
-      request.email,
-      request.pin,
-    );
-    return createSignupRecords(request, authenticatedId, "online");
-  },
+  async () =>
+    publicSignupEnvelope("submitOnlineSignup", () => {
+      throw new PublicSignupError(
+        "PAYMENT_REQUIRED",
+        "Online entries now require Wix checkout. Reload registration and try again.",
+      );
+    }),
 );
 
 export const submitRegistrationDeskSignup = webMethod(
   Permissions.SiteMember,
   async (request) => {
     await requireRegistrationDesk();
-    const result = await createSignupRecords(
-      request,
-      request.contestantId,
-      "staff",
-    );
+    const result = await createRegistrationDeskSignupRecords(request);
     return {
       ...result,
       summary: result.existing
@@ -2582,7 +2468,11 @@ export const submitSpectatorPrediction = webMethod(
     if (!spectatorPicksAreOpen(team)) {
       throw new Error("Predictions are closed for this run.");
     }
-    if (activePublicPredictionRun(event, workspace.teams)?.id !== team.id) {
+    const { activeRun } = effectivePublicPredictionState(
+      event,
+      workspace.teams,
+    );
+    if (team.id !== activeRun?.id) {
       throw new Error("That run is not active at the Run Desk.");
     }
     const normalizedName = name.toLowerCase();

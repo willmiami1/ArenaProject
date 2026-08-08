@@ -33,24 +33,23 @@ import {
   createContestantAccount,
   createRiderAccount,
   isWixEmbed,
+  getPublicSignupPaymentStatus,
   loadPublicArenaData,
   loadPublicSchedule,
   loadSignupOptions,
-  submitOnlineSignup,
+  startPublicSignupPayment,
   submitSpectatorPrediction,
-  type SignupOptions,
+  type PublicSignupOptions,
+  type PublicSignupPayment,
+  type PublicSignupSelection,
 } from "./wixBridge";
 import {
   createSpectatorPrediction,
   type SpectatorChoice,
 } from "./spectatorPredictions";
-import {
-  createLocalContestantAccount,
-  type ContestantAccountRequest,
-} from "./contestantAccount";
+import type { ContestantAccountRequest } from "./contestantAccount";
 import type { ArenaData } from "./types";
 import { isBrowserStoragePreview } from "./adminAccess";
-import { minimumDrawEntries } from "./competition";
 
 const localWorkspaceKey = "arena-command-data-v1";
 
@@ -969,86 +968,91 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     pin: "",
     confirmPin: "",
   });
-  const [options, setOptions] = useState<SignupOptions | null>(null);
-  const [role, setRole] = useState<"Header" | "Heeler">("Header");
-  const [entries, setEntries] = useState(1);
-  const [horseName, setHorseName] = useState("");
-  const [partnerId, setPartnerId] = useState("");
-  const [slideEntryType, setSlideEntryType] = useState<"draw" | "pick">("draw");
+  const [options, setOptions] = useState<PublicSignupOptions | null>(null);
+  const [selections, setSelections] = useState<Record<string, PublicSignupSelection>>({});
   const [submissionId, setSubmissionId] = useState("");
+  const [payment, setPayment] = useState<PublicSignupPayment | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const accountSubmissionInFlight = useRef(false);
-  const slide = competition?.competitionType === "slide";
-  const individual =
-    competition?.competitionType === "draw-pot" ||
-    competition?.competitionType === "round-robin" ||
-    (slide && slideEntryType === "draw");
-  const pickAndDraw = competition?.competitionType === "pick-and-draw";
-  const minimumDraws = competition ? minimumDrawEntries(competition) : 1;
-  const drawRole = role;
-  const contestantCanEnter = (
-    contestant: SignupOptions["contestant"],
-    position: "Header" | "Heeler",
-  ) =>
-    (contestant.role === "Both" || contestant.role === position) &&
-    (position === "Header"
-      ? contestant.headerHandicap
-      : contestant.heelerHandicap) <= (competition?.maxContestantHandicap ?? 10);
-  const eligiblePartners = options && competition
-    ? options.partners.filter((partner) => {
-        const partnerPosition = role === "Header" ? "Heeler" : "Header";
-        const contestantHandicap =
-          role === "Header"
-            ? options.contestant.headerHandicap
-            : options.contestant.heelerHandicap;
-        const partnerHandicap =
-          partnerPosition === "Header"
-            ? partner.headerHandicap
-            : partner.heelerHandicap;
-        return (
-          contestantCanEnter(options.contestant, role) &&
-          (partner.role === "Both" || partner.role === partnerPosition) &&
-          partnerHandicap <= competition.maxContestantHandicap &&
-          contestantHandicap + partnerHandicap <= competition.handicapTotal
-        );
-      })
-    : [];
-  const hasEligibleRole =
-    Boolean(options) &&
-    (contestantCanEnter(options!.contestant, "Header") ||
-      contestantCanEnter(options!.contestant, "Heeler"));
-  const hasEligibleDrawRole =
-    !pickAndDraw ||
-    !options ||
-    contestantCanEnter(options.contestant, drawRole);
+
+  const paymentPending =
+    payment?.status === "creating" ||
+    payment?.status === "payment-created" ||
+    payment?.status === "pending";
+  const selectedEntries = Object.values(selections);
+  const total = selectedEntries.length * (options?.price.amount ?? 200);
+  const formatMoney = (amount: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: options?.price.currency ?? "USD",
+      maximumFractionDigits: 0,
+    }).format(amount);
 
   useEffect(() => {
-    setEntries(minimumDraws);
-  }, [competition?.id, minimumDraws]);
+    if (!options || !paymentPending || !submissionId) return;
+    const poll = window.setInterval(async () => {
+      try {
+        const result = await getPublicSignupPaymentStatus(
+          options.signupToken,
+          submissionId,
+        );
+        if (!result) return;
+        setPayment(result);
+        setMessage(result.message);
+      } catch (error) {
+        console.error("Could not refresh Wix payment status.", error);
+        if (
+          error instanceof Error &&
+          /sign in again|session expired/i.test(error.message)
+        ) {
+          setOptions(null);
+          setPayment(null);
+          setSubmissionId("");
+          setMessage("Your secure session expired. Sign in again to continue checking payment.");
+        }
+      }
+    }, 2500);
+    return () => window.clearInterval(poll);
+  }, [options, paymentPending, submissionId]);
 
   if (!competition) return <NotFound />;
-  if (!competition.registrationOpen || competition.status === "Complete" || competition.drawLocked) {
-    return <section className="public-signup"><h1>Online entry is closed</h1><p>Online registration closes one hour before the competition starts.</p><a href={href("competition", competition.id)}>Return to competition</a></section>;
-  }
+
+  const applySignupOptions = (result: PublicSignupOptions) => {
+    const active = result.activePayment;
+    const nextSubmissionId =
+      active?.submissionId ??
+      window.crypto.randomUUID?.() ??
+      `${Date.now()}-${result.contestant.id}`;
+    const initial = result.competitions.find((item) => item.id === competition.id);
+    setOptions(result);
+    setSubmissionId(nextSubmissionId);
+    setPayment(active ?? null);
+    setSelections(
+      !active && initial
+        ? {
+            [initial.id]: {
+              competitionId: initial.id,
+              role: initial.roles[0],
+            },
+          }
+        : {},
+    );
+    if (active) setMessage(active.message);
+  };
 
   const authenticate = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setMessage("");
     try {
-      if (!isWixEmbed()) throw new Error("Online signup is available on the Destiny Ranch Arena Wix site.");
+      if (!isWixEmbed()) {
+        throw new Error("Online signup is available on the Destiny Ranch Arena Wix site.");
+      }
       const result = await loadSignupOptions(competition.id, email, pin);
       if (!result) throw new Error("Signup options are unavailable.");
-      setOptions(result);
-      setSubmissionId(
-        window.crypto.randomUUID?.() ??
-          `${Date.now()}-${result.contestant.id}-${competition.id}`,
-      );
-      const possibleRole = contestantCanEnter(result.contestant, "Header")
-        ? "Header"
-        : "Heeler";
-      setRole(possibleRole);
+      applySignupOptions(result);
+      setPin("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not sign in.");
     } finally {
@@ -1066,63 +1070,22 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       if (account.pin !== account.confirmPin) {
         throw new Error("PIN confirmation does not match.");
       }
-      let result: SignupOptions | null;
-      if (isWixEmbed()) {
-        result = await createContestantAccount(
-          competition.id,
-          contestantAccountRequest(account),
-        );
-      } else {
-        const saved = window.localStorage.getItem(localWorkspaceKey);
-        const workspace = saved
-          ? (JSON.parse(saved) as ArenaData)
-          : structuredClone(seedData);
-        workspace.spectators ??= [];
-        workspace.spectatorPredictions ??= [];
-        const created = createLocalContestantAccount(
-          workspace,
-          contestantAccountRequest(account),
-          `contestant-${window.crypto.randomUUID?.() ?? Date.now()}`,
-        );
-        workspace.contestants = created.contestants;
-        window.localStorage.setItem(
-          localWorkspaceKey,
-          JSON.stringify(workspace),
-        );
-        result = {
-          contestant: {
-            id: created.contestant.id,
-            name: created.contestant.name,
-            role: created.contestant.role,
-            headerHandicap: created.contestant.headerHandicap,
-            heelerHandicap: created.contestant.heelerHandicap,
-            horses: created.contestant.horses,
-          },
-          partners: workspace.contestants
-            .filter((contestant) => contestant.id !== created.contestant.id)
-            .map(({ id, name, role, headerHandicap, heelerHandicap }) => ({
-              id,
-              name,
-              role,
-              headerHandicap,
-              heelerHandicap,
-            })),
-        };
+      if (!isWixEmbed()) {
+        throw new Error("Account creation is available on the Destiny Ranch Arena Wix site.");
       }
-      if (!result) throw new Error("Contestant account could not be created.");
+      await createContestantAccount(
+        competition.id,
+        contestantAccountRequest(account),
+      );
+      const result = await loadSignupOptions(
+        competition.id,
+        account.email,
+        account.pin,
+      );
+      if (!result) throw new Error("Contestant account could not be opened.");
       setEmail(account.email);
-      setPin(account.pin);
-      setOptions(result);
-      setSubmissionId(
-        window.crypto.randomUUID?.() ??
-          `${Date.now()}-${result.contestant.id}-${competition.id}`,
-      );
-      setRole(
-        contestantCanEnter(result.contestant, "Header") ? "Header" : "Heeler",
-      );
-      setMessage(
-        `Account created for ${result.contestant.name}. Complete your entry below.`,
-      );
+      applySignupOptions(result);
+      setMessage(`Account created for ${result.contestant.name}. Choose your ropings below.`);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Account could not be created.",
@@ -1133,54 +1096,99 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     }
   };
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    try {
-      const result = await submitOnlineSignup(
-        { email, pin },
-        {
-          submissionId,
-          contestantId: options!.contestant.id,
-          eventId: competition.id,
-          role,
-          drawRole: pickAndDraw ? drawRole : undefined,
-          entries: individual || pickAndDraw ? entries : undefined,
-          partnerId: individual ? undefined : partnerId,
-          horseName: horseName || undefined,
+  const toggleCompetition = (competitionId: string) => {
+    const roping = options?.competitions.find((item) => item.id === competitionId);
+    if (!roping) return;
+    setSelections((current) => {
+      if (current[competitionId]) {
+        const next = { ...current };
+        delete next[competitionId];
+        return next;
+      }
+      return {
+        ...current,
+        [competitionId]: {
+          competitionId,
+          role: roping.roles[0],
         },
+      };
+    });
+  };
+
+  const updateSelection = (
+    competitionId: string,
+    change: Partial<PublicSignupSelection>,
+  ) => {
+    setSelections((current) => ({
+      ...current,
+      [competitionId]: {
+        ...current[competitionId],
+        ...change,
+        competitionId,
+      },
+    }));
+  };
+
+  const checkout = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!options || !selectedEntries.length) return;
+    const missingPartner = options.competitions.some(
+      (item) =>
+        item.requiresPartner &&
+        selections[item.id] &&
+        !selections[item.id].partnerId,
+    );
+    if (missingPartner) {
+      setMessage("Choose an eligible partner for every selected Pick & Draw.");
+      return;
+    }
+    setBusy(true);
+    setMessage("Opening secure Wix checkout…");
+    try {
+      const result = await startPublicSignupPayment(
+        options.signupToken,
+        submissionId,
+        selectedEntries,
       );
-      if (!result) throw new Error("The signup could not be confirmed.");
-      setMessage(result.summary);
-      setOptions(null);
-      setPin("");
+      if (!result) throw new Error("Wix checkout could not be opened.");
+      setPayment(result);
+      setSubmissionId(result.submissionId);
+      setMessage(result.message);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The entry could not be submitted.");
+      setMessage(
+        error instanceof Error ? error.message : "The payment could not be started.",
+      );
     } finally {
       setBusy(false);
     }
   };
 
+  const startNewCart = () => {
+    setPayment(null);
+    setSelections({});
+    setSubmissionId(
+      window.crypto.randomUUID?.() ??
+        `${Date.now()}-${options?.contestant.id ?? "contestant"}`,
+    );
+    setMessage("");
+  };
+
   return (
-    <section className="public-signup">
+    <section className="public-signup public-signup-cart">
       <ReturnToEventsLink />
       <h1>Enter the arena</h1>
-      <p>Online registration closes {new Date(competition.registrationClosesAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.</p>
-      <p>{authMode === "login" ? "Sign in with the email and four-digit PIN already connected to your contestant account." : "Create your contestant account, then continue directly to this competition’s entry form."}</p>
+      <p>Sign in once, choose every open roping you want to enter, and pay securely by credit card through Wix.</p>
       {!options ? (
         <>
-          {competition.status === "Upcoming" && (
-            <div className="public-account-choice" role="tablist" aria-label="Contestant account access">
-              <button className={authMode === "login" ? "active" : ""} onClick={() => setAuthMode("login")}>I have an account</button>
-              <button className={authMode === "create" ? "active" : ""} onClick={() => setAuthMode("create")}>Create account</button>
-            </div>
-          )}
+          <div className="public-account-choice" role="tablist" aria-label="Contestant account access">
+            <button className={authMode === "login" ? "active" : ""} onClick={() => setAuthMode("login")}>I have an account</button>
+            <button className={authMode === "create" ? "active" : ""} onClick={() => setAuthMode("create")}>Create account</button>
+          </div>
           {authMode === "login" ? (
             <form onSubmit={authenticate}>
               <label>Email address<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
               <label>Four-digit PIN<input type="password" inputMode="numeric" autoComplete="one-time-code" pattern="\d{4}" maxLength={4} required value={pin} onChange={(event) => setPin(event.target.value)} /></label>
-              <button className="public-button primary" disabled={busy}>{busy ? "Checking account…" : "Continue securely"}</button>
+              <button className="public-button primary" disabled={busy}>{busy ? "Checking account…" : "View available ropings"}</button>
             </form>
           ) : (
             <form className="public-account-form" onSubmit={createAccount}>
@@ -1194,52 +1202,63 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
               {account.role !== "Header" && <label>Heeler handicap<input required type="number" min="0" max="20" step="0.5" value={account.heelerHandicap} onChange={(event) => setAccount({ ...account, heelerHandicap: Number(event.target.value) })} /></label>}
               <label>Choose four-digit PIN<input required type="password" inputMode="numeric" autoComplete="one-time-code" pattern="\d{4}" maxLength={4} value={account.pin} onChange={(event) => setAccount({ ...account, pin: event.target.value })} /></label>
               <label>Confirm PIN<input required type="password" inputMode="numeric" autoComplete="one-time-code" pattern="\d{4}" maxLength={4} value={account.confirmPin} onChange={(event) => setAccount({ ...account, confirmPin: event.target.value })} /></label>
-              <button className="public-button primary" disabled={busy}>{busy ? "Creating account…" : "Create account and continue"}</button>
+              <button className="public-button primary" disabled={busy}>{busy ? "Creating account…" : "Create account and view ropings"}</button>
             </form>
           )}
         </>
       ) : (
-        <form onSubmit={submit}>
+        <>
           <div className="public-authenticated"><CheckCircle2 /><span>Entering as <strong>{options.contestant.name}</strong></span></div>
-          <label>
-            Horse
-            <select disabled={!options.contestant.horses?.length} value={horseName} onChange={(event) => setHorseName(event.target.value)}>
-              <option value="">{options.contestant.horses?.length ? "No horse selected" : "No saved horses"}</option>
-              {options.contestant.horses?.map((horse) => (
-                <option key={horse} value={horse}>{horse}</option>
-              ))}
-            </select>
-            {!options.contestant.horses?.length && <small>Add a horse to your contestant profile before selecting one.</small>}
-          </label>
-         {slide && (
-           <fieldset>
-             <legend>Entry type</legend>
-             <label className="public-radio"><input type="radio" name="slide-entry-type" checked={slideEntryType === "draw"} onChange={() => { setSlideEntryType("draw"); setPartnerId(""); }} />Draw entry</label>
-             <label className="public-radio"><input type="radio" name="slide-entry-type" checked={slideEntryType === "pick"} onChange={() => setSlideEntryType("pick")} />Picked team</label>
-           </fieldset>
-         )}
-          <fieldset>
-            <legend>Your position</legend>
-            {(["Header", "Heeler"] as const).map((value) => {
-              const disabled = !contestantCanEnter(options.contestant, value);
-              return <label className="public-radio" key={value}><input type="radio" name="role" value={value} disabled={disabled} checked={role === value} onChange={() => { setRole(value); setPartnerId(""); }} />{value}</label>;
-            })}
-          </fieldset>
-          {!hasEligibleRole && <p className="public-form-message" role="status">Your handicap is above the #{competition.maxContestantHandicap} limit for this roping.</p>}
-          {individual ? (
-            <label>Number of entries<input type="number" min={minimumDraws} max={competition.entriesAllowed} value={entries} onChange={(event) => setEntries(Number(event.target.value))} /></label>
-          ) : pickAndDraw ? (
-            <>
-              <label>Number of {drawRole.toLowerCase()} draws<input type="number" min={minimumDraws} max={competition.entriesAllowed} value={entries} onChange={(event) => setEntries(Number(event.target.value))} /></label>
-              {!hasEligibleDrawRole && <p className="public-form-message" role="status">Your handicap exceeds the {drawRole.toLowerCase()} draw limit for this roping.</p>}
-              <label>Picked partner<select required value={partnerId} onChange={(event) => setPartnerId(event.target.value)}><option value="">Choose an eligible partner</option>{eligiblePartners.map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select></label>
-            </>
+          {payment && (paymentPending || payment.status === "successful" || payment.status === "fulfillment-failed") ? (
+            <div className={`public-payment-status ${payment.status}`}>
+              <strong>{payment.status === "successful" ? "Payment confirmed" : payment.status === "fulfillment-failed" ? "Arena assistance needed" : "Checking payment"}</strong>
+              <p>{payment.message}</p>
+              <small>Submission: {payment.submissionId}</small>
+            </div>
           ) : (
-            <label>Partner<select required value={partnerId} onChange={(event) => setPartnerId(event.target.value)}><option value="">Choose an eligible partner</option>{eligiblePartners.map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select></label>
+            <form onSubmit={checkout}>
+              <div className="public-roping-list">
+                {options.competitions.length ? options.competitions.map((roping) => {
+                  const selection = selections[roping.id];
+                  return (
+                    <article className={`public-roping-choice ${selection ? "selected" : ""}`} key={roping.id}>
+                      <label className="public-roping-toggle">
+                        <input type="checkbox" checked={Boolean(selection)} onChange={() => toggleCompetition(roping.id)} />
+                        <span><strong>{roping.name}</strong><small>{new Date(`${roping.date}T${roping.startTime}`).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</small></span>
+                        <b>{formatMoney(options.price.amount)}</b>
+                      </label>
+                      {selection && (
+                        <div className="public-roping-options">
+                          <fieldset>
+                            <legend>Your position</legend>
+                            {roping.roles.map((role) => (
+                              <label className="public-radio" key={role}>
+                                <input type="radio" name={`role-${roping.id}`} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role, partnerId: undefined })} />
+                                {role}
+                              </label>
+                            ))}
+                          </fieldset>
+                          {roping.requiresPartner && (
+                            <label>Picked partner<select required value={selection.partnerId ?? ""} onChange={(event) => updateSelection(roping.id, { partnerId: event.target.value || undefined })}><option value="">Choose an eligible partner</option>{roping.partners.filter((partner) => partner.eligibleRoles.includes(selection.role)).map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select></label>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  );
+                }) : <p className="public-form-message">There are no open ropings available for this contestant right now.</p>}
+              </div>
+              <div className="public-cart-total">
+                <span>{selectedEntries.length} {selectedEntries.length === 1 ? "roping" : "ropings"} selected</span>
+                <strong>Total {formatMoney(total)}</strong>
+              </div>
+              <p className="public-payment-note">Each checked roping is one basic entry. Wix securely processes the combined credit-card payment.</p>
+              <button className="public-button primary" disabled={busy || !selectedEntries.length}>{busy ? "Opening Wix checkout…" : `Pay ${formatMoney(total)} and preregister`}</button>
+            </form>
           )}
-          <p className="public-payment-note">Your entry will be pending until arena staff confirms payment.</p>
-          <button className="public-button primary" disabled={busy || !hasEligibleRole || !hasEligibleDrawRole || (!individual && !partnerId)}>{busy ? "Submitting entry…" : "Submit entry"}</button>
-        </form>
+          {payment && !paymentPending && payment.status !== "successful" && payment.status !== "fulfillment-failed" && (
+            <button className="public-button" type="button" onClick={startNewCart}>Start a new checkout</button>
+          )}
+        </>
       )}
       {message && <p className="public-form-message" role="status">{message}</p>}
     </section>

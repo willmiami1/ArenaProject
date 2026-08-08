@@ -25,6 +25,8 @@ type WixAction =
   | "loadPublicSchedule"
   | "publishPublicSchedule"
   | "loadSignupOptions"
+  | "startPublicSignupPayment"
+  | "getPublicSignupPaymentStatus"
   | "submitOnlineSignup"
   | "submitSpectatorPrediction"
   | "createContestantAccount"
@@ -53,6 +55,56 @@ export interface SignupOptions {
   partners: Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap">[];
 }
 
+export interface PublicSignupCompetition {
+  id: string;
+  name: string;
+  date: string;
+  startTime: string;
+  competitionType: "slide" | "round-robin" | "pick-and-draw";
+  registrationClosesAt: string;
+  roles: Array<"Header" | "Heeler">;
+  requiresPartner: boolean;
+  partners: Array<
+    Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap"> & {
+      eligibleRoles: Array<"Header" | "Heeler">;
+    }
+  >;
+}
+
+export interface PublicSignupSelection {
+  competitionId: string;
+  role: "Header" | "Heeler";
+  partnerId?: string;
+}
+
+export interface PublicSignupPayment {
+  submissionId: string;
+  paymentId: string;
+  status:
+    | "creating"
+    | "payment-created"
+    | "pending"
+    | "successful"
+    | "failed"
+    | "cancelled"
+    | "expired"
+    | "fulfillment-failed";
+  amount: number;
+  currency: "USD";
+  competitionIds: string[];
+  message: string;
+  checkoutStatus?: string;
+}
+
+export interface PublicSignupOptions {
+  contestant: Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap">;
+  signupToken: string;
+  expiresAt: string;
+  price: { amount: number; currency: "USD" };
+  competitions: PublicSignupCompetition[];
+  activePayment?: PublicSignupPayment;
+}
+
 export interface SignupConfirmation {
   submissionId: string;
   competitionId: string;
@@ -65,7 +117,11 @@ interface WixResponse<T> {
   requestId: string;
   ok: boolean;
   data?: T | null;
-  error?: string;
+  error?: string | { code: string; message: string };
+}
+
+export function wixResponseErrorMessage(error: WixResponse<unknown>["error"]) {
+  return typeof error === "string" ? error : error?.message;
 }
 
 const wixRelayStorageKey = "arena-command-wix-relay-origin";
@@ -149,6 +205,8 @@ function sensitiveWixAction(action: WixAction) {
     action === "authenticateContestant" ||
     action === "setContestantPin" ||
     action === "loadSignupOptions" ||
+    action === "startPublicSignupPayment" ||
+    action === "getPublicSignupPaymentStatus" ||
     action === "submitOnlineSignup" ||
     action === "submitSpectatorPrediction" ||
     action === "createContestantAccount" ||
@@ -253,7 +311,8 @@ function requestWixFromOrigin<T>(
         : undefined;
     const timeoutMilliseconds =
       action === "promptAdminLogin" ||
-      action === "promptRegistrationDeskLogin"
+      action === "promptRegistrationDeskLogin" ||
+      action === "startPublicSignupPayment"
         ? 5 * 60 * 1000
         : 8000;
     const timeout = window.setTimeout(() => {
@@ -275,7 +334,8 @@ function requestWixFromOrigin<T>(
       window.clearTimeout(timeout);
       window.removeEventListener("message", handleMessage);
       if (!event.data.ok) {
-        reject(new Error(event.data.error || "Wix persistence failed."));
+        const message = wixResponseErrorMessage(event.data.error);
+        reject(new Error(message || "Wix persistence failed."));
         return;
       }
       resolve(event.data.data ?? null);
@@ -365,14 +425,36 @@ export function setRegistrationDeskContestantPin(
 }
 
 export function loadSignupOptions(
-  competitionId: string,
+  competitionId: string | undefined,
   email: string,
   pin: string,
 ) {
-  return requestWix<SignupOptions>("loadSignupOptions", {
+  return requestWix<PublicSignupOptions>("loadSignupOptions", {
     competitionId,
     email,
     pin,
+  });
+}
+
+export function startPublicSignupPayment(
+  signupToken: string,
+  submissionId: string,
+  selections: PublicSignupSelection[],
+) {
+  return requestWix<PublicSignupPayment>("startPublicSignupPayment", {
+    signupToken,
+    submissionId,
+    selections,
+  });
+}
+
+export function getPublicSignupPaymentStatus(
+  signupToken: string,
+  submissionId: string,
+) {
+  return requestWix<PublicSignupPayment>("getPublicSignupPaymentStatus", {
+    signupToken,
+    submissionId,
   });
 }
 

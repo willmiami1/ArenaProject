@@ -147,6 +147,7 @@
 .public-result-row b,.public-result-row small { display: block; }
 .public-result-row small { margin-top: 3px; color: var(--public-muted); }
 .public-signup { width: min(650px,100%); margin: 70px auto 0; padding: clamp(28px,5vw,55px); background: #17130f; border: 1px solid rgba(234,220,198,.22); box-shadow: 10px 12px 0 rgba(166,108,67,.38); }
+.public-signup-cart { width: min(860px,100%); }
 .public-signup>a { font-size: 11px; font-weight: 800; }
 .public-signup h1 { max-width: none; margin-top: 35px; font-size: clamp(42px,7vw,72px); }
 .public-signup>p { color: var(--public-muted); line-height: 1.6; }
@@ -164,6 +165,26 @@
 .public-radio input { width: 17px; min-height: auto; accent-color: var(--public-brown); }
 .public-authenticated { display: flex; align-items: center; gap: 10px; padding: 14px; color: #563923; background: #ead7bd; font-size: 12px; }
 .public-payment-note { margin: 0; color: var(--public-muted); font-size: 11px; }
+.public-roping-list { display: grid; gap: 12px; }
+.public-roping-choice { border: 1px solid #80674f; background: #0e0b09; }
+.public-roping-choice.selected { border-color: var(--public-tan); box-shadow: 0 0 0 2px rgba(234,215,189,.14); }
+.public-roping-toggle { grid-template-columns: auto minmax(0,1fr) auto!important; align-items: center; gap: 14px!important; padding: 18px; cursor: pointer; text-transform: none!important; letter-spacing: normal!important; }
+.public-roping-toggle input { width: 19px; min-height: 19px; accent-color: var(--public-brown); }
+.public-roping-toggle span { display: grid; gap: 4px; }
+.public-roping-toggle strong { font-family: "Manrope",sans-serif; font-size: 18px; }
+.public-roping-toggle small { color: var(--public-muted); font-size: 11px; }
+.public-roping-toggle b { color: var(--public-tan); font-size: 17px; }
+.public-roping-options { display: grid; grid-template-columns: minmax(220px,.8fr) minmax(240px,1.2fr); gap: 15px; padding: 0 18px 18px 51px; }
+.public-roping-options fieldset { margin: 0; }
+.public-cart-total { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 18px; color: #17130f; background: var(--public-tan); }
+.public-cart-total span { font-size: 12px; font-weight: 800; text-transform: uppercase; }
+.public-cart-total strong { font-family: "Manrope",sans-serif; font-size: 24px; }
+.public-payment-status { margin-top: 26px; padding: 22px; border: 1px solid #80674f; background: #0e0b09; }
+.public-payment-status strong { color: var(--public-tan); font-family: "Manrope",sans-serif; font-size: 24px; }
+.public-payment-status p { color: var(--public-muted); line-height: 1.55; }
+.public-payment-status small { color: var(--public-muted); overflow-wrap: anywhere; }
+.public-payment-status.successful { color: #1a120b; background: #d8e8c9; border-color: #d8e8c9; }
+.public-payment-status.successful strong,.public-payment-status.successful p,.public-payment-status.successful small { color: #1a120b; }
 .public-form-message { padding: 14px; color: #422814!important; background: #e6c89f; font-size: 12px; }
 .public-spectator { padding: 70px 0 100px; }
 .public-spectator>a { font-size: 11px; font-weight: 800; }
@@ -318,6 +339,10 @@
   .public-signup .public-account-form { grid-template-columns: 1fr; }
   .public-account-form .public-button { grid-column: auto; }
   .public-signup fieldset { flex-direction: column; gap: 14px; }
+  .public-roping-options { grid-template-columns: 1fr; padding: 0 14px 14px; }
+  .public-roping-toggle { grid-template-columns: auto minmax(0,1fr)!important; padding: 14px; }
+  .public-roping-toggle b { grid-column: 2; }
+  .public-cart-total { align-items: flex-start; flex-direction: column; }
   .public-account-choice { grid-template-columns: 1fr; }
   .public-spectator-grid .public-pick-choices { grid-template-columns: 1fr; }
   .public-pick-buttons { grid-template-columns: 1fr; }
