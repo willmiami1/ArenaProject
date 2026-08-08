@@ -98,6 +98,21 @@ const formatTime = (time: string) => {
   });
 };
 
+const ordinalDay = (day: number) => {
+  const remainder = day % 100;
+  if (remainder >= 11 && remainder <= 13) return `${day}th`;
+  if (day % 10 === 1) return `${day}st`;
+  if (day % 10 === 2) return `${day}nd`;
+  if (day % 10 === 3) return `${day}rd`;
+  return `${day}th`;
+};
+
+const formatSignupRopingLabel = (name: string, date: string, time: string) => {
+  const scheduledDate = new Date(`${date}T12:00:00`);
+  const month = scheduledDate.toLocaleDateString("en-US", { month: "long" });
+  return `${name} on ${month} ${ordinalDay(scheduledDate.getDate())} at ${formatTime(time)}`;
+};
+
 const initials = (name: string) =>
   name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 
@@ -1224,7 +1239,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                     <article className={`public-roping-choice ${selection ? "selected" : ""}`} key={roping.id}>
                       <label className="public-roping-toggle">
                         <input type="checkbox" checked={Boolean(selection)} onChange={() => toggleCompetition(roping.id)} />
-                        <span><strong>{roping.name}</strong><small>{new Date(`${roping.date}T${roping.startTime}`).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</small></span>
+                        <span><strong>{formatSignupRopingLabel(roping.name, roping.date, roping.startTime)}</strong></span>
                         <b>{formatMoney(options.price.amount)}</b>
                       </label>
                       {selection && (
