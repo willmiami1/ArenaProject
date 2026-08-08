@@ -74,6 +74,7 @@
 .public-event-copy h3 { margin: 24px 0 12px; font-family: "Manrope",sans-serif; font-size: 24px; line-height: 1.15; }
 .public-event-copy h3 a:hover { text-decoration: underline; text-decoration-color: var(--public-tan); text-underline-offset: 4px; }
 .public-event-copy p { display: flex; align-items: center; gap: 7px; margin: 4px 0; color: var(--public-muted); font-size: 12px; }
+.public-event-copy .public-event-description { display: block; margin: 16px 0 2px; color: var(--public-cream); font-size: 12px; line-height: 1.65; white-space: pre-wrap; }
 .public-card-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0; }
 .public-card-badges span { padding: 5px 8px; color: #583a25; background: #ead7bd; font-size: 9px; font-weight: 700; }
 .public-text-link { display: inline-flex; align-items: center; gap: 7px; margin-top: auto; font-size: 11px; font-weight: 800; }

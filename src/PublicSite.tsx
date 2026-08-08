@@ -234,6 +234,11 @@ function RopingCard({
         </h3>
         <p><MapPin size={15} /> {competition.location}</p>
         <p><Clock3 size={15} /> {formatTime(competition.startTime)}</p>
+        {scheduleOnly &&
+          competition.status === "Upcoming" &&
+          competition.description.trim() && (
+            <p className="public-event-description">{competition.description}</p>
+          )}
         <div className="public-card-badges">
           {competition.registrationOpen && <span>Accepting entries</span>}
           {!scheduleOnly && (
