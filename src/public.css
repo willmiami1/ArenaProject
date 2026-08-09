@@ -133,6 +133,14 @@
 .public-competition-row p { margin: 0; color: var(--public-muted); font-size: 12px; }
 .public-competition-actions { display: flex; align-items: center; justify-content: flex-end; gap: 18px; font-size: 11px; font-weight: 800; }
 .public-competition-actions>span { color: #76695b; }
+.public-registered-roster { grid-column: 1/-1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 22px; padding-top: 4px; }
+.public-rider-role { min-width: 0; padding: 20px; background: #17130f; border: 1px solid rgba(234,220,198,.18); }
+.public-rider-role h4 { margin: 0 0 14px; color: var(--public-tan); font-family: "Manrope",sans-serif; font-size: 13px; text-transform: uppercase; letter-spacing: .1em; }
+.public-rider-role ul { display: grid; grid-template-columns: repeat(auto-fill,minmax(180px,1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.public-rider-role li { min-width: 0; display: grid; grid-template-columns: 46px minmax(0,1fr); align-items: center; gap: 11px; padding: 8px; background: #0e0b09; border: 1px solid rgba(234,220,198,.12); }
+.public-rider-role img,.public-rider-initials { width: 46px; height: 46px; display: grid; place-items: center; object-fit: cover; color: #17130f; background: var(--public-tan); border-radius: 50%; font-size: 12px; font-weight: 900; letter-spacing: .04em; }
+.public-rider-role strong { overflow-wrap: anywhere; font-size: 12px; line-height: 1.3; }
+.public-rider-role>p { margin: 0; color: var(--public-muted); font-size: 12px; }
 .public-rules { margin: 10px 0 80px; padding: 40px; color: var(--public-cream); background: var(--public-ink); }
 .public-rules h2 { margin: 0 0 28px; font-family: "Manrope",sans-serif; font-size: 30px; }
 .public-rules dl { display: grid; grid-template-columns: repeat(3,1fr); margin: 0; border: 1px solid #554538; }
@@ -329,6 +337,8 @@
   .public-competition-row { grid-template-columns: 1fr; }
   .public-competition-actions { display: grid; grid-template-columns: 1fr; justify-content: stretch; gap: 10px; }
   .public-competition-actions .public-button { width: 100%; }
+  .public-registered-roster { grid-template-columns: 1fr; gap: 12px; }
+  .public-rider-role { padding: 16px; }
   .public-rules { margin-bottom: 55px; padding: 25px 20px; }
   .public-rules dl { grid-template-columns: 1fr; }
   .public-rules dl div { border-right: 0; }

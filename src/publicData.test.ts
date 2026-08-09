@@ -343,7 +343,6 @@ describe("public grouping and privacy", () => {
     );
     const serialized = JSON.stringify(projectPublicArenaData(data, today));
     expect(serialized).not.toContain("ada@example.com");
-    expect(serialized).not.toContain("data:image");
     expect(serialized).not.toContain("private");
     expect(serialized).not.toContain("checkedIn");
     expect(serialized).not.toContain("\"paid\"");
@@ -353,6 +352,79 @@ describe("public grouping and privacy", () => {
         .maxContestantHandicap,
     ).toBe(5);
     expect(projectPublicArenaData(data, today).meets[0].competitions[0].results).toEqual([]);
+  });
+
+  it("projects safe registered riders by role without duplicates or private fields", () => {
+    const extraContestant: Contestant = {
+      ...contestants[0],
+      id: "both",
+      name: "Cal Both",
+      role: "Both",
+      photo: "https://example.com/private.jpg",
+      email: "cal@example.com",
+      phone: "867-5309",
+      hometown: "Private Place",
+    };
+    const data = {
+      ...workspace(event(), [
+        run(),
+        run({ id: "duplicate-team", drawPosition: 2 }),
+        run({ id: "generated-team", headerId: "both", generated: true }),
+        run({ id: "scratched-team", heelerId: "both", scratched: true }),
+        run({ id: "later-round", headerId: "both", round: 2 }),
+      ]),
+      contestants: [...contestants, extraContestant],
+      registrations: [
+        {
+          id: "header-registration",
+          eventId: "competition-1",
+          contestantId: "both",
+          role: "Header" as const,
+          entries: 2,
+          checkedIn: false,
+          status: "entered" as const,
+          notes: "do not publish",
+        },
+        {
+          id: "heeler-registration",
+          eventId: "competition-1",
+          contestantId: "both",
+          role: "Heeler" as const,
+          entries: 1,
+          checkedIn: false,
+          status: "entered" as const,
+          notes: "do not publish",
+        },
+        {
+          id: "scratched-registration",
+          eventId: "competition-1",
+          contestantId: "header",
+          role: "Heeler" as const,
+          entries: 1,
+          checkedIn: false,
+          status: "scratched" as const,
+          notes: "do not publish",
+        },
+      ],
+    };
+
+    const registeredRiders =
+      projectPublicArenaData(data, today).competitions[0].registeredRiders;
+    expect(registeredRiders).toEqual({
+      headers: [
+        { id: "header", name: "Ada Header", photo: "data:image/png;base64,secret" },
+        { id: "both", name: "Cal Both", photo: undefined },
+      ],
+      heelers: [
+        { id: "heeler", name: "Bo Heeler", photo: undefined },
+        { id: "both", name: "Cal Both", photo: undefined },
+      ],
+    });
+    const serialized = JSON.stringify(registeredRiders);
+    expect(serialized).not.toContain("cal@example.com");
+    expect(serialized).not.toContain("867-5309");
+    expect(serialized).not.toContain("Private Place");
+    expect(serialized).not.toContain("do not publish");
   });
 
   it("projects profile photos only for the current prediction team", () => {
