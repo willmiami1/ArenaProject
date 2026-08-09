@@ -15,6 +15,7 @@ import {
   aggregatePublicSpectatorLeaderboard,
   competitionGroup,
   parsePublicRoute,
+  publicHorseNamesLabel,
   projectPublicArenaData,
 } from "./publicData";
 import { publicStandingRows } from "./standings";
@@ -319,6 +320,14 @@ describe("staff save reconciliation", () => {
 
 describe("public grouping and privacy", () => {
   const today = new Date(2026, 7, 3);
+  it("formats entry horse names only when present", () => {
+    expect(publicHorseNamesLabel([])).toBe("");
+    expect(publicHorseNamesLabel(["Ace"])).toBe("Horse: Ace");
+    expect(publicHorseNamesLabel(["Ace", "Blue"])).toBe(
+      "Horses: Ace, Blue",
+    );
+  });
+
   it("groups each roping from its own status", () => {
     expect(competitionGroup("Live")).toBe("live");
     expect(competitionGroup("Upcoming")).toBe("future");

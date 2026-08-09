@@ -22,6 +22,7 @@ import {
   aggregatePublicSpectatorLeaderboard,
   competitionGroup,
   parsePublicRoute,
+  publicHorseNamesLabel,
   projectPublicArenaData,
   type PublicArenaData,
   type PublicCompetition,
@@ -830,11 +831,8 @@ function RiderRoleRoster({
               )}
               <span className="public-rider-copy">
                 <strong>{rider.name}</strong>
-                {(rider.horseNames?.length ?? 0) > 0 && (
-                  <small>
-                    {rider.horseNames.length === 1 ? "Horse" : "Horses"}:{" "}
-                    {rider.horseNames.join(", ")}
-                  </small>
+                {publicHorseNamesLabel(rider.horseNames ?? []) && (
+                  <small>{publicHorseNamesLabel(rider.horseNames ?? [])}</small>
                 )}
               </span>
             </li>
