@@ -278,6 +278,16 @@ function RopingCard({
             Enter online
           </a>
         )}
+        <div className="public-registered-roster homepage">
+          <RiderRoleRoster
+            label="Headers"
+            riders={competition.registeredRiders?.headers ?? []}
+          />
+          <RiderRoleRoster
+            label="Heelers"
+            riders={competition.registeredRiders?.heelers ?? []}
+          />
+        </div>
       </div>
       {competition.status === "Live" && (
         <aside className="public-live-actions">
