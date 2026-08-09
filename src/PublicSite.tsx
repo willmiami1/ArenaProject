@@ -55,6 +55,7 @@ import type { ArenaData } from "./types";
 import { isBrowserStoragePreview } from "./adminAccess";
 
 const localWorkspaceKey = "arena-command-data-v1";
+const registrationLinkLabel = "Log in or call/text Will 954-520-2631";
 
 function loadLocalPublicData() {
   const saved = window.localStorage.getItem(localWorkspaceKey);
@@ -276,7 +277,7 @@ function RopingCard({
         )}
         {!scheduleOnly && competition.registrationOpen && (
           <a className="public-button compact" href={href("signup", competition.id)}>
-            Enter online
+            {registrationLinkLabel}
           </a>
         )}
         <div className="public-registered-roster homepage">
@@ -798,7 +799,7 @@ function CompetitionRow({ competition }: { competition: PublicCompetition }) {
       </div>
       <div className="public-competition-actions">
         {competition.registrationOpen && competition.status !== "Complete" && !competition.drawLocked && (
-          <a className="public-button compact" href={href("signup", competition.id)}>Enter online</a>
+          <a className="public-button compact" href={href("signup", competition.id)}>{registrationLinkLabel}</a>
         )}
         {competition.resultsPublished && <a href={href("competition", competition.id)}>View results</a>}
         {!competition.resultsPublished && competition.status === "Complete" && <span>Results pending</span>}
@@ -990,7 +991,7 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
           <span><UsersRound /> {competition.entryCount} entries</span>
         </div>
         {competition.registrationOpen && competition.status !== "Complete" && !competition.drawLocked && (
-          <a className="public-button primary" href={href("signup", competition.id)}>Enter this competition <ArrowRight size={18} /></a>
+          <a className="public-button primary" href={href("signup", competition.id)}>{registrationLinkLabel} <ArrowRight size={18} /></a>
         )}
         {!competition.registrationOpen && competition.status !== "Complete" && (
           <p className="public-registration-closed">Online registration closes one hour before the competition starts.</p>
