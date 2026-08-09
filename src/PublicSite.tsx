@@ -1418,6 +1418,15 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
     document.title = `${title ?? "Event"} | Destiny Ranch Arena`;
   }, [route.kind, selected.competition?.name, selected.meet?.name]);
 
+  useEffect(() => {
+    if (!data || (route.kind !== "home" && route.kind !== "events")) return;
+    const targetId = window.location.hash.slice(1);
+    if (!["events", "events-live", "events-future", "events-past"].includes(targetId)) return;
+    window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView();
+    });
+  }, [data, route.kind]);
+
   return (
     <div className="public-site">
       {/* THESIS: Arena day begins at the gate, not in a generic card grid. OWN-WORLD: ink-black ranch marks, bone paper, arena-gold signals, and squared field forms. STORY: find the next roping, understand the card, enter, and return for official results. FIRST VIEWPORT: oversized ride-your-run statement beside a stamped DR mark with the next event directly below. FORM: established ranch identity extended into a public event ledger. */}
