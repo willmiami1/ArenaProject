@@ -48,6 +48,11 @@ export interface PublicRegisteredRider {
   horseNames: string[];
 }
 
+export const publicHorseNamesLabel = (horseNames: string[]) =>
+  horseNames.length === 0
+    ? ""
+    : `${horseNames.length === 1 ? "Horse" : "Horses"}: ${horseNames.join(", ")}`;
+
 export interface PublicCompetition {
   id: string;
   parentEventId: string;
