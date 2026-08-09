@@ -103,6 +103,7 @@ import {
 } from "./competition";
 import { spectatorLeaderboard } from "./spectatorPredictions";
 import { normalizeHorseNames } from "./contestantHorses";
+import { contestantRopingHistory } from "./contestantHistory";
 import type {
   ArenaData,
   ArenaEvent,
@@ -695,6 +696,10 @@ function StaffApp() {
           {view === "contestants" && (
             <Contestants
               contestants={data.contestants}
+              meets={data.meets}
+              events={data.events}
+              teams={data.teams}
+              registrations={data.registrations}
               onAdd={(contestant) =>
                 saveImmediately({
                   ...data,
@@ -1975,12 +1980,20 @@ function EventForm({
 
 function Contestants({
   contestants,
+  meets,
+  events,
+  teams,
+  registrations,
   onAdd,
   onUpdate,
   onDelete,
   onImport,
 }: {
   contestants: Contestant[];
+  meets: ArenaMeet[];
+  events: ArenaEvent[];
+  teams: Team[];
+  registrations: EventRegistration[];
   onAdd: (contestant: Contestant) => void | Promise<unknown>;
   onUpdate: (contestant: Contestant) => void | Promise<unknown>;
   onDelete: (contestantId: string) => void;
@@ -1988,11 +2001,28 @@ function Contestants({
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Contestant | null>(null);
+  const [profile, setProfile] = useState<Contestant | null>(null);
   const [search, setSearch] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
   const filtered = contestants.filter((contestant) =>
     `${contestant.name} ${contestant.hometown} ${(contestant.horses ?? []).join(" ")} ${contestant.headerHandicap} ${contestant.heelerHandicap}`.toLowerCase().includes(search.toLowerCase()),
   );
+  const profileHistory = profile
+    ? contestantRopingHistory(
+        profile.id,
+        events,
+        teams,
+        registrations,
+        contestants,
+      )
+    : [];
+  const profileWins = profileHistory.filter((history) => history.won);
+  const profileParticipations = profileHistory.filter(
+    (history) => history.participated,
+  );
+  const contestantName = (id: string) =>
+    contestants.find((contestant) => contestant.id === id)?.name ??
+    "Unknown contestant";
   const downloadBackup = () => {
     const backup = {
       format: "arena-command-contestants",
@@ -2038,6 +2068,96 @@ function Contestants({
   return (
     <>
       <PageIntro title="Contestants" text="Maintain the rider roster used to build teams for every event." button="Add contestant" onClick={() => { setEditing(null); setShowForm((open) => !open); }} />
+      {profile && (
+        <div
+          className="contestant-profile-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setProfile(null);
+          }}
+        >
+          <section
+            className="contestant-profile-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="contestant-profile-name"
+          >
+            <div className="contestant-profile-header">
+              <div className="contestant-profile-identity">
+                {profile.photo
+                  ? <img src={profile.photo} alt="" />
+                  : <i>{initials(profile.name)}</i>}
+                <div>
+                  <span>Contestant profile</span>
+                  <h2 id="contestant-profile-name">{profile.name}</h2>
+                  <p>{profile.role} · Header #{profile.headerHandicap} · Heeler #{profile.heelerHandicap}</p>
+                </div>
+              </div>
+              <button className="icon-action" title="Close profile" onClick={() => setProfile(null)}><X size={18} /></button>
+            </div>
+            <div className="contestant-profile-content">
+              <div className="contestant-profile-stats">
+                <span><strong>{profileHistory.length}</strong> Ropings registered</span>
+                <span><strong>{profileParticipations.length}</strong> Ropings participated</span>
+                <span className="winner"><strong>{profileWins.length}</strong> Competition wins</span>
+              </div>
+              <div className="contestant-profile-details">
+                <span><small>Email</small><strong>{profile.email || "Not provided"}</strong></span>
+                <span><small>Phone</small><strong>{profile.phone || "Not provided"}</strong></span>
+                <span><small>Hometown</small><strong>{profile.hometown || "Not provided"}</strong></span>
+                <span><small>Horses</small><strong>{profile.horses?.join(", ") || "None listed"}</strong></span>
+              </div>
+              <div className="contestant-history-heading">
+                <div><h3>Roping history</h3><p>Registrations, participation, and published official results.</p></div>
+              </div>
+              <div className="contestant-history-list">
+                {profileHistory.map((history) => {
+                  const meet = meets.find(
+                    (item) => item.id === history.event.parentEventId,
+                  );
+                  const uniquePartners = [
+                    ...new Set(
+                      history.teams.map((team) =>
+                        contestantName(
+                          team.headerId === profile.id
+                            ? team.heelerId
+                            : team.headerId,
+                        ),
+                      ),
+                    ),
+                  ];
+                  const roles = [
+                    ...new Set([
+                      ...history.registrations.map((entry) => entry.role),
+                      ...history.teams.map((team) =>
+                        team.headerId === profile.id ? "Header" : "Heeler",
+                      ),
+                    ]),
+                  ];
+                  return (
+                    <article className="contestant-history-row" key={history.event.id}>
+                      <div className="contestant-history-date">
+                        <strong>{new Date(`${history.event.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</strong>
+                        <small>{new Date(`2000-01-01T${history.event.startTime}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</small>
+                      </div>
+                      <div>
+                        <h4>{history.event.name}</h4>
+                        <p>{meet?.name ? `${meet.name} · ` : ""}{roles.join(" / ") || "Team entry"}{uniquePartners.length ? ` · Partner: ${uniquePartners.join(", ")}` : ""}</p>
+                      </div>
+                      <div className="contestant-history-statuses">
+                        {history.won && <span className="tag winner"><Trophy size={12} /> Winner</span>}
+                        {!history.won && history.bestPlace && <span className="tag complete">Place #{history.bestPlace}</span>}
+                        <span className={`tag ${history.participated ? "complete" : "neutral"}`}>{history.participated ? "Participated" : "Registered"}</span>
+                      </div>
+                    </article>
+                  );
+                })}
+                {!profileHistory.length && <EmptyState text="This contestant has no roping registrations yet." />}
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
       {(showForm || editing) && (
         <ContestantForm
           contestant={editing ?? undefined}
@@ -2076,7 +2196,7 @@ function Contestants({
                 {contestant.photo
                   ? <img className="profile-photo" src={contestant.photo} alt="" />
                   : <i>{initials(contestant.name)}</i>}
-                <strong>{contestant.name}</strong>
+                <button className="contestant-name-button" onClick={() => setProfile(contestant)}>{contestant.name}</button>
               </span>
               <span>{contestant.headerHandicap}</span>
               <span>{contestant.heelerHandicap}</span>
