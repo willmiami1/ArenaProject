@@ -37,7 +37,6 @@ import {
   isWixEmbed,
   getPublicSignupPaymentStatus,
   loadPublicArenaData,
-  loadPublicSchedule,
   loadSignupOptions,
   startPublicSignupPayment,
   submitSpectatorPrediction,
@@ -1370,13 +1369,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       if (refreshing) return;
       refreshing = true;
       try {
-        const result =
-          route.kind === "home" ||
-          route.kind === "events" ||
-          route.kind === "event" ||
-          route.kind === "competition"
-            ? await loadPublicSchedule()
-            : await loadPublicArenaData();
+        const result = await loadPublicArenaData();
         if (!cancelled) {
           hasUsableData = true;
           setData(result);
