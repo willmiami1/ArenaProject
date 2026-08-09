@@ -361,14 +361,20 @@ describe("public grouping and privacy", () => {
       name: "Cal Both",
       role: "Both",
       photo: "https://example.com/private.jpg",
+      horses: ["Profile Horse"],
       email: "cal@example.com",
       phone: "867-5309",
       hometown: "Private Place",
     };
     const data = {
       ...workspace(event(), [
-        run(),
-        run({ id: "duplicate-team", drawPosition: 2 }),
+        run({ headerHorseName: "Bravo", heelerHorseName: "Delta" }),
+        run({
+          id: "duplicate-team",
+          drawPosition: 2,
+          headerHorseName: "Alpha",
+          heelerHorseName: "Echo",
+        }),
         run({ id: "generated-team", headerId: "both", generated: true }),
         run({ id: "scratched-team", heelerId: "both", scratched: true }),
         run({ id: "later-round", headerId: "both", round: 2 }),
@@ -380,6 +386,7 @@ describe("public grouping and privacy", () => {
           eventId: "competition-1",
           contestantId: "both",
           role: "Header" as const,
+          horseName: "  Ace  ",
           entries: 2,
           checkedIn: false,
           status: "entered" as const,
@@ -390,6 +397,7 @@ describe("public grouping and privacy", () => {
           eventId: "competition-1",
           contestantId: "both",
           role: "Heeler" as const,
+          horseName: "Switch",
           entries: 1,
           checkedIn: false,
           status: "entered" as const,
@@ -405,6 +413,17 @@ describe("public grouping and privacy", () => {
           status: "scratched" as const,
           notes: "do not publish",
         },
+        {
+          id: "duplicate-horse-registration",
+          eventId: "competition-1",
+          contestantId: "both",
+          role: "Header" as const,
+          horseName: "Ace",
+          entries: 1,
+          checkedIn: false,
+          status: "entered" as const,
+          notes: "",
+        },
       ],
     };
 
@@ -412,12 +431,32 @@ describe("public grouping and privacy", () => {
       projectPublicArenaData(data, today).competitions[0].registeredRiders;
     expect(registeredRiders).toEqual({
       headers: [
-        { id: "header", name: "Ada Header", photo: "data:image/png;base64,secret" },
-        { id: "both", name: "Cal Both", photo: undefined },
+        {
+          id: "header",
+          name: "Ada Header",
+          photo: "data:image/png;base64,secret",
+          horseNames: ["Alpha", "Bravo"],
+        },
+        {
+          id: "both",
+          name: "Cal Both",
+          photo: undefined,
+          horseNames: ["Ace"],
+        },
       ],
       heelers: [
-        { id: "heeler", name: "Bo Heeler", photo: undefined },
-        { id: "both", name: "Cal Both", photo: undefined },
+        {
+          id: "heeler",
+          name: "Bo Heeler",
+          photo: undefined,
+          horseNames: ["Delta", "Echo"],
+        },
+        {
+          id: "both",
+          name: "Cal Both",
+          photo: undefined,
+          horseNames: ["Switch"],
+        },
       ],
     });
     const serialized = JSON.stringify(registeredRiders);
@@ -425,6 +464,7 @@ describe("public grouping and privacy", () => {
     expect(serialized).not.toContain("867-5309");
     expect(serialized).not.toContain("Private Place");
     expect(serialized).not.toContain("do not publish");
+    expect(serialized).not.toContain("Profile Horse");
   });
 
   it("projects profile photos only for the current prediction team", () => {

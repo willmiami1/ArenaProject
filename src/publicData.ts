@@ -45,6 +45,7 @@ export interface PublicRegisteredRider {
   id: string;
   name: string;
   photo?: string;
+  horseNames: string[];
 }
 
 export interface PublicCompetition {
@@ -148,8 +149,18 @@ function registeredRidersForEvent(
   data: ArenaData,
   contestantsById: Map<string, ArenaData["contestants"][number]>,
 ) {
-  const headerIds = new Set<string>();
-  const heelerIds = new Set<string>();
+  const headerEntries = new Map<string, Set<string>>();
+  const heelerEntries = new Map<string, Set<string>>();
+  const addEntry = (
+    entries: Map<string, Set<string>>,
+    contestantId: string,
+    horseName?: string,
+  ) => {
+    const horses = entries.get(contestantId) ?? new Set<string>();
+    const normalizedHorseName = horseName?.trim();
+    if (normalizedHorseName) horses.add(normalizedHorseName);
+    entries.set(contestantId, horses);
+  };
   data.registrations
     .filter(
       (registration) =>
@@ -157,8 +168,10 @@ function registeredRidersForEvent(
         registration.status !== "scratched",
     )
     .forEach((registration) => {
-      (registration.role === "Header" ? headerIds : heelerIds).add(
+      addEntry(
+        registration.role === "Header" ? headerEntries : heelerEntries,
         registration.contestantId,
+        registration.horseName,
       );
     });
   data.teams
@@ -170,24 +183,31 @@ function registeredRidersForEvent(
         !team.scratched,
     )
     .forEach((team) => {
-      headerIds.add(team.headerId);
-      heelerIds.add(team.heelerId);
+      addEntry(headerEntries, team.headerId, team.headerHorseName);
+      addEntry(heelerEntries, team.heelerId, team.heelerHorseName);
     });
 
-  const projectRiders = (ids: Set<string>) =>
-    [...ids]
-      .map((id) => contestantsById.get(id))
-      .filter((contestant) => contestant !== undefined)
-      .map((contestant) => ({
+  const projectRiders = (entries: Map<string, Set<string>>) =>
+    [...entries]
+      .map(([id, horseNames]) => {
+        const contestant = contestantsById.get(id);
+        return contestant
+          ? {
         id: contestant.id,
         name: contestant.name,
         photo: publicProfilePhoto(contestant.photo),
-      }))
+              horseNames: [...horseNames].sort((left, right) =>
+                left.localeCompare(right),
+              ),
+            }
+          : undefined;
+      })
+      .filter((contestant) => contestant !== undefined)
       .sort((left, right) => left.name.localeCompare(right.name));
 
   return {
-    headers: projectRiders(headerIds),
-    heelers: projectRiders(heelerIds),
+    headers: projectRiders(headerEntries),
+    heelers: projectRiders(heelerEntries),
   };
 }
 

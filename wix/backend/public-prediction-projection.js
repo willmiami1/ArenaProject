@@ -15,8 +15,15 @@ export const publicRegisteredRiders = (
   teams,
   contestantsById,
 ) => {
-  const headerIds = new Set();
-  const heelerIds = new Set();
+  const headerEntries = new Map();
+  const heelerEntries = new Map();
+  const addEntry = (entries, contestantId, horseName) => {
+    const horses = entries.get(contestantId) || new Set();
+    const normalizedHorseName =
+      typeof horseName === "string" ? horseName.trim() : "";
+    if (normalizedHorseName) horses.add(normalizedHorseName);
+    entries.set(contestantId, horses);
+  };
   registrations
     .filter(
       (registration) =>
@@ -24,8 +31,10 @@ export const publicRegisteredRiders = (
         registration.status !== "scratched",
     )
     .forEach((registration) => {
-      (registration.role === "Header" ? headerIds : heelerIds).add(
+      addEntry(
+        registration.role === "Header" ? headerEntries : heelerEntries,
         registration.contestantId,
+        registration.horseName,
       );
     });
   teams
@@ -37,24 +46,31 @@ export const publicRegisteredRiders = (
         !team.scratched,
     )
     .forEach((team) => {
-      headerIds.add(team.headerId);
-      heelerIds.add(team.heelerId);
+      addEntry(headerEntries, team.headerId, team.headerHorseName);
+      addEntry(heelerEntries, team.heelerId, team.heelerHorseName);
     });
 
-  const projectRiders = (ids) =>
-    [...ids]
-      .map((id) => contestantsById.get(id))
+  const projectRiders = (entries) =>
+    [...entries]
+      .map(([id, horseNames]) => {
+        const contestant = contestantsById.get(id);
+        return contestant
+          ? {
+              id: contestant.id,
+              name: contestant.name,
+              photo: publicProfilePhoto(contestant.photo),
+              horseNames: [...horseNames].sort((left, right) =>
+                left.localeCompare(right),
+              ),
+            }
+          : undefined;
+      })
       .filter(Boolean)
-      .map((contestant) => ({
-        id: contestant.id,
-        name: contestant.name,
-        photo: publicProfilePhoto(contestant.photo),
-      }))
       .sort((left, right) => left.name.localeCompare(right.name));
 
   return {
-    headers: projectRiders(headerIds),
-    heelers: projectRiders(heelerIds),
+    headers: projectRiders(headerEntries),
+    heelers: projectRiders(heelerEntries),
   };
 };
 
