@@ -279,6 +279,7 @@ function RopingCard({
           </a>
         )}
         <div className="public-registered-roster homepage">
+          <h4 className="public-registered-title">Registered Riders</h4>
           <RiderRoleRoster
             label="Headers"
             riders={competition.registeredRiders?.headers ?? []}

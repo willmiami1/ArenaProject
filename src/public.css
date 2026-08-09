@@ -135,6 +135,7 @@
 .public-competition-actions>span { color: #76695b; }
 .public-registered-roster { grid-column: 1/-1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 22px; padding-top: 4px; }
 .public-registered-roster.homepage { margin-top: 18px; gap: 10px; }
+.public-registered-title { grid-column: 1/-1; margin: 0; color: var(--public-cream); font-family: "Manrope",sans-serif; font-size: 16px; text-transform: uppercase; letter-spacing: .08em; }
 .public-registered-roster.homepage .public-rider-role { padding: 13px; }
 .public-registered-roster.homepage .public-rider-role h4 { margin-bottom: 10px; font-size: 11px; }
 .public-registered-roster.homepage .public-rider-role ul { grid-template-columns: 1fr; gap: 7px; }
