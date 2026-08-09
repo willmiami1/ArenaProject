@@ -828,7 +828,15 @@ function RiderRoleRoster({
                   {initials(rider.name)}
                 </span>
               )}
-              <strong>{rider.name}</strong>
+              <span className="public-rider-copy">
+                <strong>{rider.name}</strong>
+                {(rider.horseNames?.length ?? 0) > 0 && (
+                  <small>
+                    {rider.horseNames.length === 1 ? "Horse" : "Horses"}:{" "}
+                    {rider.horseNames.join(", ")}
+                  </small>
+                )}
+              </span>
             </li>
           ))}
         </ul>

@@ -1329,7 +1329,11 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
       const hasRegisteredRiders = events.competitions.every(
         (competition) =>
           Array.isArray(competition.registeredRiders?.headers) &&
-          Array.isArray(competition.registeredRiders?.heelers),
+          Array.isArray(competition.registeredRiders?.heelers) &&
+          [
+            ...competition.registeredRiders.headers,
+            ...competition.registeredRiders.heelers,
+          ].every((rider) => Array.isArray(rider.horseNames)),
       );
       if (hasRegisteredRiders) return events;
       return publicProjection(await readWorkspace({ includeSpectators: true }));
