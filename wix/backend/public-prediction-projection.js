@@ -1,4 +1,4 @@
-const publicProfilePhoto = (photo) => {
+export const publicProfilePhoto = (photo) => {
   if (
     !photo ||
     photo.length > 3_000_000 ||
@@ -7,6 +7,55 @@ const publicProfilePhoto = (photo) => {
     return undefined;
   }
   return photo;
+};
+
+export const publicRegisteredRiders = (
+  eventId,
+  registrations,
+  teams,
+  contestantsById,
+) => {
+  const headerIds = new Set();
+  const heelerIds = new Set();
+  registrations
+    .filter(
+      (registration) =>
+        registration.eventId === eventId &&
+        registration.status !== "scratched",
+    )
+    .forEach((registration) => {
+      (registration.role === "Header" ? headerIds : heelerIds).add(
+        registration.contestantId,
+      );
+    });
+  teams
+    .filter(
+      (team) =>
+        team.eventId === eventId &&
+        Number(team.round) === 1 &&
+        !team.generated &&
+        !team.scratched,
+    )
+    .forEach((team) => {
+      headerIds.add(team.headerId);
+      heelerIds.add(team.heelerId);
+    });
+
+  const projectRiders = (ids) =>
+    [...ids]
+      .map((id) => contestantsById.get(id))
+      .filter(Boolean)
+      .map((contestant) => ({
+        id: contestant.id,
+        name: contestant.name,
+        photo: publicProfilePhoto(contestant.photo),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+  return {
+    headers: projectRiders(headerIds),
+    heelers: projectRiders(heelerIds),
+  };
 };
 
 export const spectatorPicksAreOpen = (team, now = Date.now()) =>

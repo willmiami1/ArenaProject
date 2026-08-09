@@ -26,6 +26,7 @@ import {
   type PublicArenaData,
   type PublicCompetition,
   type PublicMeet,
+  type PublicRegisteredRider,
   type PublicRoute,
   type PublicSpectatorLeaderboardRow,
 } from "./publicData";
@@ -789,7 +790,52 @@ function CompetitionRow({ competition }: { competition: PublicCompetition }) {
         {competition.resultsPublished && <a href={href("competition", competition.id)}>View results</a>}
         {!competition.resultsPublished && competition.status === "Complete" && <span>Results pending</span>}
       </div>
+      <div className="public-registered-roster">
+        <RiderRoleRoster
+          label="Headers"
+          riders={competition.registeredRiders?.headers ?? []}
+        />
+        <RiderRoleRoster
+          label="Heelers"
+          riders={competition.registeredRiders?.heelers ?? []}
+        />
+      </div>
     </article>
+  );
+}
+
+function RiderRoleRoster({
+  label,
+  riders,
+}: {
+  label: "Headers" | "Heelers";
+  riders: PublicRegisteredRider[];
+}) {
+  return (
+    <section
+      className="public-rider-role"
+      aria-label={`${label} registered riders`}
+    >
+      <h4>{label}</h4>
+      {riders.length ? (
+        <ul aria-label={`Registered ${label.toLowerCase()}`}>
+          {riders.map((rider) => (
+            <li key={rider.id}>
+              {rider.photo ? (
+                <img src={rider.photo} alt="" />
+              ) : (
+                <span className="public-rider-initials" aria-hidden="true">
+                  {initials(rider.name)}
+                </span>
+              )}
+              <strong>{rider.name}</strong>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>No {label.toLowerCase()} registered yet.</p>
+      )}
+    </section>
   );
 }
 

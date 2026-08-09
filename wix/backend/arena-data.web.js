@@ -8,6 +8,7 @@ import { elevate } from "wix-auth";
 import {
   effectivePublicPredictionState,
   publicPredictionRunProjection,
+  publicRegisteredRiders,
   spectatorPicksAreOpen,
 } from "./public-prediction-projection";
 import {
@@ -672,6 +673,12 @@ function publicProjection(workspace) {
               registration.status !== "scratched",
           )
           .reduce((sum, registration) => sum + Number(registration.entries || 0), 0),
+      registeredRiders: publicRegisteredRiders(
+        event.id,
+        workspace.registrations,
+        workspace.teams,
+        contestantsById,
+      ),
       results: publishedResults(event, workspace.teams, workspace.contestants),
       spectatorLeaderboards: Array.from(
         { length: Math.max(Number(event.rounds || 1), 1) },
@@ -1318,7 +1325,15 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
       .get(SETTINGS_COLLECTION, PUBLIC_SCHEDULE_ID, OPTIONS)
       .catch(() => null);
     events = snapshot?.payload ? JSON.parse(snapshot.payload) : null;
-    if (Array.isArray(events?.competitions)) return events;
+    if (Array.isArray(events?.competitions)) {
+      const hasRegisteredRiders = events.competitions.every(
+        (competition) =>
+          Array.isArray(competition.registeredRiders?.headers) &&
+          Array.isArray(competition.registeredRiders?.heelers),
+      );
+      if (hasRegisteredRiders) return events;
+      return publicProjection(await readWorkspace({ includeSpectators: true }));
+    }
     if (!Array.isArray(events)) events = await readPublicScheduleEvents();
   } catch (error) {
     return {
@@ -1377,6 +1392,7 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
     incentiveTeams: scheduleNumber(event.incentiveTeams, 1),
     incentiveAmountPerTeam: scheduleNumber(event.incentiveAmountPerTeam),
     entryCount: 0,
+    registeredRiders: { headers: [], heelers: [] },
     results: [],
     predictionRuns: [],
     spectatorLeaderboards: [],

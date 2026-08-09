@@ -41,6 +41,12 @@ export interface PublicStandingRow {
   status: "qualified" | "no-time";
 }
 
+export interface PublicRegisteredRider {
+  id: string;
+  name: string;
+  photo?: string;
+}
+
 export interface PublicCompetition {
   id: string;
   parentEventId: string;
@@ -72,6 +78,10 @@ export interface PublicCompetition {
   incentiveTeams: number;
   incentiveAmountPerTeam: number;
   entryCount: number;
+  registeredRiders: {
+    headers: PublicRegisteredRider[];
+    heelers: PublicRegisteredRider[];
+  };
   results: PublicStandingRow[];
   activePredictionRunId?: string;
   predictionRuns: PublicPredictionRun[];
@@ -133,6 +143,54 @@ function publicProfilePhoto(photo: string | undefined) {
   return photo;
 }
 
+function registeredRidersForEvent(
+  eventId: string,
+  data: ArenaData,
+  contestantsById: Map<string, ArenaData["contestants"][number]>,
+) {
+  const headerIds = new Set<string>();
+  const heelerIds = new Set<string>();
+  data.registrations
+    .filter(
+      (registration) =>
+        registration.eventId === eventId &&
+        registration.status !== "scratched",
+    )
+    .forEach((registration) => {
+      (registration.role === "Header" ? headerIds : heelerIds).add(
+        registration.contestantId,
+      );
+    });
+  data.teams
+    .filter(
+      (team) =>
+        team.eventId === eventId &&
+        team.round === 1 &&
+        !team.generated &&
+        !team.scratched,
+    )
+    .forEach((team) => {
+      headerIds.add(team.headerId);
+      heelerIds.add(team.heelerId);
+    });
+
+  const projectRiders = (ids: Set<string>) =>
+    [...ids]
+      .map((id) => contestantsById.get(id))
+      .filter((contestant) => contestant !== undefined)
+      .map((contestant) => ({
+        id: contestant.id,
+        name: contestant.name,
+        photo: publicProfilePhoto(contestant.photo),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+  return {
+    headers: projectRiders(headerIds),
+    heelers: projectRiders(heelerIds),
+  };
+}
+
 export interface PublicMeet {
   id: string;
   name: string;
@@ -185,10 +243,10 @@ export function projectPublicArenaData(
   data: ArenaData,
   today = new Date(),
 ): PublicArenaData {
+  const contestantsById = new Map(
+    data.contestants.map((contestant) => [contestant.id, contestant]),
+  );
   const competitions = data.events.map((event): PublicCompetition => {
-    const contestantsById = new Map(
-      data.contestants.map((contestant) => [contestant.id, contestant]),
-    );
     const fixedEntries = data.teams.filter(
       (team) =>
         team.eventId === event.id &&
@@ -236,6 +294,11 @@ export function projectPublicArenaData(
       incentiveTeams: event.incentiveTeams ?? 1,
       incentiveAmountPerTeam: event.incentiveAmountPerTeam ?? 0,
       entryCount: fixedEntries + individualEntries,
+      registeredRiders: registeredRidersForEvent(
+        event.id,
+        data,
+        contestantsById,
+      ),
       results: publicStandingRows(event, data.teams, data.contestants),
       activePredictionRunId: activeRun?.id,
       predictionRuns: predictionTeams
