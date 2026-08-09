@@ -130,3 +130,26 @@ for both option loading and submission and are never stored in browser storage.
 Online teams and registrations start unpaid and do not enter generated draws
 until staff confirms payment. Revision-aware staff saves preserve online
 records submitted after the staff workspace was loaded.
+
+### Owner payment notification
+
+After authoritative fulfillment marks a payment intent `successful`, the backend
+sends a Wix triggered email to the single CRM contact whose email is
+`willmiami1@gmail.com`. Configure Wix before enabling this flow:
+
+1. Add exactly one Wix CRM contact with `willmiami1@gmail.com` and ensure the
+   contact is not unsubscribed.
+2. Create a Dashboard triggered-email template with these text variables:
+   `contestantName`, `paidAmount`, `ropings`, `submissionId`, `paymentId`, and
+   `transactionId`.
+3. Add the template ID to Wix Secrets Manager as
+   `ArenaOwnerPaymentTriggeredEmailId`.
+
+Delivery state is stored in the admin-only `ArenaOwnerPaymentNotifications`
+collection. A successful send is not repeated for duplicate Wix payment events.
+Failed sends are logged and recorded with attempt count and error, and a later
+duplicate event retries up to five times. Notification failure never changes the
+successful payment intent or repeats registration fulfillment. A record left in
+`sending` means the delivery outcome is unknown because execution stopped between
+the durable attempt marker and its final state. It is intentionally not
+auto-retried to avoid sending a duplicate email.

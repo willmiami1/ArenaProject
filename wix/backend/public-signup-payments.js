@@ -2,6 +2,8 @@ import wixData from "wix-data";
 import { collections } from "wix-data.v2";
 import { elevate } from "wix-auth";
 import wixPayBackend from "wix-pay-backend";
+import { contacts, triggeredEmails } from "wix-crm-backend";
+import { secrets } from "wix-secrets-backend.v2";
 import { createHash, randomBytes } from "crypto";
 import {
   PUBLIC_SIGNUP_ENTRY_RESERVATION_MINUTES,
@@ -14,6 +16,10 @@ import {
   publicSignupPaymentCreatedIntentIsStale,
   storedPublicSignupSelectionsForRetry,
 } from "./public-signup-contract";
+import {
+  buildOwnerPaymentNotification,
+  deliverOwnerPaymentNotification,
+} from "./public-signup-owner-notification";
 
 const OPTIONS = { suppressAuth: true, consistentRead: true };
 const COLLECTIONS = {
@@ -28,6 +34,9 @@ const SIGNUP_SESSIONS_COLLECTION = "ArenaPublicSignupSessions";
 const PAYMENT_INTENTS_COLLECTION = "ArenaPublicSignupPaymentIntents";
 const ENTRY_RESERVATIONS_COLLECTION = "ArenaPublicSignupEntryReservations";
 const PAYMENT_LOCKS_COLLECTION = "ArenaPublicSignupPaymentLocks";
+const OWNER_NOTIFICATIONS_COLLECTION = "ArenaOwnerPaymentNotifications";
+const OWNER_EMAIL = "willmiami1@gmail.com";
+const OWNER_TRIGGERED_EMAIL_SECRET = "ArenaOwnerPaymentTriggeredEmailId";
 const VALID_APP_ID = /^[a-zA-Z0-9_-]{1,100}$/;
 const SECURITY_WRITE_ATTEMPTS = 3;
 const PENDING_RESERVATION_MINUTES = 24 * 60;
@@ -36,6 +45,7 @@ const ACTIVE_PAYMENT_STATUSES = new Set([
   "pending",
   "settling",
 ]);
+const getSecretValue = elevate(secrets.getSecretValue);
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const storageId = (namespace, value) =>
@@ -129,6 +139,22 @@ async function ensurePublicSignupCollections() {
       [
         { key: "paymentId", displayName: "Payment ID", type: "TEXT" },
         { key: "expiresAt", displayName: "Expires At", type: "DATETIME" },
+      ],
+    ),
+    ensureCollection(
+      OWNER_NOTIFICATIONS_COLLECTION,
+      "Arena Owner Payment Notifications",
+      [
+        { key: "intentId", displayName: "Payment Intent ID", type: "TEXT" },
+        { key: "paymentId", displayName: "Wix Payment ID", type: "TEXT" },
+        { key: "submissionId", displayName: "Submission ID", type: "TEXT" },
+        { key: "status", displayName: "Notification Status", type: "TEXT" },
+        { key: "attempts", displayName: "Delivery Attempts", type: "NUMBER" },
+        { key: "error", displayName: "Last Error", type: "TEXT" },
+        { key: "lastAttemptAt", displayName: "Last Attempt At", type: "DATETIME" },
+        { key: "notifiedAt", displayName: "Notified At", type: "DATETIME" },
+        { key: "createdAt", displayName: "Created At", type: "DATETIME" },
+        { key: "updatedAt", displayName: "Updated At", type: "DATETIME" },
       ],
     ),
   ]);
@@ -851,7 +877,7 @@ async function insertUniqueArenaRecord(collectionId, record) {
 }
 
 async function finalizeSuccessfulPayment(intent, transactionId) {
-  if (intent.status === "successful") return;
+  if (intent.status === "successful") return intent;
   const workspace = await readWorkspace();
   const contestant = workspace.contestants.find(
     (item) => item.id === intent.contestantId,
@@ -904,7 +930,7 @@ async function finalizeSuccessfulPayment(intent, transactionId) {
     },
     OPTIONS,
   );
-  await updateWithRetry(
+  const successfulIntent = await updateWithRetry(
     PAYMENT_INTENTS_COLLECTION,
     {
       ...intent,
@@ -921,6 +947,7 @@ async function finalizeSuccessfulPayment(intent, transactionId) {
       message: error instanceof Error ? error.message : String(error),
     });
   });
+  return successfulIntent;
 }
 
 async function findPaymentIntent(paymentId) {
@@ -936,6 +963,95 @@ async function findPaymentIntent(paymentId) {
   return null;
 }
 
+async function sendOwnerTriggeredEmail(notification) {
+  const secret = await getSecretValue(OWNER_TRIGGERED_EMAIL_SECRET);
+  const emailId = String(secret?.value || "").trim();
+  if (!emailId) {
+    throw new Error(
+      `Wix secret ${OWNER_TRIGGERED_EMAIL_SECRET} is empty or unavailable.`,
+    );
+  }
+
+  const result = await contacts
+    .queryContacts()
+    .eq("info.emails.email", OWNER_EMAIL)
+    .limit(2)
+    .find({ suppressAuth: true });
+  if (result.items.length !== 1) {
+    throw new Error(
+      `Expected exactly one Wix contact for ${OWNER_EMAIL}; found ${result.items.length}.`,
+    );
+  }
+
+  await triggeredEmails.emailContact(emailId, result.items[0]._id, {
+    variables: notification,
+  });
+}
+
+async function notifyOwnerForSuccessfulPayment(intent) {
+  const workspace = await readWorkspace();
+  const contestant = workspace.contestants.find(
+    (item) => item.id === intent.contestantId,
+  );
+  if (!contestant) {
+    throw new Error("Paid contestant is unavailable for owner notification.");
+  }
+
+  const id = storageId(OWNER_NOTIFICATIONS_COLLECTION, intent._id);
+  const existingResult = await wixData
+    .query(OWNER_NOTIFICATIONS_COLLECTION)
+    .eq("_id", id)
+    .limit(1)
+    .find(OPTIONS);
+  const existing = existingResult.items[0] || null;
+  const now = new Date();
+  const record = existing || {
+    _id: id,
+    intentId: intent._id,
+    paymentId: intent.paymentId,
+    submissionId: intent.submissionId,
+    status: "pending",
+    attempts: 0,
+    error: "",
+    createdAt: now,
+    updatedAt: now,
+  };
+  const notification = buildOwnerPaymentNotification(
+    workspace,
+    contestant,
+    intent,
+  );
+
+  return deliverOwnerPaymentNotification({
+    record,
+    notification,
+    send: sendOwnerTriggeredEmail,
+    persist: (updatedRecord, context) =>
+      wixData.save(OWNER_NOTIFICATIONS_COLLECTION, updatedRecord, OPTIONS).catch(
+        (error) => {
+          console.error("Owner payment notification state write failed.", {
+            paymentId: intent.paymentId,
+            submissionId: intent.submissionId,
+            context,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        },
+      ),
+  });
+}
+
+async function notifyOwnerAfterSuccessfulPayment(intent) {
+  return notifyOwnerForSuccessfulPayment(intent).catch((error) => {
+    console.error("Paid public signup owner notification failed.", {
+      paymentId: intent.paymentId,
+      submissionId: intent.submissionId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  });
+}
+
 async function processPublicSignupPaymentUpdateLocked(event) {
   const paymentId = String(event?.payment?.id || "");
   if (!paymentId) return;
@@ -945,6 +1061,7 @@ async function processPublicSignupPaymentUpdateLocked(event) {
   const intent = await expireStalePaymentCreatedIntentLocked(storedIntent);
   if (intent.status === "successful") {
     await releaseEntryReservations(intent).catch(() => undefined);
+    await notifyOwnerAfterSuccessfulPayment(intent);
     return;
   }
 
@@ -1011,8 +1128,9 @@ async function processPublicSignupPaymentUpdateLocked(event) {
     return;
   }
 
+  let successfulIntent;
   try {
-    await withResourceLocks(
+    successfulIntent = await withResourceLocks(
       JSON.parse(intent.competitionIds).map(
         (competitionId) => `competition:${competitionId}`,
       ),
@@ -1043,7 +1161,10 @@ async function processPublicSignupPaymentUpdateLocked(event) {
         "payment-fulfillment-failed",
       );
     }
+    return;
   }
+
+  await notifyOwnerAfterSuccessfulPayment(successfulIntent);
 }
 
 export async function processPublicSignupPaymentUpdate(event) {
