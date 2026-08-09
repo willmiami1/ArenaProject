@@ -55,7 +55,7 @@ import type { ArenaData } from "./types";
 import { isBrowserStoragePreview } from "./adminAccess";
 
 const localWorkspaceKey = "arena-command-data-v1";
-const registrationLinkLabel = "Log in or call/text Will 954-520-2631";
+const registrationLinkLabel = "Accepting Entries - Log in or call/text Will 954-520-2631";
 
 function loadLocalPublicData() {
   const saved = window.localStorage.getItem(localWorkspaceKey);
@@ -260,7 +260,7 @@ function RopingCard({
         <div className="public-card-badges">
           {competition.registrationOpen && (
             <a href={href("signup", competition.id)}>
-              Accepting entries · Log in or create account
+              {registrationLinkLabel}
             </a>
           )}
           {!scheduleOnly && (
