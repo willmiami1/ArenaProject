@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { trustedWixRelayOrigin, wixResponseErrorMessage } from "./wixBridge";
+import {
+  publicEventSectionTargetId,
+  trustedWixRelayOrigin,
+  wixResponseErrorMessage,
+} from "./wixBridge";
 
 describe("trusted Wix relay origin", () => {
   const siteOrigin = "https://www.destinyrancharena.com";
@@ -30,6 +34,21 @@ describe("trusted Wix relay origin", () => {
       expect(wixResponseErrorMessage("The requested Arena action failed.")).toBe(
         "The requested Arena action failed.",
       );
+    });
+  });
+
+  describe("public event section links", () => {
+    it("maps Wix section values to public event anchors", () => {
+      expect(publicEventSectionTargetId("future")).toBe("events-future");
+      expect(publicEventSectionTargetId("current")).toBe("events-live");
+      expect(publicEventSectionTargetId("live")).toBe("events-live");
+      expect(publicEventSectionTargetId("past")).toBe("events-past");
+      expect(publicEventSectionTargetId("events")).toBe("events");
+    });
+
+    it("rejects unknown or malformed section values", () => {
+      expect(publicEventSectionTargetId("admin")).toBeNull();
+      expect(publicEventSectionTargetId(null)).toBeNull();
     });
   });
 

@@ -200,6 +200,42 @@ export function isWixEmbed() {
   return Boolean(wixParentOrigin());
 }
 
+const publicEventSectionIds = {
+  events: "events",
+  live: "events-live",
+  current: "events-live",
+  future: "events-future",
+  past: "events-past",
+} as const;
+
+export function publicEventSectionTargetId(section: unknown) {
+  return typeof section === "string" && section in publicEventSectionIds
+    ? publicEventSectionIds[section as keyof typeof publicEventSectionIds]
+    : null;
+}
+
+export function subscribeToWixSectionNavigation(
+  onNavigate: (targetId: string) => void,
+) {
+  const trustedOrigin = wixParentOrigin();
+  if (!trustedOrigin) return () => undefined;
+  const handleMessage = (event: MessageEvent) => {
+    if (
+      event.source !== window.parent ||
+      event.origin !== trustedOrigin ||
+      typeof event.data !== "object" ||
+      event.data === null ||
+      event.data.type !== "arena:navigate-section"
+    ) {
+      return;
+    }
+    const targetId = publicEventSectionTargetId(event.data.section);
+    if (targetId) onNavigate(targetId);
+  };
+  window.addEventListener("message", handleMessage);
+  return () => window.removeEventListener("message", handleMessage);
+}
+
 function sensitiveWixAction(action: WixAction) {
   return (
     action === "authenticateContestant" ||

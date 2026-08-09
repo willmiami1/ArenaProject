@@ -38,7 +38,9 @@ import {
   getPublicSignupPaymentStatus,
   loadPublicArenaData,
   loadSignupOptions,
+  publicEventSectionTargetId,
   startPublicSignupPayment,
+  subscribeToWixSectionNavigation,
   submitSpectatorPrediction,
   type PublicSignupOptions,
   type PublicSignupPayment,
@@ -1351,6 +1353,13 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
     isWixEmbed() ? null : loadLocalPublicData(),
   );
   const [error, setError] = useState("");
+  const [requestedEventSection, setRequestedEventSection] = useState<string | null>(
+    () => publicEventSectionTargetId(window.location.hash.slice(1).replace(/^events-/, "")),
+  );
+  useEffect(
+    () => subscribeToWixSectionNavigation(setRequestedEventSection),
+    [],
+  );
   useEffect(() => {
     if (route.kind === "rider-account") return;
     if (!isWixEmbed()) {
@@ -1420,12 +1429,12 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
 
   useEffect(() => {
     if (!data || (route.kind !== "home" && route.kind !== "events")) return;
-    const targetId = window.location.hash.slice(1);
-    if (!["events", "events-live", "events-future", "events-past"].includes(targetId)) return;
+    const targetId = requestedEventSection;
+    if (!targetId) return;
     window.requestAnimationFrame(() => {
       document.getElementById(targetId)?.scrollIntoView();
     });
-  }, [data, route.kind]);
+  }, [data, requestedEventSection, route.kind]);
 
   return (
     <div className="public-site">
