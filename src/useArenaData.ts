@@ -11,9 +11,11 @@ import { normalizeHorseNames } from "./contestantHorses";
 import type { ArenaData, ArenaMeet } from "./types";
 import {
   isWixEmbed,
+  isWorkspaceSaveConfirmation,
   publishPublicSchedule,
   requestWixData,
   setActiveRun,
+  type WorkspaceSaveConfirmation,
 } from "./wixBridge";
 import {
   activeRunConfirmationIsCurrent,
@@ -362,6 +364,19 @@ export function workspaceSaveNeedsFollowUp(
   return localDirty && current !== submitted;
 }
 
+export function reconcileWorkspaceSaveConfirmation(
+  submitted: ArenaData,
+  confirmation: WorkspaceSaveConfirmation,
+) {
+  return {
+    ...submitted,
+    revision: confirmation.revision,
+    staffRevision: confirmation.staffRevision,
+    onlineRevision: confirmation.onlineRevision,
+    loadedAt: confirmation.loadedAt,
+  };
+}
+
 export function useArenaData() {
   const [data, setData] = useState<ArenaData>(loadLocalData);
   const [status, setStatus] = useState<PersistenceStatus>("loading");
@@ -377,6 +392,7 @@ export function useArenaData() {
   const conflictRetryCount = useRef(0);
   const automaticRetryCount = useRef(0);
   const lastFailedSnapshot = useRef("");
+  const pendingAuthoritativeRefreshRevision = useRef<number | null>(null);
   const saveRetryTimer = useRef(0);
   const activeRunSaveQueue =
     useRef<LatestActiveRunSaveQueue<ActiveRunConfirmation> | null>(null);
@@ -468,8 +484,16 @@ export function useArenaData() {
     try {
       const saved = await requestWixData("save", submitted);
       if (!saved) throw new Error("Wix did not confirm the workspace save.");
-      const normalized = mergeSavedArenaData(submitted, saved);
-      persistedDataRef.current = normalizeData(saved);
+      const compactConfirmation = isWorkspaceSaveConfirmation(saved);
+      const normalized = compactConfirmation
+        ? reconcileWorkspaceSaveConfirmation(submitted, saved)
+        : mergeSavedArenaData(submitted, saved);
+      persistedDataRef.current = compactConfirmation
+        ? normalized
+        : normalizeData(saved);
+      pendingAuthoritativeRefreshRevision.current = compactConfirmation
+        ? saved.revision
+        : null;
       conflictRetryCount.current = 0;
       automaticRetryCount.current = 0;
       if (dataRef.current === submitted) {
@@ -713,20 +737,32 @@ export function useArenaData() {
       try {
         const saved = await requestWixData("save", submitted);
         if (!saved) throw new Error("Wix did not confirm the workspace save.");
-        if (saved) {
-          persistedDataRef.current = normalizeData(saved);
-          conflictRetryCount.current = 0;
-          automaticRetryCount.current = 0;
-          lastFailedSnapshot.current = "";
-          setLastSaveError("");
-        }
-        if (saved && saved.revision !== submitted.revision) {
+        const compactConfirmation = isWorkspaceSaveConfirmation(saved);
+        const confirmed = compactConfirmation
+          ? reconcileWorkspaceSaveConfirmation(submitted, saved)
+          : normalizeData(saved);
+        persistedDataRef.current = confirmed;
+        pendingAuthoritativeRefreshRevision.current = compactConfirmation
+          ? saved.revision
+          : null;
+        conflictRetryCount.current = 0;
+        automaticRetryCount.current = 0;
+        lastFailedSnapshot.current = "";
+        setLastSaveError("");
+        if (
+          compactConfirmation ||
+          confirmed.revision !== submitted.revision
+        ) {
           setData((current) => {
             if (current !== submitted) {
-              return mergeConcurrentSavedArenaData(submitted, current, saved);
+              return mergeConcurrentSavedArenaData(
+                submitted,
+                current,
+                confirmed,
+              );
             }
             skipNextSave.current = true;
-            return mergeSavedArenaData(submitted, saved);
+            return mergeSavedArenaData(submitted, confirmed);
           });
         }
         setStatus("saved");
@@ -847,16 +883,39 @@ export function useArenaData() {
         return;
       }
       refreshing = true;
+      const stateAtLoadStart = dataRef.current;
       try {
         const saved = await requestWixData("load");
         if (
           cancelled ||
           !saved ||
+          dataRef.current !== stateAtLoadStart ||
           localWriteIsPending()
         ) {
           return;
         }
         const normalized = normalizeData(saved);
+        if (
+          pendingAuthoritativeRefreshRevision.current !== null &&
+          normalized.revision === pendingAuthoritativeRefreshRevision.current
+        ) {
+          pendingAuthoritativeRefreshRevision.current = null;
+          skipNextSave.current = true;
+          localDirty.current = false;
+          persistedDataRef.current = normalized;
+          dataRef.current = normalized;
+          setData(normalized);
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+          setStatus("saved");
+          return;
+        }
+        if (
+          pendingAuthoritativeRefreshRevision.current !== null &&
+          Number(normalized.revision ?? 0) >
+            pendingAuthoritativeRefreshRevision.current
+        ) {
+          pendingAuthoritativeRefreshRevision.current = null;
+        }
         if (!remoteWorkspaceIsNewer(dataRef.current, normalized)) return;
         skipNextSave.current = true;
         localDirty.current = false;

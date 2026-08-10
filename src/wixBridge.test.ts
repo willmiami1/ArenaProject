@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   publicEventSectionTargetId,
+  isWorkspaceSaveConfirmation,
   trustedWixRelayOrigin,
   wixResponseErrorMessage,
 } from "./wixBridge";
@@ -28,6 +29,27 @@ describe("trusted Wix relay origin", () => {
           message: "Email or PIN is incorrect.",
         }),
       ).toBe("Email or PIN is incorrect.");
+    });
+
+    it("recognizes only complete compact workspace save confirmations", () => {
+      expect(
+        isWorkspaceSaveConfirmation({
+          saved: true,
+          revision: 12,
+          staffRevision: 9,
+          onlineRevision: 3,
+          loadedAt: "2026-08-10T20:20:00.000Z",
+        }),
+      ).toBe(true);
+      expect(
+        isWorkspaceSaveConfirmation({
+          saved: true,
+          revision: 12,
+          staffRevision: 9,
+          onlineRevision: Number.NaN,
+          loadedAt: "2026-08-10T20:20:00.000Z",
+        }),
+      ).toBe(false);
     });
 
     it("keeps legacy string relay failures compatible", () => {

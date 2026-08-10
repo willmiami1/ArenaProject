@@ -30,6 +30,7 @@ import {
   mergeConcurrentSavedArenaData,
   mergeSavedArenaData,
   normalizeData,
+  reconcileWorkspaceSaveConfirmation,
   remoteWorkspaceIsNewer,
   staffWorkspaceIsNewer,
   workspaceSaveNeedsFollowUp,
@@ -88,6 +89,28 @@ const workspace = (competition = event(), teams: Team[] = []): ArenaData => ({
 });
 
 describe("workspace save queue", () => {
+  it("keeps submitted content while applying a compact save confirmation", () => {
+    const submitted = workspace(
+      event({ id: "new-event", name: "New Event", status: "Live" }),
+    );
+    const confirmed = reconcileWorkspaceSaveConfirmation(submitted, {
+      saved: true,
+      revision: 12,
+      staffRevision: 9,
+      onlineRevision: 3,
+      loadedAt: "2026-08-10T20:20:00.000Z",
+    });
+
+    expect(confirmed.events).toEqual(submitted.events);
+    expect(confirmed).toMatchObject({
+      revision: 12,
+      staffRevision: 9,
+      onlineRevision: 3,
+      loadedAt: "2026-08-10T20:20:00.000Z",
+    });
+    expect(confirmed).not.toHaveProperty("saved");
+  });
+
   it("queues a newer Run Desk selection after an older save finishes", () => {
     const submitted = workspace(
       event({ activeRunId: "team-1", activeRound: 1 }),

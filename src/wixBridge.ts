@@ -54,6 +54,27 @@ export interface ContestantPortalData {
   teams: Team[];
 }
 
+export interface WorkspaceSaveConfirmation {
+  saved: true;
+  revision: number;
+  staffRevision: number;
+  onlineRevision: number;
+  loadedAt: string;
+}
+
+export function isWorkspaceSaveConfirmation(
+  value: ArenaData | WorkspaceSaveConfirmation,
+): value is WorkspaceSaveConfirmation {
+  return (
+    "saved" in value &&
+    value.saved === true &&
+    Number.isFinite(value.revision) &&
+    Number.isFinite(value.staffRevision) &&
+    Number.isFinite(value.onlineRevision) &&
+    typeof value.loadedAt === "string"
+  );
+}
+
 export interface SignupOptions {
   contestant: Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap" | "horses">;
   partners: Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap">[];
@@ -397,11 +418,13 @@ function requestWixFromOrigin<T>(
   });
 }
 
+export function requestWixData(action: "load"): Promise<ArenaData | null>;
 export function requestWixData(
-  action: "load" | "save",
-  data?: ArenaData,
-) {
-  return requestWix<ArenaData>(action, data);
+  action: "save",
+  data: ArenaData,
+): Promise<ArenaData | WorkspaceSaveConfirmation | null>;
+export function requestWixData(action: "load" | "save", data?: ArenaData) {
+  return requestWix<ArenaData | WorkspaceSaveConfirmation>(action, data);
 }
 
 export async function setActiveRun(data: {
