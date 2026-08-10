@@ -892,7 +892,10 @@ main { grid-column: 2; min-width: 0; }
   .report-filter-grid { grid-template-columns: repeat(3, 1fr); }
   .portal-team-row { grid-template-columns: 1fr 1fr; }
   .portal-result { text-align: left; }
-  .registration-desk-columns { grid-template-columns: 1fr; }
+  .registration-desk-main { display: flex; flex-direction: column; }
+  .registration-desk-columns { order: 1; grid-template-columns: 1fr; }
+  .registration-desk-roster { order: 2; margin: 22px 0 0; }
+  .registration-desk-message { order: 3; }
 }
 
 @media (max-width: 1024px) {
