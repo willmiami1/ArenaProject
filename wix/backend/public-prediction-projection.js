@@ -99,9 +99,26 @@ export const effectivePublicPredictionState = (event, teams) => {
     );
   return {
     runs,
-    activeRun:
-      runs.find((team) => team.id === event.activeRunId) || runs[0] || null,
+    activeRun: runs.find((team) => team.id === event.activeRunId) || null,
   };
+};
+
+export const assertSpectatorPredictionRunIsActive = (
+  event,
+  team,
+  teams,
+  now = Date.now(),
+) => {
+  if (!event || event.status !== "Live" || !team || team.scratched) {
+    throw new Error("That live run is not available.");
+  }
+  if (!spectatorPicksAreOpen(team, now)) {
+    throw new Error("Predictions are closed for this run.");
+  }
+  const { activeRun } = effectivePublicPredictionState(event, teams);
+  if (team.id !== activeRun?.id) {
+    throw new Error("That run is not active at the Run Desk.");
+  }
 };
 
 export const publicPredictionRunProjection = (

@@ -6,10 +6,9 @@ import { createHash, randomBytes } from "crypto";
 import { currentMember } from "wix-members-backend";
 import { elevate } from "wix-auth";
 import {
-  effectivePublicPredictionState,
+  assertSpectatorPredictionRunIsActive,
   publicPredictionRunProjection,
   publicRegisteredRiders,
-  spectatorPicksAreOpen,
 } from "./public-prediction-projection";
 import {
   PublicSignupError,
@@ -2486,19 +2485,7 @@ export const submitSpectatorPrediction = webMethod(
     const team = workspace.teams.find(
       (item) => item.id === request.teamId && item.eventId === request.eventId,
     );
-    if (!event || event.status !== "Live" || !team || team.scratched) {
-      throw new Error("That live run is not available.");
-    }
-    if (!spectatorPicksAreOpen(team)) {
-      throw new Error("Predictions are closed for this run.");
-    }
-    const { activeRun } = effectivePublicPredictionState(
-      event,
-      workspace.teams,
-    );
-    if (team.id !== activeRun?.id) {
-      throw new Error("That run is not active at the Run Desk.");
-    }
+    assertSpectatorPredictionRunIsActive(event, team, workspace.teams);
     const normalizedName = name.toLowerCase();
     const existingSpectator = workspace.spectators.find(
       (item) => String(item.name || "").trim().toLowerCase() === normalizedName,
