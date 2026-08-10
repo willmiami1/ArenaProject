@@ -30,6 +30,7 @@ import {
 import type { ArenaData, Contestant } from "./types";
 import { roundRobinRoleCapacity } from "./roundRobinCapacity";
 import { registrationDeskWorkspaceHref } from "./registrationDeskNavigation";
+import { showStandaloneRegistrationProfile } from "./registrationDeskProfile";
 import {
   isWixEmbed,
   loadRegistrationDeskData,
@@ -841,7 +842,11 @@ export function RegistrationDesk() {
           </div>
         )}
 
-        {profileOpen && profile.id !== contestant?.id && (
+        {showStandaloneRegistrationProfile(
+          profileOpen,
+          profile.id,
+          contestant?.id,
+        ) && (
           <section className="registration-desk-panel registration-profile-panel">
             {profileEditor}
           </section>
