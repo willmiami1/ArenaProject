@@ -35,6 +35,7 @@ import {
   reconcileWorkspaceSaveConfirmation,
   remoteWorkspaceIsNewer,
   staffWorkspaceIsNewer,
+  shouldSkipContestantReconciliationSave,
   workspaceSaveNeedsFollowUp,
 } from "./useArenaData";
 import {
@@ -159,6 +160,43 @@ describe("workspace save queue", () => {
         "new-rider",
       ),
     ).toBe(true);
+  });
+
+  it("saves a Draw entry added before contestant reconciliation finishes", () => {
+    const reconciled = {
+      ...workspace(),
+      contestants: [
+        ...contestants,
+        { ...contestants[0], id: "new-rider", name: "NEW RIDER" },
+      ],
+    };
+    const snapshot = JSON.stringify(reconciled);
+
+    expect(
+      shouldSkipContestantReconciliationSave(reconciled, snapshot),
+    ).toBe(true);
+    expect(
+      shouldSkipContestantReconciliationSave(
+        {
+          ...reconciled,
+          registrations: [
+            ...reconciled.registrations,
+            {
+              id: "new-entry",
+              eventId: reconciled.events[0].id,
+              contestantId: "new-rider",
+              role: "Header",
+              entries: 1,
+              checkedIn: false,
+              status: "entered",
+              notes: "",
+              paid: true,
+            },
+          ],
+        },
+        snapshot,
+      ),
+    ).toBe(false);
   });
 
   it("keeps submitted content while applying a compact save confirmation", () => {

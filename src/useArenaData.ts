@@ -428,6 +428,16 @@ export function contestantSaveHasUnrelatedChanges(
   );
 }
 
+export function shouldSkipContestantReconciliationSave(
+  data: ArenaData,
+  reconciliationSnapshot: string,
+) {
+  return (
+    reconciliationSnapshot !== "" &&
+    JSON.stringify(data) === reconciliationSnapshot
+  );
+}
+
 export function useArenaData() {
   const [data, setData] = useState<ArenaData>(loadLocalData);
   const [status, setStatus] = useState<PersistenceStatus>("loading");
@@ -435,6 +445,7 @@ export function useArenaData() {
   const [ready, setReady] = useState(false);
   const [wixConnected, setWixConnected] = useState(false);
   const skipNextSave = useRef(false);
+  const contestantReconciliationSnapshot = useRef("");
   const preserveDirtyOnSkippedSave = useRef(false);
   const localDirty = useRef(false);
   const saveInFlight = useRef(false);
@@ -687,6 +698,9 @@ export function useArenaData() {
             confirmation,
           );
           skipNextSave.current = !currentWasDirty;
+          contestantReconciliationSnapshot.current = currentWasDirty
+            ? ""
+            : JSON.stringify(reconciled);
           preserveDirtyOnSkippedSave.current = false;
           localDirty.current = currentWasDirty;
           dataRef.current = reconciled;
@@ -836,12 +850,18 @@ export function useArenaData() {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     if (skipNextSave.current) {
       skipNextSave.current = false;
+      const contestantSnapshot =
+        contestantReconciliationSnapshot.current;
+      const shouldSkip =
+        contestantSnapshot === "" ||
+        shouldSkipContestantReconciliationSave(data, contestantSnapshot);
+      contestantReconciliationSnapshot.current = "";
       if (preserveDirtyOnSkippedSave.current) {
         preserveDirtyOnSkippedSave.current = false;
-      } else {
+      } else if (shouldSkip) {
         localDirty.current = false;
       }
-      return;
+      if (shouldSkip) return;
     }
     if (!wixConnected) {
       if (status !== "error") setStatus("local");
