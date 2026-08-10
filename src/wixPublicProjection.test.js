@@ -1,5 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { publicRegisteredRiders } from "../wix/backend/public-prediction-projection.js";
+import {
+  assertSpectatorPredictionRunIsActive,
+  effectivePublicPredictionState,
+  publicPredictionRunProjection,
+  publicRegisteredRiders,
+} from "../wix/backend/public-prediction-projection.js";
+
+const predictionEvent = {
+  id: "event",
+  status: "Live",
+  activeRound: 1,
+  activeRunId: "run-1",
+};
+
+const predictionTeam = {
+  id: "run-1",
+  eventId: predictionEvent.id,
+  round: 1,
+  drawPosition: 2,
+  headerId: "header",
+  heelerId: "heeler",
+  status: "ready",
+};
+
+const predictionContestants = new Map([
+  ["header", { id: "header", name: "Header" }],
+  ["heeler", { id: "heeler", name: "Heeler" }],
+]);
 
 describe("Wix public registered rider projection", () => {
   it("matches role, eligibility, dedupe, sorting, and privacy rules", () => {
@@ -40,5 +67,127 @@ describe("Wix public registered rider projection", () => {
     });
     expect(JSON.stringify(projected)).not.toContain("private@example.com");
     expect(JSON.stringify(projected)).not.toContain("Profile Horse");
+  });
+});
+
+describe("Wix public prediction active run", () => {
+  it("requires an exact eligible active ID without changing eligible runs", () => {
+    const runs = [
+      predictionTeam,
+      { ...predictionTeam, id: "run-2", drawPosition: 1 },
+    ];
+
+    for (const activeRunId of [undefined, "", "stale-run"]) {
+      const event = { ...predictionEvent, activeRunId };
+      const state = effectivePublicPredictionState(event, runs);
+      const projection = publicPredictionRunProjection(
+        event,
+        runs,
+        predictionContestants,
+      );
+
+      expect(state.activeRun).toBeNull();
+      expect(state.runs.map(({ id }) => id)).toEqual(["run-2", "run-1"]);
+      expect(projection).not.toHaveProperty("activePredictionRunId");
+      expect(projection.predictionRuns.map(({ id }) => id)).toEqual([
+        "run-2",
+        "run-1",
+      ]);
+    }
+  });
+
+  it("rejects active IDs from another event or round", () => {
+    const wrongEvent = { ...predictionTeam, eventId: "other-event" };
+    const nextRound = { ...predictionTeam, round: 2 };
+
+    expect(
+      effectivePublicPredictionState(predictionEvent, [wrongEvent]).activeRun,
+    ).toBeNull();
+    expect(
+      effectivePublicPredictionState(predictionEvent, [nextRound]).activeRun,
+    ).toBeNull();
+    expect(
+      effectivePublicPredictionState(
+        { ...predictionEvent, activeRound: 2 },
+        [predictionTeam],
+      ).activeRun,
+    ).toBeNull();
+    expect(
+      effectivePublicPredictionState(
+        { ...predictionEvent, activeRound: 2 },
+        [predictionTeam, nextRound],
+      ).activeRun?.round,
+    ).toBe(2);
+  });
+
+  it("tracks exact active ID changes", () => {
+    const secondTeam = { ...predictionTeam, id: "run-2", drawPosition: 1 };
+
+    expect(
+      effectivePublicPredictionState(
+        predictionEvent,
+        [predictionTeam, secondTeam],
+      ).activeRun?.id,
+    ).toBe("run-1");
+    expect(
+      effectivePublicPredictionState(
+        { ...predictionEvent, activeRunId: "run-2" },
+        [predictionTeam, secondTeam],
+      ).activeRun?.id,
+    ).toBe("run-2");
+  });
+
+  it("rejects scratched, rolled, and non-ready active IDs", () => {
+    for (const ineligibleTeam of [
+      { ...predictionTeam, scratched: true },
+      { ...predictionTeam, rolled: true },
+      { ...predictionTeam, status: "completed" },
+    ]) {
+      expect(
+        effectivePublicPredictionState(
+          predictionEvent,
+          [ineligibleTeam],
+        ).activeRun,
+      ).toBeNull();
+    }
+  });
+
+  it("rejects submissions without the exact active run", () => {
+    const secondTeam = { ...predictionTeam, id: "run-2" };
+
+    for (const event of [
+      { ...predictionEvent, activeRunId: undefined },
+      { ...predictionEvent, activeRunId: "stale-run" },
+      { ...predictionEvent, activeRunId: secondTeam.id },
+    ]) {
+      expect(() =>
+        assertSpectatorPredictionRunIsActive(event, predictionTeam, [
+          predictionTeam,
+          secondTeam,
+        ]),
+      ).toThrow("That run is not active at the Run Desk.");
+    }
+  });
+
+  it("preserves availability and picks-open rejection order", () => {
+    const nonmatchingEvent = {
+      ...predictionEvent,
+      activeRunId: "other-run",
+    };
+
+    expect(() =>
+      assertSpectatorPredictionRunIsActive(
+        { ...nonmatchingEvent, status: "Upcoming" },
+        predictionTeam,
+        [predictionTeam],
+      ),
+    ).toThrow("That live run is not available.");
+    expect(() =>
+      assertSpectatorPredictionRunIsActive(
+        nonmatchingEvent,
+        { ...predictionTeam, status: "completed" },
+        [predictionTeam],
+      ),
+    ).toThrow("Predictions are closed for this run.");
   });
 });
