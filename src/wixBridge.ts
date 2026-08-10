@@ -21,6 +21,7 @@ type WixAction =
   | "load"
   | "save"
   | "saveContestant"
+  | "saveRegistration"
   | "setActiveRun"
   | "authenticateContestant"
   | "setContestantPin"
@@ -65,6 +66,14 @@ export interface WorkspaceSaveConfirmation {
 
 export interface ContestantSaveConfirmation {
   contestant: Contestant;
+  revision: number;
+  staffRevision: number;
+  onlineRevision: number;
+  loadedAt: string;
+}
+
+export interface RegistrationSaveConfirmation {
+  registration: EventRegistration;
   revision: number;
   staffRevision: number;
   onlineRevision: number;
@@ -280,6 +289,7 @@ export function sensitiveWixAction(action: WixAction) {
   return (
     action === "authenticateContestant" ||
     action === "saveContestant" ||
+    action === "saveRegistration" ||
     action === "setActiveRun" ||
     action === "setContestantPin" ||
     action === "loadSignupOptions" ||
@@ -444,6 +454,17 @@ export async function saveContestant(contestant: Contestant) {
   );
   if (!confirmation) {
     throw new Error("Wix did not confirm the contestant save.");
+  }
+  return confirmation;
+}
+
+export async function saveRegistration(registration: EventRegistration) {
+  const confirmation = await requestWix<RegistrationSaveConfirmation>(
+    "saveRegistration",
+    registration,
+  );
+  if (!confirmation) {
+    throw new Error("Wix did not confirm the registration save.");
   }
   return confirmation;
 }

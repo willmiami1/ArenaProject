@@ -8,15 +8,22 @@ import {
   resetInheritedPredictionCutoffs,
 } from "./competition";
 import { normalizeHorseNames } from "./contestantHorses";
-import type { ArenaData, ArenaMeet, Contestant } from "./types";
+import type {
+  ArenaData,
+  ArenaMeet,
+  Contestant,
+  EventRegistration,
+} from "./types";
 import {
   isWixEmbed,
   isWorkspaceSaveConfirmation,
   publishPublicSchedule,
   requestWixData,
   saveContestant,
+  saveRegistration,
   setActiveRun,
   type ContestantSaveConfirmation,
+  type RegistrationSaveConfirmation,
   type WorkspaceSaveConfirmation,
 } from "./wixBridge";
 import {
@@ -428,7 +435,56 @@ export function contestantSaveHasUnrelatedChanges(
   );
 }
 
-export function shouldSkipContestantReconciliationSave(
+export function reconcileRegistrationSaveConfirmation(
+  data: ArenaData,
+  confirmation: RegistrationSaveConfirmation,
+) {
+  const exists = data.registrations.some(
+    (registration) => registration.id === confirmation.registration.id,
+  );
+  return {
+    ...data,
+    revision: confirmation.revision,
+    staffRevision: confirmation.staffRevision,
+    onlineRevision: confirmation.onlineRevision,
+    loadedAt: confirmation.loadedAt,
+    registrations: exists
+      ? data.registrations.map((registration) =>
+          registration.id === confirmation.registration.id
+            ? confirmation.registration
+            : registration,
+        )
+      : [...data.registrations, confirmation.registration],
+  };
+}
+
+export function registrationSaveHasUnrelatedChanges(
+  current: ArenaData,
+  persisted: ArenaData,
+  registrationId: string,
+) {
+  const comparable = (data: ArenaData) => {
+    const {
+      revision: _revision,
+      staffRevision: _staffRevision,
+      onlineRevision: _onlineRevision,
+      loadedAt: _loadedAt,
+      ...content
+    } = data;
+    return {
+      ...content,
+      registrations: content.registrations.filter(
+        (registration) => registration.id !== registrationId,
+      ),
+    };
+  };
+  return (
+    JSON.stringify(comparable(current)) !==
+    JSON.stringify(comparable(persisted))
+  );
+}
+
+export function shouldSkipDirectMutationReconciliationSave(
   data: ArenaData,
   reconciliationSnapshot: string,
 ) {
@@ -445,13 +501,15 @@ export function useArenaData() {
   const [ready, setReady] = useState(false);
   const [wixConnected, setWixConnected] = useState(false);
   const skipNextSave = useRef(false);
-  const contestantReconciliationSnapshot = useRef("");
+  const directMutationReconciliationSnapshot = useRef("");
   const preserveDirtyOnSkippedSave = useRef(false);
   const localDirty = useRef(false);
   const saveInFlight = useRef(false);
   const activeRunSaveInFlight = useRef(false);
   const contestantSaveInFlight = useRef(false);
   const contestantSaveQueue = useRef<Promise<void>>(Promise.resolve());
+  const registrationSaveInFlight = useRef(false);
+  const registrationSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveIdleWaiters = useRef<Array<() => void>>([]);
   const conflictRetryCount = useRef(0);
   const automaticRetryCount = useRef(0);
@@ -470,7 +528,13 @@ export function useArenaData() {
     waiters.forEach((resolve) => resolve());
   };
   const retryWorkspaceSave = useCallback(() => {
-    if (!localDirty.current || saveInFlight.current || activeRunSaveInFlight.current) {
+    if (
+      !localDirty.current ||
+      saveInFlight.current ||
+      activeRunSaveInFlight.current ||
+      contestantSaveInFlight.current ||
+      registrationSaveInFlight.current
+    ) {
       return;
     }
     automaticRetryCount.current = 0;
@@ -489,6 +553,7 @@ export function useArenaData() {
       saveInFlight.current ||
       activeRunSaveInFlight.current ||
       contestantSaveInFlight.current ||
+      registrationSaveInFlight.current ||
       statusRef.current === "saving";
     if (writePending()) {
       throw new Error("Wait for the current workspace changes to finish saving before refreshing.");
@@ -534,7 +599,8 @@ export function useArenaData() {
     if (
       saveInFlight.current ||
       activeRunSaveInFlight.current ||
-      contestantSaveInFlight.current
+      contestantSaveInFlight.current ||
+      registrationSaveInFlight.current
     ) {
       throw new Error("Wait for the current workspace save to finish, then try again.");
     }
@@ -659,7 +725,11 @@ export function useArenaData() {
   const saveContestantImmediately = useCallback(
     (contestant: Contestant) => {
       const operation = contestantSaveQueue.current.then(async () => {
-        while (saveInFlight.current || activeRunSaveInFlight.current) {
+        while (
+          saveInFlight.current ||
+          activeRunSaveInFlight.current ||
+          registrationSaveInFlight.current
+        ) {
           await new Promise<void>((resolve) => {
             saveIdleWaiters.current.push(resolve);
           });
@@ -698,7 +768,7 @@ export function useArenaData() {
             confirmation,
           );
           skipNextSave.current = !currentWasDirty;
-          contestantReconciliationSnapshot.current = currentWasDirty
+          directMutationReconciliationSnapshot.current = currentWasDirty
             ? ""
             : JSON.stringify(reconciled);
           preserveDirtyOnSkippedSave.current = false;
@@ -722,6 +792,84 @@ export function useArenaData() {
         }
       });
       contestantSaveQueue.current = operation.then(
+        () => undefined,
+        () => undefined,
+      );
+      return operation;
+    },
+    [],
+  );
+
+  const saveRegistrationImmediately = useCallback(
+    (registration: EventRegistration) => {
+      const operation = registrationSaveQueue.current.then(async () => {
+        while (
+          saveInFlight.current ||
+          activeRunSaveInFlight.current ||
+          contestantSaveInFlight.current
+        ) {
+          await new Promise<void>((resolve) => {
+            saveIdleWaiters.current.push(resolve);
+          });
+        }
+        registrationSaveInFlight.current = true;
+        try {
+          window.clearTimeout(saveRetryTimer.current);
+          saveRetryTimer.current = 0;
+          if (
+            localDirty.current &&
+            !registrationSaveHasUnrelatedChanges(
+              dataRef.current,
+              persistedDataRef.current,
+              registration.id,
+            )
+          ) {
+            localDirty.current = false;
+            automaticRetryCount.current = 0;
+            conflictRetryCount.current = 0;
+            lastFailedSnapshot.current = "";
+          }
+          const confirmation = await saveRegistration(registration);
+          const currentWasDirty =
+            localDirty.current &&
+            registrationSaveHasUnrelatedChanges(
+              dataRef.current,
+              persistedDataRef.current,
+              confirmation.registration.id,
+            );
+          const reconciled = reconcileRegistrationSaveConfirmation(
+            dataRef.current,
+            confirmation,
+          );
+          persistedDataRef.current = reconcileRegistrationSaveConfirmation(
+            persistedDataRef.current,
+            confirmation,
+          );
+          skipNextSave.current = !currentWasDirty;
+          directMutationReconciliationSnapshot.current = currentWasDirty
+            ? ""
+            : JSON.stringify(reconciled);
+          preserveDirtyOnSkippedSave.current = false;
+          localDirty.current = currentWasDirty;
+          dataRef.current = reconciled;
+          setData(reconciled);
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(reconciled));
+          setLastSaveError("");
+          automaticRetryCount.current = 0;
+          conflictRetryCount.current = 0;
+          lastFailedSnapshot.current = "";
+          setStatus(currentWasDirty ? "saving" : "saved");
+          return confirmation.registration;
+        } finally {
+          registrationSaveInFlight.current = false;
+          releaseSaveIdleWaiters();
+          if (localDirty.current) {
+            setStatus("saving");
+            setData((current) => ({ ...current }));
+          }
+        }
+      });
+      registrationSaveQueue.current = operation.then(
         () => undefined,
         () => undefined,
       );
@@ -759,7 +907,11 @@ export function useArenaData() {
             if (!latestSelection.activeRunId) {
               throw new Error("Select a valid team for Roping Now.");
             }
-            while (saveInFlight.current || contestantSaveInFlight.current) {
+            while (
+              saveInFlight.current ||
+              contestantSaveInFlight.current ||
+              registrationSaveInFlight.current
+            ) {
               await new Promise<void>((resolve) => {
                 saveIdleWaiters.current.push(resolve);
               });
@@ -850,12 +1002,15 @@ export function useArenaData() {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     if (skipNextSave.current) {
       skipNextSave.current = false;
-      const contestantSnapshot =
-        contestantReconciliationSnapshot.current;
+      const directMutationSnapshot =
+        directMutationReconciliationSnapshot.current;
       const shouldSkip =
-        contestantSnapshot === "" ||
-        shouldSkipContestantReconciliationSave(data, contestantSnapshot);
-      contestantReconciliationSnapshot.current = "";
+        directMutationSnapshot === "" ||
+        shouldSkipDirectMutationReconciliationSave(
+          data,
+          directMutationSnapshot,
+        );
+      directMutationReconciliationSnapshot.current = "";
       if (preserveDirtyOnSkippedSave.current) {
         preserveDirtyOnSkippedSave.current = false;
       } else if (shouldSkip) {
@@ -884,7 +1039,8 @@ export function useArenaData() {
       if (
         saveInFlight.current ||
         activeRunSaveInFlight.current ||
-        contestantSaveInFlight.current
+        contestantSaveInFlight.current ||
+        registrationSaveInFlight.current
       ) {
         return;
       }
@@ -1029,6 +1185,7 @@ export function useArenaData() {
       saveInFlight.current ||
       activeRunSaveInFlight.current ||
       contestantSaveInFlight.current ||
+      registrationSaveInFlight.current ||
       statusRef.current === "saving";
 
     const refreshNewerWorkspace = async () => {
@@ -1119,6 +1276,7 @@ export function useArenaData() {
     refreshFromWix,
     saveImmediately,
     saveContestantImmediately,
+    saveRegistrationImmediately,
     saveActiveRunImmediately,
     lastSaveError,
     retryWorkspaceSave,

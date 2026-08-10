@@ -62,6 +62,10 @@ describe("trusted Wix relay origin", () => {
     it("requires the trusted Wix relay for direct contestant saves", () => {
       expect(sensitiveWixAction("saveContestant")).toBe(true);
     });
+
+    it("requires the trusted Wix relay for direct registration saves", () => {
+      expect(sensitiveWixAction("saveRegistration")).toBe(true);
+    });
   });
 
   describe("public event section links", () => {

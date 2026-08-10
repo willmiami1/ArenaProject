@@ -272,6 +272,7 @@ function StaffApp() {
     refreshFromWix,
     saveImmediately,
     saveContestantImmediately,
+    saveRegistrationImmediately,
     saveActiveRunImmediately,
     lastSaveError,
     retryWorkspaceSave,
@@ -812,12 +813,7 @@ function StaffApp() {
                   ),
                 }))
               }
-              onAddRegistration={(registration) =>
-                setData((current) => ({
-                  ...current,
-                  registrations: [...current.registrations, registration],
-                }))
-              }
+              onAddRegistration={saveRegistrationImmediately}
               onUpdateRegistration={(registration) =>
                 setData((current) => ({
                   ...current,
@@ -2758,7 +2754,7 @@ function Teams({
   onAdd: (team: Team) => void;
   onUpdateTeam: (team: Team) => void;
   onDeleteTeam: (teamId: string) => void;
-  onAddRegistration: (registration: EventRegistration) => void;
+  onAddRegistration: (registration: EventRegistration) => Promise<unknown>;
   onUpdateRegistration: (registration: EventRegistration) => void;
   onDeleteRegistration: (registrationId: string) => void;
   onCommitDraw: (eventId: string, teams: Team[]) => void;
@@ -2771,6 +2767,7 @@ function Teams({
   const [teamSearch, setTeamSearch] = useState("");
   const [draftDraw, setDraftDraw] = useState<Team[] | null>(null);
   const [draggedTeamId, setDraggedTeamId] = useState("");
+  const registrationSubmissionInFlight = useRef(false);
   const eventTeams = teams.filter((team) => team.eventId === event?.id).sort((a, b) => a.drawPosition - b.drawPosition);
   const eventRegistrations = registrations.filter(
     (entry) => entry.eventId === event?.id && !entry.sourceTeamId,
@@ -3000,7 +2997,8 @@ function Teams({
           event={event}
           contestants={contestants}
           registrations={eventRegistrations}
-          onSubmit={(registration) => {
+          onSubmit={async (registration) => {
+            if (registrationSubmissionInFlight.current) return;
             const contestant = rider(registration.contestantId);
             if (!contestantEligibleForRole(event, contestant, registration.role)) {
               setMessage(
@@ -3031,9 +3029,20 @@ function Teams({
               );
               return;
             }
-            onAddRegistration(registration);
-            setShowForm(false);
-            setMessage("");
+            try {
+              registrationSubmissionInFlight.current = true;
+              await onAddRegistration(registration);
+              setShowForm(false);
+              setMessage("");
+            } catch (error) {
+              setMessage(
+                error instanceof Error
+                  ? error.message
+                  : "The Draw registration could not be saved.",
+              );
+            } finally {
+              registrationSubmissionInFlight.current = false;
+            }
           }}
           onCancel={() => setShowForm(false)}
         />

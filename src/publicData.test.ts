@@ -32,10 +32,12 @@ import {
   normalizeData,
   contestantSaveHasUnrelatedChanges,
   reconcileContestantSaveConfirmation,
+  reconcileRegistrationSaveConfirmation,
   reconcileWorkspaceSaveConfirmation,
+  registrationSaveHasUnrelatedChanges,
   remoteWorkspaceIsNewer,
   staffWorkspaceIsNewer,
-  shouldSkipContestantReconciliationSave,
+  shouldSkipDirectMutationReconciliationSave,
   workspaceSaveNeedsFollowUp,
 } from "./useArenaData";
 import {
@@ -173,10 +175,10 @@ describe("workspace save queue", () => {
     const snapshot = JSON.stringify(reconciled);
 
     expect(
-      shouldSkipContestantReconciliationSave(reconciled, snapshot),
+      shouldSkipDirectMutationReconciliationSave(reconciled, snapshot),
     ).toBe(true);
     expect(
-      shouldSkipContestantReconciliationSave(
+      shouldSkipDirectMutationReconciliationSave(
         {
           ...reconciled,
           registrations: [
@@ -197,6 +199,51 @@ describe("workspace save queue", () => {
         snapshot,
       ),
     ).toBe(false);
+  });
+
+  it("reconciles a direct Draw registration and revision metadata only", () => {
+    const original = workspace();
+    const registration = {
+      id: "direct-entry",
+      eventId: original.events[0].id,
+      contestantId: original.contestants[0].id,
+      role: "Header" as const,
+      entries: 1,
+      checkedIn: false,
+      status: "entered" as const,
+      notes: "",
+      paid: true,
+    };
+    const reconciled = reconcileRegistrationSaveConfirmation(original, {
+      registration,
+      revision: 18,
+      staffRevision: 15,
+      onlineRevision: 3,
+      loadedAt: "2026-08-10T23:20:00.000Z",
+    });
+
+    expect(reconciled.registrations).toContainEqual(registration);
+    expect(reconciled).toMatchObject({
+      revision: 18,
+      staffRevision: 15,
+      onlineRevision: 3,
+      loadedAt: "2026-08-10T23:20:00.000Z",
+    });
+    expect(reconciled.contestants).toBe(original.contestants);
+    expect(
+      registrationSaveHasUnrelatedChanges(
+        reconciled,
+        original,
+        registration.id,
+      ),
+    ).toBe(false);
+    expect(
+      registrationSaveHasUnrelatedChanges(
+        { ...reconciled, activeEventId: "other-event" },
+        original,
+        registration.id,
+      ),
+    ).toBe(true);
   });
 
   it("keeps submitted content while applying a compact save confirmation", () => {
