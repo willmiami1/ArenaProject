@@ -46,11 +46,9 @@ export function predictionRunsForEvent(event: ArenaEvent, teams: Team[]) {
 }
 
 export function activePredictionRun(event: ArenaEvent, teams: Team[]) {
+  if (!event.activeRunId) return undefined;
   const eligible = predictionRunsForEvent(event, teams);
-  return (
-    eligible.find((team) => team.id === event.activeRunId) ??
-    eligible[0]
-  );
+  return eligible.find((team) => team.id === event.activeRunId);
 }
 
 export function predictionOutcome(team: Team): SpectatorChoice | null {

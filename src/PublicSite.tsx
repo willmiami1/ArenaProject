@@ -55,6 +55,11 @@ import {
   spectatorIdentityInput,
   spectatorIdentityLabel,
 } from "./spectatorIdentity";
+import {
+  effectiveActivePredictionRun,
+  PublicPollGuard,
+  submissionMatchesCurrentRun,
+} from "./publicSpectatorSync";
 import type { ContestantAccountRequest } from "./contestantAccount";
 import type { ArenaData } from "./types";
 import { isBrowserStoragePreview } from "./adminAccess";
@@ -315,9 +320,11 @@ function RopingCard({
 function SpectatorPage({
   competition,
   onLocalUpdate,
+  refreshWarning,
 }: {
   competition?: PublicCompetition;
   onLocalUpdate: (data: PublicArenaData) => void;
+  refreshWarning?: string;
 }) {
   const [name, setName] = useState(
     () =>
@@ -329,12 +336,7 @@ function SpectatorPage({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [roundAnnouncement, setRoundAnnouncement] = useState("");
-  const selectedRun =
-    competition?.predictionRuns.find(
-      (run) => run.id === competition.activePredictionRunId,
-    ) ??
-    competition?.predictionRuns.find((run) => run.open) ??
-    competition?.predictionRuns[0];
+  const selectedRun = effectiveActivePredictionRun(competition);
   const activeRound =
     selectedRun?.round ??
     Math.max(
@@ -352,27 +354,27 @@ function SpectatorPage({
       window.sessionStorage.removeItem("arena-spectator-name");
     }
   }, [name]);
+  const activeRunKey = `${competition?.id ?? ""}:${selectedRun?.id ?? ""}:${selectedRun?.round ?? ""}`;
   useEffect(() => {
-    if (!competition?.id || !activeRound) return;
-    const storageKey = `arena-spectator-round-${competition.id}`;
-    const previousRound = Number(window.sessionStorage.getItem(storageKey) || 0);
-    if (activeRound > previousRound) {
-      setChoice("cowboys");
-      setMessage("");
-      setRoundAnnouncement(
-        activeRound > 1 ? `A new round is starting — Round ${activeRound}` : "",
-      );
-    }
-    window.sessionStorage.setItem(storageKey, String(activeRound));
-  }, [activeRound, competition?.id]);
+    setChoice("cowboys");
+    setMessage("");
+    setRoundAnnouncement(
+      selectedRun && selectedRun.round > 1
+        ? `A new run is active — Round ${selectedRun.round}`
+        : "",
+    );
+  }, [activeRunKey, selectedRun?.round]);
+  const teamId = selectedRun?.id ?? "";
+  const currentRunIdRef = useRef(teamId);
+  currentRunIdRef.current = teamId;
   if (!competition || competition.status !== "Live") {
     return <NotFound />;
   }
-  const teamId = selectedRun?.id ?? "";
   const selectedRunOpen = Boolean(selectedRun?.open);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const submittedValue = ((event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value;
+    const submittedRunId = teamId;
     const submittedChoice: SpectatorChoice = submittedValue === "steer" ? "steer" : "cowboys";
     setChoice(submittedChoice);
     setBusy(true);
@@ -387,7 +389,16 @@ function SpectatorPage({
           choice: submittedChoice,
         });
         if (!result) throw new Error("Prediction could not be saved.");
-        onLocalUpdate(result.publicData);
+        const responseRunId = effectiveActivePredictionRun(
+          result.publicData.competitions.find((item) => item.id === competition.id),
+        )?.id;
+        if (
+          !submissionMatchesCurrentRun(
+            submittedRunId,
+            currentRunIdRef.current,
+            responseRunId,
+          )
+        ) return;
       } else {
         const saved = window.localStorage.getItem(localWorkspaceKey);
         const workspace = saved
@@ -420,6 +431,7 @@ function SpectatorPage({
           : `Pick saved for ${result.spectatorName}.`,
       );
     } catch (error) {
+      if (submittedRunId !== currentRunIdRef.current) return;
       setMessage(error instanceof Error ? error.message : "Prediction could not be saved.");
     } finally {
       setBusy(false);
@@ -433,6 +445,11 @@ function SpectatorPage({
         <h1>Pick the run.</h1>
         <p>Free spectator predictions for {competition.name}. One point is awarded when your Steer or Cowboys pick matches the official run result.</p>
       </div>
+      {refreshWarning && (
+        <p className="public-form-message" role="status">
+          {refreshWarning}
+        </p>
+      )}
       <div className="public-spectator-grid">
         <form onSubmit={submit}>
           {roundAnnouncement && (
@@ -1389,6 +1406,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
     isWixEmbed() ? null : loadLocalPublicData(),
   );
   const [error, setError] = useState("");
+  const [refreshWarning, setRefreshWarning] = useState("");
   const [requestedEventSection, setRequestedEventSection] = useState<string | null>(
     () => publicEventSectionTargetId(window.location.hash.slice(1).replace(/^events-/, "")),
   );
@@ -1408,28 +1426,34 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       };
     }
     let cancelled = false;
-    let refreshing = false;
+    const pollGuard = new PublicPollGuard();
     let hasUsableData = data !== null;
     const refresh = async () => {
-      if (refreshing) return;
-      refreshing = true;
+      const request = pollGuard.begin();
+      if (request === null) return;
       try {
         const result = await loadPublicArenaData();
-        if (!cancelled) {
+        if (!cancelled && pollGuard.complete(request)) {
           hasUsableData = true;
           setData(result);
           setError("");
+          setRefreshWarning("");
         }
       } catch (reason) {
-        if (!cancelled && !hasUsableData) {
-          setError(
+        const current = pollGuard.complete(request);
+        if (!cancelled && current) {
+          const message =
             reason instanceof Error
               ? reason.message
-              : "Events could not be loaded.",
-          );
+              : "Events could not be loaded.";
+          if (hasUsableData) {
+            setRefreshWarning(
+              `Live run refresh failed. Retrying automatically. ${message}`,
+            );
+          } else {
+            setError(message);
+          }
         }
-      } finally {
-        refreshing = false;
       }
     };
     const refreshWhenVisible = () => {
@@ -1442,6 +1466,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       route.kind === "spectator" ? window.setInterval(refresh, 1500) : undefined;
     return () => {
       cancelled = true;
+      pollGuard.cancel();
       if (interval !== undefined) window.clearInterval(interval);
       window.removeEventListener("focus", refreshWhenVisible);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
@@ -1488,7 +1513,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
           route.kind === "event" ? <EventPage meet={selected.meet} /> :
           route.kind === "competition" ? <CompetitionPage competition={selected.competition} meet={selected.meet} /> :
           route.kind === "signup" ? <SignupPage competition={selected.competition} /> :
-          route.kind === "spectator" ? <SpectatorPage competition={selected.competition} onLocalUpdate={setData} /> : null}
+          route.kind === "spectator" ? <SpectatorPage competition={selected.competition} onLocalUpdate={setData} refreshWarning={refreshWarning} /> : null}
       </main>
       <PublicFooter />
     </div>

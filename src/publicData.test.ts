@@ -1462,11 +1462,14 @@ describe("workspace compatibility", () => {
     const now = new Date("2026-08-04T18:00:00Z");
 
     it("accepts one free pick per display name before cutoff", () => {
-      const competition = event({ status: "Live" });
       const activeRun = run({
         status: "ready",
         rawTime: null,
         predictionClosesAt: "2026-08-04T18:05:00Z",
+      });
+      const competition = event({
+        status: "Live",
+        activeRunId: activeRun.id,
       });
       const data = workspace(competition, [activeRun]);
       const created = createSpectatorPrediction(
@@ -1532,11 +1535,14 @@ describe("workspace compatibility", () => {
     });
 
     it("keeps the current ready team open until staff closes picks", () => {
-      const competition = event({ status: "Live" });
       const currentRun = run({
         status: "ready",
         rawTime: null,
         predictionClosesAt: undefined,
+      });
+      const competition = event({
+        status: "Live",
+        activeRunId: currentRun.id,
       });
 
       expect(projectPublicArenaData(workspace(competition, [currentRun]), now)
@@ -1556,6 +1562,17 @@ describe("workspace compatibility", () => {
           now,
         ),
       ).not.toThrow();
+    });
+
+    it("does not project a ready team when Run Desk has no active team", () => {
+      const competition = event({ status: "Live", activeRunId: undefined });
+      const readyRun = run({ status: "ready", rawTime: null });
+
+      expect(projectPublicArenaData(workspace(competition, [readyRun]), now)
+        .competitions[0]).toMatchObject({
+          activePredictionRunId: undefined,
+          predictionRuns: [expect.objectContaining({ id: readyRun.id })],
+        });
     });
 
     it("removes rolled teams and rejects stale prediction requests", () => {
