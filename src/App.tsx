@@ -69,6 +69,10 @@ import {
   roundTimeSheetHtml,
 } from "./runDeskPrint";
 import {
+  normalizedRunDeskRound,
+  runDeskSelectionToPersist,
+} from "./runDeskActiveSelection";
+import {
   authenticateContestant,
   isWixEmbed,
   loadPublicArenaData,
@@ -3352,7 +3356,11 @@ function RunDesk({
   onSetPredictionCutoff: (teamId: string, predictionClosesAt?: string) => void;
 }) {
   const [selectedRound, setSelectedRound] = useState(
-    () => event?.activeRound ?? 1,
+    () =>
+      normalizedRunDeskRound(
+        event?.activeRound,
+        Math.max(event?.rounds ?? 1, 1),
+      ),
   );
   const [showRideInForm, setShowRideInForm] = useState(false);
   const [rideInMessage, setRideInMessage] = useState("");
@@ -3362,7 +3370,7 @@ function RunDesk({
   } | null>(null);
   const timeSheetFrame = useRef<HTMLIFrameElement>(null);
   const roundCount = Math.max(event?.rounds ?? 1, 1);
-  const activeRound = Math.min(selectedRound, roundCount);
+  const activeRound = normalizedRunDeskRound(selectedRound, roundCount);
   const allEventTeams = teams
     .filter(
       (team) =>
@@ -3390,10 +3398,7 @@ function RunDesk({
   const [penalties, setPenalties] = useState("0");
   const [notes, setNotes] = useState("");
   useEffect(() => {
-    const nextRound = Math.min(
-      Math.max(Number(event?.activeRound || 1), 1),
-      roundCount,
-    );
+    const nextRound = normalizedRunDeskRound(event?.activeRound, roundCount);
     setSelectedRound(nextRound);
     setSelectedId(event?.activeRunId ?? null);
     const nextRoundTeams = allEventTeams.filter(
@@ -3407,6 +3412,32 @@ function RunDesk({
     setPenalties(nextSelected?.penalties.toString() ?? "0");
     setNotes(nextSelected?.notes ?? "");
   }, [event?.activeRound, event?.activeRunId, event?.id, roundCount]);
+  const persistedRound = normalizedRunDeskRound(
+    event?.activeRound,
+    roundCount,
+  );
+  const persistedRoundTeams = allEventTeams.filter(
+    (team) => team.round === persistedRound,
+  );
+  const runDeskTeamState = persistedRoundTeams
+    .map((team) => `${team.id}:${team.status}:${team.rolled}`)
+    .join("|");
+  useEffect(() => {
+    if (!event) return;
+    const selection = runDeskSelectionToPersist(
+      event,
+      persistedRoundTeams,
+      persistedRound,
+    );
+    if (!selection) return;
+    onUpdateEvent({ ...event, ...selection });
+  }, [
+    event?.activeRound,
+    event?.activeRunId,
+    event?.id,
+    persistedRound,
+    runDeskTeamState,
+  ]);
   const selectActiveRun = (teamId: string | null, round = activeRound) => {
     setSelectedRound(round);
     setSelectedId(teamId);
