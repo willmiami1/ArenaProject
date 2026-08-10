@@ -365,6 +365,7 @@ export function workspaceSaveNeedsFollowUp(
 export function useArenaData() {
   const [data, setData] = useState<ArenaData>(loadLocalData);
   const [status, setStatus] = useState<PersistenceStatus>("loading");
+  const [lastSaveError, setLastSaveError] = useState("");
   const [ready, setReady] = useState(false);
   const [wixConnected, setWixConnected] = useState(false);
   const skipNextSave = useRef(false);
@@ -388,6 +389,17 @@ export function useArenaData() {
     const waiters = saveIdleWaiters.current.splice(0);
     waiters.forEach((resolve) => resolve());
   };
+  const retryWorkspaceSave = useCallback(() => {
+    if (!localDirty.current || saveInFlight.current || activeRunSaveInFlight.current) {
+      return;
+    }
+    automaticRetryCount.current = 0;
+    conflictRetryCount.current = 0;
+    lastFailedSnapshot.current = "";
+    setLastSaveError("");
+    setStatus("saving");
+    setData((current) => ({ ...current }));
+  }, []);
   const refreshFromWix = useCallback(async () => {
     if (!isWixEmbed()) {
       throw new Error("Open Arena Command from the published Wix site to refresh live data.");
@@ -429,7 +441,6 @@ export function useArenaData() {
     }
   }, []);
   const saveImmediately = useCallback(async (submitted: ArenaData) => {
-    const stateAtStart = dataRef.current;
     if (!isWixEmbed()) {
       const normalized = normalizeData(submitted);
       skipNextSave.current = true;
@@ -477,9 +488,13 @@ export function useArenaData() {
         setData(current);
       }
       setWixConnected(true);
+      setLastSaveError("");
       setStatus("saved");
       return normalized;
     } catch (error) {
+      setLastSaveError(
+        error instanceof Error ? error.message : String(error),
+      );
       try {
         const latest = await requestWixData("load");
         if (latest) {
@@ -524,12 +539,8 @@ export function useArenaData() {
         console.error("Could not rebase the immediate workspace save.", rebaseError);
       }
       if (dataRef.current === submitted) {
-        skipNextSave.current = true;
-        preserveDirtyOnSkippedSave.current = false;
-        localDirty.current = false;
-        dataRef.current = stateAtStart;
-        setData(stateAtStart);
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stateAtStart));
+        localDirty.current = true;
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(submitted));
       } else {
         localDirty.current = true;
         setData((current) => ({ ...current }));
@@ -707,6 +718,7 @@ export function useArenaData() {
           conflictRetryCount.current = 0;
           automaticRetryCount.current = 0;
           lastFailedSnapshot.current = "";
+          setLastSaveError("");
         }
         if (saved && saved.revision !== submitted.revision) {
           setData((current) => {
@@ -722,6 +734,8 @@ export function useArenaData() {
         if (dataRef.current === submitted) localDirty.current = false;
       } catch (error) {
         console.error("Could not save arena data to Wix.", error);
+        const saveError =
+          error instanceof Error ? error.message : String(error);
         let rebased = false;
         let conflictExhausted = false;
         try {
@@ -754,6 +768,15 @@ export function useArenaData() {
           }
         } catch (rebaseError) {
           console.error("Could not inspect the latest workspace after save failure.", rebaseError);
+        }
+        if (rebased) {
+          setLastSaveError("");
+        } else if (conflictExhausted) {
+          setLastSaveError(
+            `${saveError} Your local changes are still preserved and can be retried when the other save finishes.`,
+          );
+        } else {
+          setLastSaveError(saveError || "Wix persistence failed.");
         }
         setStatus(rebased ? "saving" : "error");
         if (!rebased && !conflictExhausted) {
@@ -880,5 +903,7 @@ export function useArenaData() {
     refreshFromWix,
     saveImmediately,
     saveActiveRunImmediately,
+    lastSaveError,
+    retryWorkspaceSave,
   ] as const;
 }

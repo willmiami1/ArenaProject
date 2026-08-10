@@ -363,6 +363,8 @@ function requestWixFromOrigin<T>(
       action === "promptRegistrationDeskLogin" ||
       action === "startPublicSignupPayment"
         ? 5 * 60 * 1000
+        : action === "save"
+          ? 30 * 1000
         : 8000;
     const timeout = window.setTimeout(() => {
       if (retry !== undefined) window.clearInterval(retry);

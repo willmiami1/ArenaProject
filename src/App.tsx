@@ -272,6 +272,8 @@ function StaffApp() {
     refreshFromWix,
     saveImmediately,
     saveActiveRunImmediately,
+    lastSaveError,
+    retryWorkspaceSave,
   ] = useArenaData();
   const [view, setView] = useState<View>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -615,6 +617,20 @@ function StaffApp() {
             <ChevronDown size={16} />
           </label>
         </header>
+
+        {persistenceStatus === "error" && lastSaveError && (
+          <div className="workspace-save-error" role="alert">
+            <div>
+              <strong>Wix save failed</strong>
+              <span>{lastSaveError}</span>
+              <small>Your unsaved workspace remains on this device.</small>
+            </div>
+            <button onClick={retryWorkspaceSave}>
+              <RefreshCw size={15} />
+              Retry save
+            </button>
+          </div>
+        )}
 
         <div className="content">
           {view === "overview" && (
