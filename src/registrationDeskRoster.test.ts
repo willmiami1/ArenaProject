@@ -90,6 +90,32 @@ describe("Registration Desk competition roster", () => {
     expect(roster[0]).not.toHaveProperty("email");
   });
 
+  it("separates event roles and includes dual-role contestants in both", () => {
+    const dualHeelerEntry = {
+      ...registration("dual-heeler", "dual"),
+      role: "Heeler" as const,
+    };
+    const roster = registrationDeskEventRoster(
+      data(
+        [contestant("dual", "Dual Rider"), contestant("heeler", "Heeler Only")],
+        [registration("dual-header", "dual"), dualHeelerEntry],
+        [team("heeler-team", "dual", "heeler")],
+      ),
+      "live-event",
+    );
+
+    expect(
+      roster.filter((entry) => entry.roles.includes("Header")).map((entry) => entry.id),
+    ).toEqual(["dual"]);
+    expect(
+      roster.filter((entry) => entry.roles.includes("Heeler")).map((entry) => entry.id),
+    ).toEqual(["dual", "heeler"]);
+    expect(roster.find((entry) => entry.id === "dual")?.roles).toEqual([
+      "Header",
+      "Heeler",
+    ]);
+  });
+
   it("excludes scratched registrations and teams", () => {
     const roster = registrationDeskEventRoster(
       data(

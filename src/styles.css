@@ -796,8 +796,13 @@ main { grid-column: 2; min-width: 0; }
 .registration-desk-roster-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 20px; border-bottom: 1px solid #3e2e23; }
 .registration-desk-roster-heading span { color: #b88458; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
 .registration-desk-roster-heading h2 { margin: 3px 0 0; font-family: "Manrope",sans-serif; font-size: 18px; }
-.registration-desk-roster-heading>strong { display: grid; width: 38px; height: 38px; place-items: center; color: #f1d4ac; background: #3b281b; border: 1px solid #68482e; border-radius: 50%; }
-.registration-desk-roster>p { margin: 0; padding: 20px; color: #9b8673; font-size: 11px; }
+.registration-desk-roster-empty { margin: 0; padding: 20px; color: #9b8673; font-size: 11px; }
+.registration-desk-roster-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #3e2e23; }
+.registration-desk-roster-group { min-width: 0; background: #17110d; }
+.registration-desk-roster-role-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 20px; background: #211810; border-bottom: 1px solid #3e2e23; }
+.registration-desk-roster-role-heading h3 { margin: 0; color: #e4c494; font-family: "Manrope",sans-serif; font-size: 13px; }
+.registration-desk-roster-role-heading strong { display: grid; width: 27px; height: 27px; place-items: center; color: #f1d4ac; background: #3b281b; border: 1px solid #68482e; border-radius: 50%; font-size: 10px; }
+.registration-desk-roster-group>p { margin: 0; padding: 18px 20px; color: #8e7b69; font-size: 10px; }
 .registration-desk-roster ul { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 1px; margin: 0; padding: 0; background: #3e2e23; list-style: none; }
 .registration-desk-roster li { min-width: 0; padding: 13px 20px; background: #17110d; }
 .registration-desk-roster li strong,.registration-desk-roster li span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -900,6 +905,7 @@ main { grid-column: 2; min-width: 0; }
 }
 
 @media (max-width: 760px) {
+  .registration-desk-roster-groups { grid-template-columns: 1fr; }
   .registration-desk-header { align-items: flex-start; flex-direction: column; }
   .registration-profile-form { grid-template-columns: 1fr 1fr; }
   .registration-pin-panel { grid-template-columns: 1fr; }

@@ -145,6 +145,13 @@ export function RegistrationDesk() {
     () => registrationDeskEventRoster(data, eventId),
     [data, eventId],
   );
+  const rosterSections = (["Header", "Heeler"] as const).map((rosterRole) => ({
+    role: rosterRole,
+    title: `${rosterRole}s`,
+    contestants: eventRoster.filter((rosterContestant) =>
+      rosterContestant.roles.includes(rosterRole),
+    ),
+  }));
   const entryUnavailableMessage = !event
     ? ""
     : !event.registrationOpen
@@ -503,29 +510,46 @@ export function RegistrationDesk() {
                   Competition roster
                 </h2>
               </div>
-              <strong>{eventRoster.length}</strong>
             </div>
             {!event ? (
-              <p>Choose a live competition to view its roster.</p>
-            ) : !eventRoster.length ? (
-              <p>No contestants are signed up for this competition.</p>
+              <p className="registration-desk-roster-empty">
+                Choose a live competition to view its roster.
+              </p>
             ) : (
-              <ul>
-                {eventRoster.map((rosterContestant) => (
-                  <li key={rosterContestant.id}>
-                    <strong>{rosterContestant.name}</strong>
-                    <span>
-                      {rosterContestant.roles
-                        .map((rosterRole) =>
-                          `${rosterRole} ${rosterRole === "Header"
-                            ? rosterContestant.headerHandicap
-                            : rosterContestant.heelerHandicap}`,
-                        )
-                        .join(" · ")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div className="registration-desk-roster-groups">
+                {rosterSections.map((section) => {
+                  const headingId = `registration-roster-${section.role.toLowerCase()}`;
+                  return (
+                    <section
+                      className="registration-desk-roster-group"
+                      aria-labelledby={headingId}
+                      key={section.role}
+                    >
+                      <div className="registration-desk-roster-role-heading">
+                        <h3 id={headingId}>{section.title}</h3>
+                        <strong>{section.contestants.length}</strong>
+                      </div>
+                      {!section.contestants.length ? (
+                        <p>No {section.title.toLowerCase()} are signed up.</p>
+                      ) : (
+                        <ul>
+                          {section.contestants.map((rosterContestant) => (
+                            <li key={rosterContestant.id}>
+                              <strong>{rosterContestant.name}</strong>
+                              <span>
+                                Handicap{" "}
+                                {section.role === "Header"
+                                  ? rosterContestant.headerHandicap
+                                  : rosterContestant.heelerHandicap}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
             )}
           </section>
         )}
