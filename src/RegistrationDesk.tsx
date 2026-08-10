@@ -28,6 +28,7 @@ import {
   type RegistrationDeskData,
 } from "./registrationDeskData";
 import type { ArenaData, Contestant } from "./types";
+import { roundRobinRoleCapacity } from "./roundRobinCapacity";
 import {
   isWixEmbed,
   loadRegistrationDeskData,
@@ -154,6 +155,12 @@ export function RegistrationDesk() {
   const drawRole = role;
   const workspace = data ? asWorkspace(data) : null;
   const workspaceEvent = workspace?.events.find((item) => item.id === eventId);
+  const roleCapacities = workspaceEvent
+    ? {
+        Header: roundRobinRoleCapacity(workspaceEvent, data?.registrations ?? [], "Header"),
+        Heeler: roundRobinRoleCapacity(workspaceEvent, data?.registrations ?? [], "Heeler"),
+      }
+    : null;
   const partners = useMemo(
     () =>
       workspace && workspaceEvent && contestant
@@ -188,7 +195,8 @@ export function RegistrationDesk() {
         );
   const eligibleRoles = workspaceEvent
     ? (["Header", "Heeler"] as const).filter((value) =>
-        contestantEligibleForRole(workspaceEvent, contestant, value),
+        contestantEligibleForRole(workspaceEvent, contestant, value) &&
+        !roleCapacities?.[value].full,
       )
     : [];
 
@@ -620,6 +628,14 @@ export function RegistrationDesk() {
                   }}>
                     {eligibleRoles.map((value) => <option key={value}>{value}</option>)}
                   </select></label>
+                  {workspaceEvent?.competitionType === "round-robin" && roleCapacities && (
+                    <p className="registration-entry-hint">
+                      {(["Header", "Heeler"] as const).map((value) => {
+                        const capacity = roleCapacities[value];
+                        return `${value}: ${capacity.registered}${capacity.maximum === null ? " registered" : ` of ${capacity.maximum}${capacity.full ? " - FULL" : ""}`}`;
+                      }).join(" · ")}
+                    </p>
+                  )}
                   {individual ? (
                     <label>Number of entries<input type="number" min={minimumDraws} max={event.entriesAllowed} value={entries} onChange={(change) => setEntries(Number(change.target.value))} /><small>Competition minimum: {minimumDraws}</small></label>
                   ) : pickAndDraw && pickStage === "draws" ? (

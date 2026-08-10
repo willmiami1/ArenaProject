@@ -36,6 +36,8 @@ export interface ArenaEvent {
   drawApproved?: boolean;
   resultsPublished: boolean;
   entriesAllowed: number;
+  maxHeaders?: number;
+  maxHeelers?: number;
   minDrawsAllowed: number;
   allowRepeatPartners: boolean;
   handicapTotal: number;

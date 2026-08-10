@@ -20,8 +20,10 @@ const data: ArenaData = {
       startTime: "18:00",
       location: "Arena",
       status: "Live",
-      competitionType: "draw-pot",
+      competitionType: "round-robin",
       entryFee: 50,
+      maxHeaders: 12,
+      maxHeelers: 10,
     },
     {
       ...defaultCompetitionSettings,
@@ -116,6 +118,10 @@ describe("registration desk boundary", () => {
     expect(projected.events[0]).not.toHaveProperty("drawHistory");
     expect(projected.events[0]).not.toHaveProperty("payoutPercentages");
     expect(projected.events[0]).not.toHaveProperty("producerFeePercent");
+    expect(projected.events[0]).toMatchObject({
+      maxHeaders: 12,
+      maxHeelers: 10,
+    });
     expect(projected.teams[0]).toMatchObject({
       rawTime: null,
       penalties: 0,

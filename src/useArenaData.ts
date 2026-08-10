@@ -70,6 +70,14 @@ export function normalizeData(parsed: ArenaData): ArenaData {
         ? 10
         : event.maxContestantHandicap ?? 10,
       minDrawsAllowed: event.minDrawsAllowed ?? 0,
+      maxHeaders:
+        Number.isInteger(event.maxHeaders) && Number(event.maxHeaders) > 0
+          ? Number(event.maxHeaders)
+          : undefined,
+      maxHeelers:
+        Number.isInteger(event.maxHeelers) && Number(event.maxHeelers) > 0
+          ? Number(event.maxHeelers)
+          : undefined,
       slideNumber: event.slideNumber ?? 10,
       shortGoTeams: event.shortGoTeams ?? 0,
       incentiveHandicapTotal: event.incentiveHandicapTotal ?? 7,

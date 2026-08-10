@@ -63,6 +63,12 @@ export interface PublicSignupCompetition {
   competitionType: "slide" | "round-robin" | "pick-and-draw";
   registrationClosesAt: string;
   roles: Array<"Header" | "Heeler">;
+  roleCapacities?: Array<{
+    role: "Header" | "Heeler";
+    registered: number;
+    maximum: number;
+    full: boolean;
+  }>;
   requiresPartner: boolean;
   partners: Array<
     Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap"> & {

@@ -105,6 +105,10 @@ import { spectatorLeaderboard } from "./spectatorPredictions";
 import { normalizeHorseNames } from "./contestantHorses";
 import { contestantRopingHistory } from "./contestantHistory";
 import { sortWorkspaceMeets } from "./workspaceEventOrder";
+import {
+  assertRoundRobinRoleCapacity,
+  roundRobinRoleCapacity,
+} from "./roundRobinCapacity";
 import type {
   ArenaData,
   ArenaEvent,
@@ -1859,6 +1863,8 @@ function EventForm({
     competitionType: initialCompetitionType,
     registrationOpen: event?.registrationOpen ?? true,
     entriesAllowed: (event?.entriesAllowed ?? 10).toString(),
+    maxHeaders: event?.maxHeaders?.toString() ?? "",
+    maxHeelers: event?.maxHeelers?.toString() ?? "",
     minDrawsAllowed: (event?.minDrawsAllowed ?? (isNewPickAndDraw ? 4 : 0)).toString(),
     allowRepeatPartners: event?.allowRepeatPartners ?? false,
     handicapTotal: (event?.handicapTotal ?? 20).toString(),
@@ -1891,6 +1897,14 @@ function EventForm({
       location: parent.location,
       entryFee: Number(form.entryFee) || 0,
       entriesAllowed: Number(form.entriesAllowed) || 1,
+      maxHeaders:
+        form.competitionType === "round-robin" && Number(form.maxHeaders) > 0
+          ? Math.floor(Number(form.maxHeaders))
+          : undefined,
+      maxHeelers:
+        form.competitionType === "round-robin" && Number(form.maxHeelers) > 0
+          ? Math.floor(Number(form.maxHeelers))
+          : undefined,
       minDrawsAllowed: Math.max(
         0,
         Math.min(
@@ -1941,6 +1955,12 @@ function EventForm({
         <Field label="Entry fee"><input required min="0" type="number" value={form.entryFee} onChange={(e) => setForm({ ...form, entryFee: e.target.value })} /></Field>
         <Field label="Competition type"><select value={form.competitionType} onChange={(e) => setForm({ ...form, competitionType: e.target.value as CompetitionType })}>{competitionTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}</select></Field>
         <Field label="Maximum runs allowed"><input required type="number" min="1" value={form.entriesAllowed} onChange={(e) => setForm({ ...form, entriesAllowed: e.target.value })} /><small>Total draw and picked runs allowed per contestant.</small></Field>
+        {form.competitionType === "round-robin" && (
+          <>
+            <Field label="Maximum registered Headers"><input type="number" min="1" step="1" value={form.maxHeaders} onChange={(e) => setForm({ ...form, maxHeaders: e.target.value })} placeholder="Unlimited" /><small>Leave blank for no Header capacity limit.</small></Field>
+            <Field label="Maximum registered Heelers"><input type="number" min="1" step="1" value={form.maxHeelers} onChange={(e) => setForm({ ...form, maxHeelers: e.target.value })} placeholder="Unlimited" /><small>Leave blank for no Heeler capacity limit.</small></Field>
+          </>
+        )}
         {form.competitionType === "pick-and-draw" && (
           <Field label="Minimum draws required"><input required type="number" min="0" max={form.entriesAllowed} value={form.minDrawsAllowed} onChange={(e) => setForm({ ...form, minDrawsAllowed: e.target.value })} /><small>Minimum draw entries required before picked teams may be added.</small></Field>
         )}
@@ -2965,6 +2985,19 @@ function Teams({
               setMessage("This contestant is already registered in that position.");
               return;
             }
+            try {
+              assertRoundRobinRoleCapacity(
+                event,
+                eventRegistrations,
+                registration.role,
+                registration.entries,
+              );
+            } catch (error) {
+              setMessage(
+                error instanceof Error ? error.message : "Registration is full.",
+              );
+              return;
+            }
             onAddRegistration(registration);
             setShowForm(false);
             setMessage("");
@@ -2993,7 +3026,17 @@ function Teams({
                 <span><strong>{Math.max(headerEntryCount, heelerEntryCount)}</strong> Round 1 draw teams</span>
               )}
               {event.competitionType === "round-robin" && (
-                <span><strong>{eventRegistrations.filter((entry) => entry.role === "Header" && entry.status === "entered" && entryClearedForDraw(entry)).length * eventRegistrations.filter((entry) => entry.role === "Heeler" && entry.status === "entered" && entryClearedForDraw(entry)).length}</strong> Round Robin teams</span>
+                <>
+                  {(["Header", "Heeler"] as const).map((role) => {
+                    const capacity = roundRobinRoleCapacity(event, eventRegistrations, role);
+                    return (
+                      <span className={capacity.full ? "free-total" : ""} key={role}>
+                        <strong>{capacity.registered}{capacity.maximum === null ? "" : ` / ${capacity.maximum}`}</strong> {role}{capacity.full ? " FULL" : ""}
+                      </span>
+                    );
+                  })}
+                  <span><strong>{eventRegistrations.filter((entry) => entry.role === "Header" && entry.status === "entered" && entryClearedForDraw(entry)).length * eventRegistrations.filter((entry) => entry.role === "Heeler" && entry.status === "entered" && entryClearedForDraw(entry)).length}</strong> Round Robin teams</span>
+                </>
               )}
               {event.competitionType === "draw-pot" && headerEntryCount !== heelerEntryCount && (
                 <span className="free-total"><strong>{Math.abs(headerEntryCount - heelerEntryCount)}</strong> Free {headerEntryCount > heelerEntryCount ? "heeler" : "header"} run{Math.abs(headerEntryCount - heelerEntryCount) === 1 ? "" : "s"}</span>
@@ -3007,7 +3050,27 @@ function Teams({
                 <span className={`tag ${registration.status === "entered" ? "complete" : registration.status === "waitlist" ? "amber" : "no-time"}`}>{registration.status}</span>
                 <button className={registration.paid === false ? "secondary small-action" : "selected-button small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, paid: registration.paid === false })}>{registration.paid === false ? (registration.paymentMethod === "tab" ? "Open tab · mark paid" : "Mark paid") : "Paid"}</button>
                 <button className={registration.checkedIn ? "selected-button small-action" : "secondary small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, checkedIn: !registration.checkedIn })}>{registration.checkedIn ? <><Check size={14} /> Checked in</> : "Check in"}</button>
-                <button className="secondary small-action" disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, status: registration.status === "scratched" ? "entered" : "scratched" })}>{registration.status === "scratched" ? "Restore" : "Scratch"}</button>
+                <button className="secondary small-action" disabled={event.drawLocked} onClick={() => {
+                  if (registration.status === "scratched") {
+                    try {
+                      assertRoundRobinRoleCapacity(
+                        event,
+                        eventRegistrations,
+                        registration.role,
+                        registration.entries,
+                      );
+                    } catch (error) {
+                      setMessage(
+                        error instanceof Error ? error.message : "Registration is full.",
+                      );
+                      return;
+                    }
+                  }
+                  onUpdateRegistration({
+                    ...registration,
+                    status: registration.status === "scratched" ? "entered" : "scratched",
+                  });
+                }}>{registration.status === "scratched" ? "Restore" : "Scratch"}</button>
                 <button className="icon-action delete-action small-icon" disabled={event.drawLocked} title="Delete registration" onClick={() => onDeleteRegistration(registration.id)}><Trash2 size={14} /></button>
               </div>
             ))}

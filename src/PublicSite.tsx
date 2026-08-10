@@ -1105,15 +1105,18 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       window.crypto.randomUUID?.() ??
       `${Date.now()}-${result.contestant.id}`;
     const initial = result.competitions.find((item) => item.id === competition.id);
+    const initialRole = initial?.roles.find(
+      (role) => !initial.roleCapacities?.find((capacity) => capacity.role === role)?.full,
+    );
     setOptions(result);
     setSubmissionId(nextSubmissionId);
     setPayment(active ?? null);
     setSelections(
-      !active && initial
+      !active && initial && initialRole
         ? {
             [initial.id]: {
               competitionId: initial.id,
-              role: initial.roles[0],
+              role: initialRole,
             },
           }
         : {},
@@ -1179,6 +1182,13 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   const toggleCompetition = (competitionId: string) => {
     const roping = options?.competitions.find((item) => item.id === competitionId);
     if (!roping) return;
+    const availableRole = roping.roles.find(
+      (role) => !roping.roleCapacities?.find((capacity) => capacity.role === role)?.full,
+    );
+    if (!availableRole) {
+      setMessage("This Round Robin is full.");
+      return;
+    }
     setSelections((current) => {
       if (current[competitionId]) {
         const next = { ...current };
@@ -1189,7 +1199,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
         ...current,
         [competitionId]: {
           competitionId,
-          role: roping.roles[0],
+          role: availableRole,
         },
       };
     });
@@ -1300,23 +1310,37 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
               <div className="public-roping-list">
                 {options.competitions.length ? options.competitions.map((roping) => {
                   const selection = selections[roping.id];
+                  const availableRoles = roping.roles.filter(
+                    (role) => !roping.roleCapacities?.find((capacity) => capacity.role === role)?.full,
+                  );
+                  const full = availableRoles.length === 0;
                   return (
-                    <article className={`public-roping-choice ${selection ? "selected" : ""}`} key={roping.id}>
+                    <article className={`public-roping-choice ${selection ? "selected" : ""}${full ? " full" : ""}`} key={roping.id}>
                       <label className="public-roping-toggle">
-                        <input type="checkbox" checked={Boolean(selection)} onChange={() => toggleCompetition(roping.id)} />
-                        <span><strong>{formatSignupRopingLabel(roping.name, roping.date, roping.startTime)}</strong></span>
+                        <input type="checkbox" checked={Boolean(selection)} disabled={full} onChange={() => toggleCompetition(roping.id)} />
+                        <span><strong>{formatSignupRopingLabel(roping.name, roping.date, roping.startTime)}</strong>{full && <small>Registration full</small>}</span>
                         <b>{formatMoney(options.price.amount)}</b>
                       </label>
+                      {roping.roleCapacities?.length ? (
+                        <p className="public-payment-note">
+                          {roping.roleCapacities.map((capacity) =>
+                            `${capacity.role}: ${capacity.registered} of ${capacity.maximum}${capacity.full ? " - FULL" : ""}`,
+                          ).join(" · ")}
+                        </p>
+                      ) : null}
                       {selection && (
                         <div className="public-roping-options">
                           <fieldset>
                             <legend>Your position</legend>
-                            {roping.roles.map((role) => (
+                            {roping.roles.map((role) => {
+                              const roleFull = roping.roleCapacities?.find((capacity) => capacity.role === role)?.full;
+                              return (
                               <label className="public-radio" key={role}>
-                                <input type="radio" name={`role-${roping.id}`} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role, partnerId: undefined })} />
-                                {role}
+                                <input type="radio" name={`role-${roping.id}`} disabled={roleFull} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role, partnerId: undefined })} />
+                                {role}{roleFull ? " - FULL" : ""}
                               </label>
-                            ))}
+                              );
+                            })}
                           </fieldset>
                           {roping.requiresPartner && (
                             <label>Picked partner<select required value={selection.partnerId ?? ""} onChange={(event) => updateSelection(roping.id, { partnerId: event.target.value || undefined })}><option value="">Choose an eligible partner</option>{roping.partners.filter((partner) => partner.eligibleRoles.includes(selection.role)).map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select></label>

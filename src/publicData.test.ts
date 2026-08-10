@@ -812,9 +812,52 @@ describe("online signup", () => {
           entries: 1,
         },
       );
+
       expect(created.registrations).toHaveLength(1);
     },
   );
+
+  it("enforces separate Round Robin Header and Heeler capacities", () => {
+    const roundRobin = workspace(
+      event({
+        competitionType: "round-robin",
+        entriesAllowed: 5,
+        maxHeaders: 2,
+        maxHeelers: 1,
+      }),
+    );
+    roundRobin.registrations = [
+      {
+        id: "existing-header",
+        eventId: "competition-1",
+        contestantId: "partner",
+        role: "Header",
+        entries: 2,
+        checkedIn: false,
+        status: "entered",
+        notes: "",
+      },
+    ];
+
+    expect(() =>
+      createOnlineSignup(roundRobin, {
+        submissionId: "full-header-entry",
+        contestantId: "header",
+        eventId: "competition-1",
+        role: "Header",
+        entries: 1,
+      }, beforeCutoff),
+    ).toThrow("Header registration is full");
+    expect(
+      createOnlineSignup(roundRobin, {
+        submissionId: "available-heeler-entry",
+        contestantId: "heeler",
+        eventId: "competition-1",
+        role: "Heeler",
+        entries: 1,
+      }, beforeCutoff).registrations,
+    ).toHaveLength(1);
+  });
 
   it("enforces the configured minimum draw entries", () => {
     expect(() =>
@@ -1398,12 +1441,16 @@ describe("workspace compatibility", () => {
     const legacy = workspace();
     delete (legacy.events[0] as Partial<ArenaEvent>).maxContestantHandicap;
     delete (legacy.events[0] as Partial<ArenaEvent>).minDrawsAllowed;
+    delete (legacy.events[0] as Partial<ArenaEvent>).maxHeaders;
+    delete (legacy.events[0] as Partial<ArenaEvent>).maxHeelers;
     delete (legacy.contestants[0] as Partial<Contestant>).headerHandicap;
     legacy.contestants[0].heelerHandicap = 0;
 
     expect(normalizeData(legacy).events[0].handicapTotal).toBe(20);
     expect(normalizeData(legacy).events[0].maxContestantHandicap).toBe(10);
     expect(normalizeData(legacy).events[0].minDrawsAllowed).toBe(0);
+    expect(normalizeData(legacy).events[0].maxHeaders).toBeUndefined();
+    expect(normalizeData(legacy).events[0].maxHeelers).toBeUndefined();
     expect(normalizeData(legacy).events[0].pickDrawRole).toBe("both");
     expect(normalizeData(legacy).contestants[0]).toMatchObject({
       headerHandicap: 3,

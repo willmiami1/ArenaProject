@@ -15,6 +15,7 @@ import {
   assertRegistrationDeskOpen,
 } from "./registrationWindow";
 import { normalizeHorseNames } from "./contestantHorses";
+import { assertRoundRobinRoleCapacity } from "./roundRobinCapacity";
 
 export interface SignupRequest {
   submissionId: string;
@@ -123,6 +124,12 @@ export function createOnlineSignup(
     if (currentEntries + entries > event.entriesAllowed) {
       throw new Error("Entry limit exceeded.");
     }
+    assertRoundRobinRoleCapacity(
+      event,
+      data.registrations,
+      request.role,
+      entries,
+    );
     return {
       teams: [],
       registrations: [{
