@@ -104,6 +104,7 @@ import {
 import { spectatorLeaderboard } from "./spectatorPredictions";
 import { normalizeHorseNames } from "./contestantHorses";
 import { contestantRopingHistory } from "./contestantHistory";
+import { sortWorkspaceMeets } from "./workspaceEventOrder";
 import type {
   ArenaData,
   ArenaEvent,
@@ -1646,7 +1647,7 @@ function Events({
         />
       )}
       <div className="meet-list">
-        {meets.map((meet) => {
+        {sortWorkspaceMeets(meets).map((meet) => {
           const competitions = events.filter((event) => event.parentEventId === meet.id);
           return (
             <section className="meet-card" key={meet.id}>
