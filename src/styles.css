@@ -803,11 +803,24 @@ main { grid-column: 2; min-width: 0; }
 .registration-desk-roster-role-heading h3 { margin: 0; color: #e4c494; font-family: "Manrope",sans-serif; font-size: 13px; }
 .registration-desk-roster-role-heading strong { display: grid; width: 27px; height: 27px; place-items: center; color: #f1d4ac; background: #3b281b; border: 1px solid #68482e; border-radius: 50%; font-size: 10px; }
 .registration-desk-roster-group>p { margin: 0; padding: 18px 20px; color: #8e7b69; font-size: 10px; }
-.registration-desk-roster ul { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 1px; margin: 0; padding: 0; background: #3e2e23; list-style: none; }
+.registration-desk-roster ul { display: grid; gap: 1px; margin: 0; padding: 0; background: #3e2e23; list-style: none; }
 .registration-desk-roster li { min-width: 0; padding: 13px 20px; background: #17110d; }
 .registration-desk-roster li strong,.registration-desk-roster li span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .registration-desk-roster li strong { color: #eadcc6; font-size: 12px; }
 .registration-desk-roster li span { margin-top: 4px; color: #a9937d; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.registration-roster-entry-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.registration-roster-entry-summary>div:first-child { min-width: 0; }
+.registration-roster-entry-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.registration-roster-entry-actions button,.registration-roster-editor-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 7px 9px; color: #d7c0a7; background: #211810; border: 1px solid #543d2c; border-radius: 5px; font-size: 9px; font-weight: 800; }
+.registration-roster-entry-actions button.danger { color: #efb0a8; border-color: #77463f; }
+.registration-roster-entry-actions button:disabled { opacity: .45; }
+.registration-roster-entry-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-top: 13px; padding-top: 13px; border-top: 1px solid #49372b; }
+.registration-roster-entry-editor label { display: grid; gap: 6px; color: #cdb9a3; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.registration-roster-entry-editor :is(input,select) { min-height: 40px; }
+.registration-roster-paid { grid-template-columns: auto 1fr !important; align-items: center; }
+.registration-roster-paid input { width: 18px; min-height: 18px; }
+.registration-roster-editor-actions { display: flex; align-items: end; justify-content: flex-end; gap: 7px; }
+.registration-roster-editor-actions .primary { background: #875538; border-color: #a46b47; }
 .registration-desk-columns { display: grid; grid-template-columns: minmax(0,1fr) minmax(340px,.8fr); gap: 22px; align-items: start; }
 .registration-desk-panel { overflow: hidden; background: #17110d; border: 1px solid #3e2e23; border-radius: 10px; box-shadow: 0 14px 32px rgba(0,0,0,.2); }
 .registration-desk-panel-heading { min-height: 75px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px 20px; border-bottom: 1px solid #3e2e23; }
@@ -973,6 +986,8 @@ main { grid-column: 2; min-width: 0; }
 
 @media (max-width: 520px) {
   .registration-add-profile .registration-profile-form { grid-template-columns: 1fr; }
+  .registration-roster-entry-summary { align-items: flex-start; flex-direction: column; }
+  .registration-roster-entry-editor { grid-template-columns: 1fr; }
   .registration-desk-shortcut span { display: none; }
   .stat-grid { grid-template-columns: 1fr; }
   .two-column { grid-template-columns: minmax(0, 1fr); }

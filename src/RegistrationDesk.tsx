@@ -30,14 +30,25 @@ import {
 import type { ArenaData, Contestant } from "./types";
 import { roundRobinRoleCapacity } from "./roundRobinCapacity";
 import { registrationDeskWorkspaceHref } from "./registrationDeskNavigation";
+import {
+  registrationDeskEntryPatch,
+  registrationDeskEntryPermissions,
+  registrationDeskScratchRequest,
+  type RegistrationDeskEntryDraft,
+} from "./registrationDeskEntryActions";
 import { showStandaloneRegistrationProfile } from "./registrationDeskProfile";
-import { registrationDeskEventRoster } from "./registrationDeskRoster";
+import {
+  registrationDeskEventRoster,
+  type RegistrationDeskRosterEntry,
+} from "./registrationDeskRoster";
 import {
   isWixEmbed,
   loadRegistrationDeskData,
   saveRegistrationDeskContestant,
+  scratchRegistrationDeskEntry,
   setRegistrationDeskContestantPin,
   submitRegistrationDeskSignup,
+  updateRegistrationDeskEntry,
 } from "./wixBridge";
 
 const emptyContestant = (): RegistrationDeskContestantInput => ({
@@ -119,6 +130,8 @@ export function RegistrationDesk() {
   const [horseName, setHorseName] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [rosterEntryEdit, setRosterEntryEdit] =
+    useState<RegistrationDeskEntryDraft | null>(null);
 
   useEffect(() => {
     if (!embedded) return;
@@ -148,8 +161,8 @@ export function RegistrationDesk() {
   const rosterSections = (["Header", "Heeler"] as const).map((rosterRole) => ({
     role: rosterRole,
     title: `${rosterRole}s`,
-    contestants: eventRoster.filter((rosterContestant) =>
-      rosterContestant.roles.includes(rosterRole),
+    entries: eventRoster.filter((rosterEntry) =>
+      rosterEntry.role === rosterRole,
     ),
   }));
   const entryUnavailableMessage = !event
@@ -457,6 +470,97 @@ export function RegistrationDesk() {
     );
   };
 
+  const beginRosterEntryEdit = (entry: RegistrationDeskRosterEntry) => {
+    setRosterEntryEdit({
+      key: entry.key,
+      eventId: entry.eventId,
+      recordType: entry.recordType,
+      recordId: entry.recordId,
+      role: entry.role,
+      entries: entry.entries ?? 1,
+      horseName: entry.horseName ?? "",
+      paid: entry.paid === true,
+      paymentMethod: entry.paymentMethod ?? "",
+    });
+    setMessage("");
+  };
+
+  const saveRosterEntry = async (formEvent: FormEvent) => {
+    formEvent.preventDefault();
+    if (!rosterEntryEdit || !event || rosterEntryEdit.eventId !== event.id) {
+      setMessage("Choose the competition that owns this entry before editing it.");
+      return;
+    }
+    if (!embedded) {
+      setMessage("Entry editing requires the secured Wix Registration Desk.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await updateRegistrationDeskEntry({
+        eventId: event.id,
+        recordType: rosterEntryEdit.recordType,
+        recordId: rosterEntryEdit.recordId,
+        patch: registrationDeskEntryPatch(rosterEntryEdit),
+      });
+      if (!result) throw new Error("The competition entry was not updated.");
+      setData(result.data);
+      setRosterEntryEdit(null);
+      setMessage(result.summary);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "The entry could not be updated.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const scratchRosterEntry = async (entry: RegistrationDeskRosterEntry) => {
+    if (!event || entry.eventId !== event.id) {
+      setMessage("Choose the competition that owns this entry before deleting it.");
+      return;
+    }
+    const target =
+      entry.recordType === "team"
+        ? `${entry.name}'s whole team entry`
+        : `${entry.name}'s ${entry.role.toLowerCase()} registration`;
+    if (
+      !window.confirm(
+        `Delete ${target} from this competition? It will be scratched and retained in the audit history.`,
+      )
+    ) {
+      return;
+    }
+    if (!embedded) {
+      setMessage("Entry deletion requires the secured Wix Registration Desk.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await scratchRegistrationDeskEntry({
+        ...registrationDeskScratchRequest(entry, event.id),
+      });
+      if (!result) throw new Error("The competition entry was not scratched.");
+      setData(result.data);
+      setRosterEntryEdit((current) =>
+        current?.recordId === entry.recordId &&
+        current.recordType === entry.recordType
+          ? null
+          : current,
+      );
+      setMessage(result.summary);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "The entry could not be deleted.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="registration-desk">
       <header className="registration-desk-header">
@@ -482,6 +586,7 @@ export function RegistrationDesk() {
               setPinOpen(false);
               setPin("");
               setPinConfirmation("");
+              setRosterEntryEdit(null);
               setMessage("");
             }}>
               {(data?.events ?? []).map((item) => (
@@ -527,23 +632,183 @@ export function RegistrationDesk() {
                     >
                       <div className="registration-desk-roster-role-heading">
                         <h3 id={headingId}>{section.title}</h3>
-                        <strong>{section.contestants.length}</strong>
+                        <strong>{section.entries.length}</strong>
                       </div>
-                      {!section.contestants.length ? (
+                      {!section.entries.length ? (
                         <p>No {section.title.toLowerCase()} are signed up.</p>
                       ) : (
                         <ul>
-                          {section.contestants.map((rosterContestant) => (
-                            <li key={rosterContestant.id}>
-                              <strong>{rosterContestant.name}</strong>
-                              <span>
-                                Handicap{" "}
-                                {section.role === "Header"
-                                  ? rosterContestant.headerHandicap
-                                  : rosterContestant.heelerHandicap}
-                              </span>
-                            </li>
-                          ))}
+                          {section.entries.map((rosterEntry) => {
+                            const editing = rosterEntryEdit?.key === rosterEntry.key;
+                            const permissions = registrationDeskEntryPermissions(
+                              event,
+                              embedded,
+                              rosterEntry.generated,
+                            );
+                            const editDisabled = busy || !permissions.canEdit;
+                            const scratchDisabled = busy || !permissions.canScratch;
+                            return (
+                              <li key={rosterEntry.key}>
+                                <div className="registration-roster-entry-summary">
+                                  <div>
+                                    <strong>{rosterEntry.name}</strong>
+                                    <span>
+                                      {rosterEntry.recordType === "registration"
+                                        ? `${rosterEntry.entries ?? 1} ${
+                                            (rosterEntry.entries ?? 1) === 1
+                                              ? "entry"
+                                              : "entries"
+                                          }`
+                                        : `Team${
+                                            rosterEntry.partnerName
+                                              ? ` with ${rosterEntry.partnerName}`
+                                              : ""
+                                          }`}
+                                      {" · "}Handicap {rosterEntry.handicap}
+                                      {rosterEntry.horseName
+                                        ? ` · ${rosterEntry.horseName}`
+                                        : ""}
+                                    </span>
+                                  </div>
+                                  <div className="registration-roster-entry-actions">
+                                    <button
+                                      type="button"
+                                      disabled={editDisabled}
+                                      title={
+                                        rosterEntry.generated
+                                          ? "Generated draw teams must be scratched as a whole team."
+                                          : editDisabled
+                                            ? "Editing requires an open, unlocked live competition in Wix."
+                                            : `Edit ${rosterEntry.name}'s ${rosterEntry.role.toLowerCase()} entry`
+                                      }
+                                      onClick={() => beginRosterEntryEdit(rosterEntry)}
+                                    >
+                                      <Pencil size={13} /> Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="danger"
+                                      disabled={scratchDisabled}
+                                      title={
+                                        scratchDisabled
+                                          ? "Deleting requires a live competition in Wix."
+                                          : `Scratch ${rosterEntry.name}'s ${
+                                              rosterEntry.recordType === "team"
+                                                ? "whole team"
+                                                : rosterEntry.role.toLowerCase()
+                                            } entry`
+                                      }
+                                      onClick={() => void scratchRosterEntry(rosterEntry)}
+                                    >
+                                      <Trash2 size={13} /> Delete
+                                    </button>
+                                  </div>
+                                </div>
+                                {editing && rosterEntryEdit && (
+                                  <form
+                                    className="registration-roster-entry-editor"
+                                    onSubmit={saveRosterEntry}
+                                  >
+                                    {rosterEntry.recordType === "registration" && (
+                                      <>
+                                        <label>
+                                          Position
+                                          <select
+                                            value={rosterEntryEdit.role}
+                                            onChange={(change) =>
+                                              setRosterEntryEdit({
+                                                ...rosterEntryEdit,
+                                                role: change.target.value as
+                                                  | "Header"
+                                                  | "Heeler",
+                                              })
+                                            }
+                                          >
+                                            <option>Header</option>
+                                            <option>Heeler</option>
+                                          </select>
+                                        </label>
+                                        <label>
+                                          Entries
+                                          <input
+                                            required
+                                            type="number"
+                                            min={1}
+                                            max={event.entriesAllowed}
+                                            value={rosterEntryEdit.entries}
+                                            onChange={(change) =>
+                                              setRosterEntryEdit({
+                                                ...rosterEntryEdit,
+                                                entries: Number(change.target.value),
+                                              })
+                                            }
+                                          />
+                                        </label>
+                                      </>
+                                    )}
+                                    <label>
+                                      Horse
+                                      <input
+                                        maxLength={100}
+                                        value={rosterEntryEdit.horseName}
+                                        onChange={(change) =>
+                                          setRosterEntryEdit({
+                                            ...rosterEntryEdit,
+                                            horseName: change.target.value.toUpperCase(),
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Payment method
+                                      <select
+                                        value={rosterEntryEdit.paymentMethod}
+                                        onChange={(change) =>
+                                          setRosterEntryEdit({
+                                            ...rosterEntryEdit,
+                                            paymentMethod: change.target.value as
+                                              | ""
+                                              | "cash"
+                                              | "card"
+                                              | "tab",
+                                          })
+                                        }
+                                      >
+                                        <option value="">Not recorded</option>
+                                        <option value="cash">Cash</option>
+                                        <option value="card">Credit card</option>
+                                        <option value="tab">Open tab</option>
+                                      </select>
+                                    </label>
+                                    <label className="registration-roster-paid">
+                                      <input
+                                        type="checkbox"
+                                        checked={rosterEntryEdit.paid}
+                                        onChange={(change) =>
+                                          setRosterEntryEdit({
+                                            ...rosterEntryEdit,
+                                            paid: change.target.checked,
+                                          })
+                                        }
+                                      />
+                                      Payment received
+                                    </label>
+                                    <div className="registration-roster-editor-actions">
+                                      <button
+                                        type="button"
+                                        onClick={() => setRosterEntryEdit(null)}
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button className="primary" disabled={busy}>
+                                        {busy ? "Saving…" : "Save entry"}
+                                      </button>
+                                    </div>
+                                  </form>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                     </section>

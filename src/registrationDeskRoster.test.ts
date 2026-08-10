@@ -18,13 +18,14 @@ const contestant = (id: string, name: string): Contestant => ({
 const registration = (
   id: string,
   contestantId: string,
+  role: EventRegistration["role"] = "Header",
   status: EventRegistration["status"] = "entered",
 ): EventRegistration => ({
   id,
   eventId: "live-event",
   contestantId,
-  role: "Header",
-  entries: 1,
+  role,
+  entries: 2,
   checkedIn: false,
   status,
   notes: "",
@@ -40,6 +41,8 @@ const team = (
   eventId: "live-event",
   headerId,
   heelerId,
+  headerHorseName: "HEADER HORSE",
+  heelerHorseName: "HEELER HORSE",
   drawPosition: 1,
   status: "ready",
   rawTime: null,
@@ -63,91 +66,72 @@ const data = (
   teams,
 });
 
-describe("Registration Desk competition roster", () => {
-  it("combines registrations and teams without duplicating contestants", () => {
+describe("Registration Desk competition roster entries", () => {
+  it("keeps each underlying registration and team role independently actionable", () => {
     const roster = registrationDeskEventRoster(
       data(
-        [contestant("rider-a", "Zed Rider"), contestant("rider-b", "Amy Rider")],
-        [registration("entry-a", "rider-a")],
-        [team("team-a", "rider-a", "rider-b")],
+        [contestant("header", "Header"), contestant("heeler", "Heeler")],
+        [
+          registration("entry-one", "header"),
+          registration("entry-two", "header"),
+        ],
+        [team("team-one", "header", "heeler")],
       ),
       "live-event",
     );
 
-    expect(roster).toEqual([
-      expect.objectContaining({
-        id: "rider-b",
-        name: "Amy Rider",
-        roles: ["Heeler"],
-      }),
-      expect.objectContaining({
-        id: "rider-a",
-        name: "Zed Rider",
-        roles: ["Header"],
-      }),
+    expect(roster.map((entry) => entry.key)).toEqual([
+      "registration:entry-one:Header",
+      "registration:entry-two:Header",
+      "team:team-one:Header",
+      "team:team-one:Heeler",
     ]);
+    expect(roster.find((entry) => entry.key === "team:team-one:Header")).toMatchObject({
+      partnerName: "Heeler",
+      horseName: "HEADER HORSE",
+    });
     expect(roster[0]).not.toHaveProperty("phone");
     expect(roster[0]).not.toHaveProperty("email");
   });
 
-  it("separates event roles and includes dual-role contestants in both", () => {
-    const dualHeelerEntry = {
-      ...registration("dual-heeler", "dual"),
-      role: "Heeler" as const,
-    };
+  it("classifies dual-role registrations into their exact event roles", () => {
     const roster = registrationDeskEventRoster(
       data(
-        [contestant("dual", "Dual Rider"), contestant("heeler", "Heeler Only")],
-        [registration("dual-header", "dual"), dualHeelerEntry],
-        [team("heeler-team", "dual", "heeler")],
-      ),
-      "live-event",
-    );
-
-    expect(
-      roster.filter((entry) => entry.roles.includes("Header")).map((entry) => entry.id),
-    ).toEqual(["dual"]);
-    expect(
-      roster.filter((entry) => entry.roles.includes("Heeler")).map((entry) => entry.id),
-    ).toEqual(["dual", "heeler"]);
-    expect(roster.find((entry) => entry.id === "dual")?.roles).toEqual([
-      "Header",
-      "Heeler",
-    ]);
-  });
-
-  it("excludes scratched registrations and teams", () => {
-    const roster = registrationDeskEventRoster(
-      data(
-        [contestant("registered", "Registered"), contestant("scratched", "Scratched")],
+        [contestant("dual", "Dual Rider")],
         [
-          registration("active", "registered"),
-          registration("scratched-entry", "scratched", "scratched"),
+          registration("header-entry", "dual", "Header"),
+          registration("heeler-entry", "dual", "Heeler"),
         ],
-        [team("scratched-team", "scratched", "registered", true)],
-      ),
-      "live-event",
-    );
-
-    expect(roster.map((entry) => entry.id)).toEqual(["registered"]);
-  });
-
-  it("includes active waitlisted signups and ignores other events", () => {
-    const waitlist = registration("waitlist", "waiting", "waitlist");
-    const otherEvent = {
-      ...registration("other", "other"),
-      eventId: "other-event",
-    };
-    const roster = registrationDeskEventRoster(
-      data(
-        [contestant("waiting", "Waiting"), contestant("other", "Other")],
-        [waitlist, otherEvent],
         [],
       ),
       "live-event",
     );
 
-    expect(roster.map((entry) => entry.id)).toEqual(["waiting"]);
+    expect(roster.map(({ recordId, role }) => ({ recordId, role }))).toEqual([
+      { recordId: "header-entry", role: "Header" },
+      { recordId: "heeler-entry", role: "Heeler" },
+    ]);
+  });
+
+  it("excludes scratched records and records from another event", () => {
+    const otherEvent = {
+      ...registration("other", "active"),
+      eventId: "other-event",
+    };
+    const roster = registrationDeskEventRoster(
+      data(
+        [contestant("active", "Active"), contestant("scratched", "Scratched")],
+        [
+          registration("active", "active"),
+          registration("scratched", "scratched", "Header", "scratched"),
+          otherEvent,
+        ],
+        [team("scratched-team", "scratched", "active", true)],
+      ),
+      "live-event",
+    );
+
+    expect(roster.map((entry) => entry.recordId)).toEqual(["active"]);
   });
 
   it("returns an empty roster without data or a selected event", () => {

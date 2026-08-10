@@ -39,7 +39,9 @@ type WixAction =
   | "loadRegistrationDeskData"
   | "saveRegistrationDeskContestant"
   | "setRegistrationDeskContestantPin"
-  | "submitRegistrationDeskSignup";
+  | "submitRegistrationDeskSignup"
+  | "updateRegistrationDeskEntry"
+  | "scratchRegistrationDeskEntry";
 
 export interface ContestantPortalData {
   contestant: Contestant;
@@ -261,7 +263,9 @@ function sensitiveWixAction(action: WixAction) {
     action === "loadRegistrationDeskData" ||
     action === "saveRegistrationDeskContestant" ||
     action === "setRegistrationDeskContestantPin" ||
-    action === "submitRegistrationDeskSignup"
+    action === "submitRegistrationDeskSignup" ||
+    action === "updateRegistrationDeskEntry" ||
+    action === "scratchRegistrationDeskEntry"
   );
 }
 
@@ -454,6 +458,35 @@ export function submitRegistrationDeskSignup(signup: SignupRequest) {
     summary: string;
     data: RegistrationDeskData;
   }>("submitRegistrationDeskSignup", signup);
+}
+
+export interface RegistrationDeskEntryRequest {
+  eventId: string;
+  recordType: "registration" | "team";
+  recordId: string;
+}
+
+export interface RegistrationDeskEntryResult extends RegistrationDeskEntryRequest {
+  summary: string;
+  data: RegistrationDeskData;
+}
+
+export function updateRegistrationDeskEntry(
+  request: RegistrationDeskEntryRequest & { patch: Record<string, unknown> },
+) {
+  return requestWix<RegistrationDeskEntryResult>(
+    "updateRegistrationDeskEntry",
+    request,
+  );
+}
+
+export function scratchRegistrationDeskEntry(
+  request: RegistrationDeskEntryRequest & { confirmed: true },
+) {
+  return requestWix<RegistrationDeskEntryResult>(
+    "scratchRegistrationDeskEntry",
+    request,
+  );
 }
 
 export function setRegistrationDeskContestantPin(
