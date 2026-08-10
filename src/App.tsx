@@ -837,19 +837,31 @@ function StaffApp() {
                     ],
                   events: current.events.map((event) =>
                     event.id === eventId
-                      ? {
-                          ...event,
-                          drawApproved: true,
-                          drawLocked: true,
-                          drawHistory: [
-                            ...event.drawHistory,
-                            {
-                              id: uid("draw"),
-                              createdAt: new Date().toISOString(),
-                              teams: eventTeams,
-                            },
-                          ],
-                        }
+                      ? (() => {
+                          const activeSelection =
+                            runDeskSelectionToPersist(
+                              {
+                                activeRunId: undefined,
+                                activeRound: undefined,
+                              },
+                              eventTeams.filter((team) => team.round === 1),
+                              1,
+                            );
+                          return {
+                            ...event,
+                            drawApproved: true,
+                            drawLocked: true,
+                            ...activeSelection,
+                            drawHistory: [
+                              ...event.drawHistory,
+                              {
+                                id: uid("draw"),
+                                createdAt: new Date().toISOString(),
+                                teams: eventTeams,
+                              },
+                            ],
+                          };
+                        })()
                       : event,
                     ),
                   };

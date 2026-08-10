@@ -45,6 +45,32 @@ describe("Run Desk active selection persistence", () => {
     ).toEqual({ activeRunId: "next", activeRound: 1 });
   });
 
+  it("initializes the first ready run when a draw is approved", () => {
+    expect(
+      runDeskSelectionToPersist(
+        { activeRunId: undefined, activeRound: undefined },
+        [
+          team("draw-two", { drawPosition: 2 }),
+          team("draw-one", { drawPosition: 1 }),
+        ].sort((left, right) => left.drawPosition - right.drawPosition),
+        1,
+      ),
+    ).toEqual({ activeRunId: "draw-one", activeRound: 1 });
+  });
+
+  it("does not preserve an old active ID when a replacement draw is approved", () => {
+    expect(
+      runDeskSelectionToPersist(
+        { activeRunId: undefined, activeRound: undefined },
+        [
+          team("new-first", { drawPosition: 1 }),
+          team("previous-active", { drawPosition: 2 }),
+        ],
+        1,
+      ),
+    ).toEqual({ activeRunId: "new-first", activeRound: 1 });
+  });
+
   it("repairs a stale ID with the displayed fallback team", () => {
     expect(
       runDeskSelectionToPersist(
