@@ -50,6 +50,11 @@ import {
   createSpectatorPrediction,
   type SpectatorChoice,
 } from "./spectatorPredictions";
+import {
+  spectatorAvatarInitials,
+  spectatorIdentityInput,
+  spectatorIdentityLabel,
+} from "./spectatorIdentity";
 import type { ContestantAccountRequest } from "./contestantAccount";
 import type { ArenaData } from "./types";
 import { isBrowserStoragePreview } from "./adminAccess";
@@ -117,8 +122,7 @@ const formatSignupRopingLabel = (name: string, date: string, time: string) => {
   return `${name} on ${month} ${ordinalDay(scheduledDate.getDate())} at ${formatTime(time)}`;
 };
 
-const initials = (name: string) =>
-  name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+const initials = spectatorAvatarInitials;
 
 function Status({ value }: { value: string }) {
   const label =
@@ -316,7 +320,10 @@ function SpectatorPage({
   onLocalUpdate: (data: PublicArenaData) => void;
 }) {
   const [name, setName] = useState(
-    () => window.sessionStorage.getItem("arena-spectator-name") ?? "",
+    () =>
+      spectatorIdentityInput(
+        window.sessionStorage.getItem("arena-spectator-name") ?? "",
+      ),
   );
   const [choice, setChoice] = useState<SpectatorChoice>("cowboys");
   const [message, setMessage] = useState("");
@@ -443,7 +450,11 @@ function SpectatorPage({
               required
               maxLength={80}
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) =>
+                setName(spectatorIdentityInput(event.target.value))
+              }
+              autoCapitalize="characters"
+              className="public-spectator-name"
               placeholder="Name or avatar"
             />
           </label>
@@ -471,7 +482,7 @@ function SpectatorPage({
                         ? <img src={selectedRun.headerPhoto} alt={`${selectedRun.headerName} profile`} />
                         : <span aria-hidden="true">{initials(selectedRun.headerName)}</span>}
                     </span>
-                    <strong>{selectedRun.headerName}</strong>
+                    <strong>{spectatorIdentityLabel(selectedRun.headerName)}</strong>
                   </span>
                   <span className="public-cowboy-rider">
                     <small>Heeler</small>
@@ -480,7 +491,7 @@ function SpectatorPage({
                         ? <img src={selectedRun.heelerPhoto} alt={`${selectedRun.heelerName} profile`} />
                         : <span aria-hidden="true">{initials(selectedRun.heelerName)}</span>}
                     </span>
-                    <strong>{selectedRun.heelerName}</strong>
+                    <strong>{spectatorIdentityLabel(selectedRun.heelerName)}</strong>
                   </span>
                 </span>
                 <span className="public-cowboy-team-label">Cowboy Team</span>

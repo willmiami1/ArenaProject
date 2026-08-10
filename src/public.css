@@ -219,6 +219,7 @@
 .public-spectator-grid fieldset { display: flex; flex-wrap: wrap; gap: 22px; padding: 16px; border: 1px solid #80674f; }
 .public-spectator-grid legend { padding: 0 6px; color: var(--public-cream); font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .public-spectator-grid .public-radio input { width: 17px; min-height: auto; }
+.public-spectator-name { text-transform: uppercase; }
 .public-spectator-grid .public-pick-choices { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px; }
 .public-pick-card { position: relative; min-width: 0; display: grid; align-content: start; gap: 7px; padding: 10px; color: var(--public-cream); background: #0e0b09; border: 2px solid #5e4b3b; cursor: pointer; text-transform: none; letter-spacing: normal; }
 .public-pick-card:hover { border-color: var(--public-tan); }
