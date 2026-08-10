@@ -8,13 +8,15 @@ import {
   resetInheritedPredictionCutoffs,
 } from "./competition";
 import { normalizeHorseNames } from "./contestantHorses";
-import type { ArenaData, ArenaMeet } from "./types";
+import type { ArenaData, ArenaMeet, Contestant } from "./types";
 import {
   isWixEmbed,
   isWorkspaceSaveConfirmation,
   publishPublicSchedule,
   requestWixData,
+  saveContestant,
   setActiveRun,
+  type ContestantSaveConfirmation,
   type WorkspaceSaveConfirmation,
 } from "./wixBridge";
 import {
@@ -377,6 +379,55 @@ export function reconcileWorkspaceSaveConfirmation(
   };
 }
 
+export function reconcileContestantSaveConfirmation(
+  data: ArenaData,
+  confirmation: ContestantSaveConfirmation,
+) {
+  const exists = data.contestants.some(
+    (contestant) => contestant.id === confirmation.contestant.id,
+  );
+  return {
+    ...data,
+    revision: confirmation.revision,
+    staffRevision: confirmation.staffRevision,
+    onlineRevision: confirmation.onlineRevision,
+    loadedAt: confirmation.loadedAt,
+    contestants: exists
+      ? data.contestants.map((contestant) =>
+          contestant.id === confirmation.contestant.id
+            ? confirmation.contestant
+            : contestant,
+        )
+      : [...data.contestants, confirmation.contestant],
+  };
+}
+
+export function contestantSaveHasUnrelatedChanges(
+  current: ArenaData,
+  persisted: ArenaData,
+  contestantId: string,
+) {
+  const comparable = (data: ArenaData) => {
+    const {
+      revision: _revision,
+      staffRevision: _staffRevision,
+      onlineRevision: _onlineRevision,
+      loadedAt: _loadedAt,
+      ...content
+    } = data;
+    return {
+      ...content,
+      contestants: content.contestants.filter(
+        (contestant) => contestant.id !== contestantId,
+      ),
+    };
+  };
+  return (
+    JSON.stringify(comparable(current)) !==
+    JSON.stringify(comparable(persisted))
+  );
+}
+
 export function useArenaData() {
   const [data, setData] = useState<ArenaData>(loadLocalData);
   const [status, setStatus] = useState<PersistenceStatus>("loading");
@@ -388,6 +439,8 @@ export function useArenaData() {
   const localDirty = useRef(false);
   const saveInFlight = useRef(false);
   const activeRunSaveInFlight = useRef(false);
+  const contestantSaveInFlight = useRef(false);
+  const contestantSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveIdleWaiters = useRef<Array<() => void>>([]);
   const conflictRetryCount = useRef(0);
   const automaticRetryCount = useRef(0);
@@ -424,6 +477,7 @@ export function useArenaData() {
       localDirty.current ||
       saveInFlight.current ||
       activeRunSaveInFlight.current ||
+      contestantSaveInFlight.current ||
       statusRef.current === "saving";
     if (writePending()) {
       throw new Error("Wait for the current workspace changes to finish saving before refreshing.");
@@ -466,7 +520,11 @@ export function useArenaData() {
       localDirty.current = false;
       return normalized;
     }
-    if (saveInFlight.current || activeRunSaveInFlight.current) {
+    if (
+      saveInFlight.current ||
+      activeRunSaveInFlight.current ||
+      contestantSaveInFlight.current
+    ) {
       throw new Error("Wait for the current workspace save to finish, then try again.");
     }
     if (statusRef.current === "error") {
@@ -587,6 +645,77 @@ export function useArenaData() {
     }
   }, []);
 
+  const saveContestantImmediately = useCallback(
+    (contestant: Contestant) => {
+      const operation = contestantSaveQueue.current.then(async () => {
+        while (saveInFlight.current || activeRunSaveInFlight.current) {
+          await new Promise<void>((resolve) => {
+            saveIdleWaiters.current.push(resolve);
+          });
+        }
+        contestantSaveInFlight.current = true;
+        try {
+          window.clearTimeout(saveRetryTimer.current);
+          saveRetryTimer.current = 0;
+          if (
+            localDirty.current &&
+            !contestantSaveHasUnrelatedChanges(
+              dataRef.current,
+              persistedDataRef.current,
+              contestant.id,
+            )
+          ) {
+            localDirty.current = false;
+            automaticRetryCount.current = 0;
+            conflictRetryCount.current = 0;
+            lastFailedSnapshot.current = "";
+          }
+          const confirmation = await saveContestant(contestant);
+          const currentWasDirty =
+            localDirty.current &&
+            contestantSaveHasUnrelatedChanges(
+              dataRef.current,
+              persistedDataRef.current,
+              confirmation.contestant.id,
+            );
+          const reconciled = reconcileContestantSaveConfirmation(
+            dataRef.current,
+            confirmation,
+          );
+          persistedDataRef.current = reconcileContestantSaveConfirmation(
+            persistedDataRef.current,
+            confirmation,
+          );
+          skipNextSave.current = !currentWasDirty;
+          preserveDirtyOnSkippedSave.current = false;
+          localDirty.current = currentWasDirty;
+          dataRef.current = reconciled;
+          setData(reconciled);
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(reconciled));
+          setLastSaveError("");
+          automaticRetryCount.current = 0;
+          conflictRetryCount.current = 0;
+          lastFailedSnapshot.current = "";
+          setStatus(currentWasDirty ? "saving" : "saved");
+          return confirmation.contestant;
+        } finally {
+          contestantSaveInFlight.current = false;
+          releaseSaveIdleWaiters();
+          if (localDirty.current) {
+            setStatus("saving");
+            setData((current) => ({ ...current }));
+          }
+        }
+      });
+      contestantSaveQueue.current = operation.then(
+        () => undefined,
+        () => undefined,
+      );
+      return operation;
+    },
+    [],
+  );
+
   const saveActiveRunImmediately = useCallback(
     (selection: ActiveRunSelection) => {
       const applyConfirmation = (confirmation: ActiveRunConfirmation) => {
@@ -616,7 +745,7 @@ export function useArenaData() {
             if (!latestSelection.activeRunId) {
               throw new Error("Select a valid team for Roping Now.");
             }
-            while (saveInFlight.current) {
+            while (saveInFlight.current || contestantSaveInFlight.current) {
               await new Promise<void>((resolve) => {
                 saveIdleWaiters.current.push(resolve);
               });
@@ -629,6 +758,7 @@ export function useArenaData() {
               });
             } finally {
               activeRunSaveInFlight.current = false;
+              releaseSaveIdleWaiters();
               if (localDirty.current) {
                 setStatus("saving");
                 setData((current) => ({ ...current }));
@@ -731,7 +861,13 @@ export function useArenaData() {
     localDirty.current = true;
     setStatus("saving");
     const timeout = window.setTimeout(async () => {
-      if (saveInFlight.current || activeRunSaveInFlight.current) return;
+      if (
+        saveInFlight.current ||
+        activeRunSaveInFlight.current ||
+        contestantSaveInFlight.current
+      ) {
+        return;
+      }
       saveInFlight.current = true;
       const submitted = data;
       try {
@@ -872,6 +1008,7 @@ export function useArenaData() {
       localDirty.current ||
       saveInFlight.current ||
       activeRunSaveInFlight.current ||
+      contestantSaveInFlight.current ||
       statusRef.current === "saving";
 
     const refreshNewerWorkspace = async () => {
@@ -961,6 +1098,7 @@ export function useArenaData() {
     status,
     refreshFromWix,
     saveImmediately,
+    saveContestantImmediately,
     saveActiveRunImmediately,
     lastSaveError,
     retryWorkspaceSave,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   publicEventSectionTargetId,
   isWorkspaceSaveConfirmation,
+  sensitiveWixAction,
   trustedWixRelayOrigin,
   wixResponseErrorMessage,
 } from "./wixBridge";
@@ -56,6 +57,10 @@ describe("trusted Wix relay origin", () => {
       expect(wixResponseErrorMessage("The requested Arena action failed.")).toBe(
         "The requested Arena action failed.",
       );
+    });
+
+    it("requires the trusted Wix relay for direct contestant saves", () => {
+      expect(sensitiveWixAction("saveContestant")).toBe(true);
     });
   });
 

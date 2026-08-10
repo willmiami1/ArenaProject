@@ -30,6 +30,8 @@ import {
   mergeConcurrentSavedArenaData,
   mergeSavedArenaData,
   normalizeData,
+  contestantSaveHasUnrelatedChanges,
+  reconcileContestantSaveConfirmation,
   reconcileWorkspaceSaveConfirmation,
   remoteWorkspaceIsNewer,
   staffWorkspaceIsNewer,
@@ -89,6 +91,76 @@ const workspace = (competition = event(), teams: Team[] = []): ArenaData => ({
 });
 
 describe("workspace save queue", () => {
+  it("reconciles a created contestant and revision metadata only", () => {
+    const original = workspace();
+    const contestant = {
+      ...contestants[0],
+      id: "new-rider",
+      name: "NEW RIDER",
+    };
+    const reconciled = reconcileContestantSaveConfirmation(original, {
+      contestant,
+      revision: 12,
+      staffRevision: 9,
+      onlineRevision: 3,
+      loadedAt: "2026-08-10T21:45:00.000Z",
+    });
+
+    expect(reconciled.contestants[reconciled.contestants.length - 1]).toEqual(
+      contestant,
+    );
+    expect(reconciled.events).toBe(original.events);
+    expect(reconciled.teams).toBe(original.teams);
+    expect(reconciled).toMatchObject({
+      revision: 12,
+      staffRevision: 9,
+      onlineRevision: 3,
+      loadedAt: "2026-08-10T21:45:00.000Z",
+    });
+  });
+
+  it("reconciles an updated contestant without changing other workspace records", () => {
+    const original = workspace();
+    const contestant = {
+      ...contestants[0],
+      name: "UPDATED RIDER",
+      photo: "data:image/jpeg;base64,updated",
+    };
+    const reconciled = reconcileContestantSaveConfirmation(original, {
+      contestant,
+      revision: 8,
+      staffRevision: 7,
+      onlineRevision: 1,
+      loadedAt: "2026-08-10T21:46:00.000Z",
+    });
+
+    expect(reconciled.contestants[0]).toEqual(contestant);
+    expect(reconciled.contestants).toHaveLength(original.contestants.length);
+    expect(reconciled.registrations).toBe(original.registrations);
+  });
+
+  it("does not retry a full save when only the confirmed contestant was dirty", () => {
+    const persisted = workspace();
+    const current = {
+      ...persisted,
+      contestants: [
+        ...persisted.contestants,
+        { ...contestants[0], id: "new-rider", name: "NEW RIDER" },
+      ],
+    };
+
+    expect(
+      contestantSaveHasUnrelatedChanges(current, persisted, "new-rider"),
+    ).toBe(false);
+    expect(
+      contestantSaveHasUnrelatedChanges(
+        { ...current, activeEventId: "another-event" },
+        persisted,
+        "new-rider",
+      ),
+    ).toBe(true);
+  });
+
   it("keeps submitted content while applying a compact save confirmation", () => {
     const submitted = workspace(
       event({ id: "new-event", name: "New Event", status: "Live" }),

@@ -271,6 +271,7 @@ function StaffApp() {
     persistenceStatus,
     refreshFromWix,
     saveImmediately,
+    saveContestantImmediately,
     saveActiveRunImmediately,
     lastSaveError,
     retryWorkspaceSave,
@@ -736,20 +737,8 @@ function StaffApp() {
               events={data.events}
               teams={data.teams}
               registrations={data.registrations}
-              onAdd={(contestant) =>
-                saveImmediately({
-                  ...data,
-                  contestants: [...data.contestants, contestant],
-                })
-              }
-              onUpdate={(contestant) =>
-                saveImmediately({
-                  ...data,
-                  contestants: data.contestants.map((item) =>
-                    item.id === contestant.id ? contestant : item,
-                  ),
-                })
-              }
+              onAdd={saveContestantImmediately}
+              onUpdate={saveContestantImmediately}
               onDelete={(contestantId) =>
                 setData((current) => ({
                   ...current,

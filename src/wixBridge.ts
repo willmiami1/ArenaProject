@@ -20,6 +20,7 @@ import type { ActiveRunConfirmation } from "./activeRunSaveQueue";
 type WixAction =
   | "load"
   | "save"
+  | "saveContestant"
   | "setActiveRun"
   | "authenticateContestant"
   | "setContestantPin"
@@ -56,6 +57,14 @@ export interface ContestantPortalData {
 
 export interface WorkspaceSaveConfirmation {
   saved: true;
+  revision: number;
+  staffRevision: number;
+  onlineRevision: number;
+  loadedAt: string;
+}
+
+export interface ContestantSaveConfirmation {
+  contestant: Contestant;
   revision: number;
   staffRevision: number;
   onlineRevision: number;
@@ -267,9 +276,10 @@ export function subscribeToWixSectionNavigation(
   return () => window.removeEventListener("message", handleMessage);
 }
 
-function sensitiveWixAction(action: WixAction) {
+export function sensitiveWixAction(action: WixAction) {
   return (
     action === "authenticateContestant" ||
+    action === "saveContestant" ||
     action === "setActiveRun" ||
     action === "setContestantPin" ||
     action === "loadSignupOptions" ||
@@ -425,6 +435,17 @@ export function requestWixData(
 ): Promise<ArenaData | WorkspaceSaveConfirmation | null>;
 export function requestWixData(action: "load" | "save", data?: ArenaData) {
   return requestWix<ArenaData | WorkspaceSaveConfirmation>(action, data);
+}
+
+export async function saveContestant(contestant: Contestant) {
+  const confirmation = await requestWix<ContestantSaveConfirmation>(
+    "saveContestant",
+    contestant,
+  );
+  if (!confirmation) {
+    throw new Error("Wix did not confirm the contestant save.");
+  }
+  return confirmation;
 }
 
 export async function setActiveRun(data: {
