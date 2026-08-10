@@ -71,21 +71,28 @@ export class LatestActiveRunSaveQueue<T> {
   enqueue(selection: ActiveRunSelection) {
     this.pending = selection;
     if (!this.running) {
-      this.running = this.flush().finally(() => {
-        this.running = undefined;
-      });
+      this.running = this.flush();
     }
     return this.running;
   }
 
   private async flush() {
     let saved: T | undefined;
-    while (this.pending) {
-      const selection = this.pending;
+    try {
+      while (this.pending) {
+        const selection = this.pending;
+        this.pending = undefined;
+        saved = await this.save(selection);
+        this.onSaved?.(saved);
+      }
+      return saved as T;
+    } catch (error) {
       this.pending = undefined;
-      saved = await this.save(selection);
-      this.onSaved?.(saved);
+      throw error;
+    } finally {
+      // Clear synchronously before the returned promise settles so a new click
+      // cannot attach to a completed run and strand its pending selection.
+      this.running = undefined;
     }
-    return saved as T;
   }
 }

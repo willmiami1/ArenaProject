@@ -167,4 +167,71 @@ describe("immediate active-run save queue", () => {
     await expect(result).resolves.toBe("draw-1");
     expect(saved).toEqual(["draw-1", "draw-1"]);
   });
+
+  it("starts a third save queued as the prior run settles", async () => {
+    let releaseFirst!: (value: string) => void;
+    let releaseSecond!: (value: string) => void;
+    let signalSecondStarted!: () => void;
+    const firstPending = new Promise<string>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const secondPending = new Promise<string>((resolve) => {
+      releaseSecond = resolve;
+    });
+    const secondStarted = new Promise<void>((resolve) => {
+      signalSecondStarted = resolve;
+    });
+    const saved: string[] = [];
+    const queue = new LatestActiveRunSaveQueue<string>((selection) => {
+      const id = selection.activeRunId ?? "";
+      saved.push(id);
+      if (id === "draw-1") return firstPending;
+      if (id === "draw-2") {
+        signalSecondStarted();
+        return secondPending;
+      }
+      return Promise.resolve(id);
+    });
+
+    const running = queue.enqueue({
+      eventId: "event",
+      activeRunId: "draw-1",
+    });
+    queue.enqueue({ eventId: "event", activeRunId: "draw-2" });
+    releaseFirst("draw-1");
+    await secondStarted;
+
+    let third!: Promise<string>;
+    secondPending.then(() => {
+      third = queue.enqueue({ eventId: "event", activeRunId: "draw-3" });
+    });
+    releaseSecond("draw-2");
+
+    await expect(running).resolves.toBe("draw-2");
+    await expect(third).resolves.toBe("draw-3");
+    expect(saved).toEqual(["draw-1", "draw-2", "draw-3"]);
+  });
+
+  it("accepts a fresh selection after an in-flight save rejects", async () => {
+    let rejectFirst!: (error: Error) => void;
+    const firstPending = new Promise<string>((_, reject) => {
+      rejectFirst = reject;
+    });
+    const saved: string[] = [];
+    const queue = new LatestActiveRunSaveQueue<string>((selection) => {
+      const id = selection.activeRunId ?? "";
+      saved.push(id);
+      return id === "draw-1" ? firstPending : Promise.resolve(id);
+    });
+
+    const first = queue.enqueue({ eventId: "event", activeRunId: "draw-1" });
+    queue.enqueue({ eventId: "event", activeRunId: "draw-2" });
+    rejectFirst(new Error("rejected"));
+
+    await expect(first).rejects.toThrow("rejected");
+    await expect(
+      queue.enqueue({ eventId: "event", activeRunId: "draw-3" }),
+    ).resolves.toBe("draw-3");
+    expect(saved).toEqual(["draw-1", "draw-3"]);
+  });
 });
