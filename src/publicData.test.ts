@@ -32,6 +32,7 @@ import {
   normalizeData,
   remoteWorkspaceIsNewer,
   staffWorkspaceIsNewer,
+  workspaceSaveNeedsFollowUp,
 } from "./useArenaData";
 import {
   createSpectatorPrediction,
@@ -83,6 +84,33 @@ const workspace = (competition = event(), teams: Team[] = []): ArenaData => ({
   spectators: [],
   spectatorPredictions: [],
   activeEventId: competition.id,
+});
+
+describe("workspace save queue", () => {
+  it("queues a newer Run Desk selection after an older save finishes", () => {
+    const submitted = workspace(
+      event({ activeRunId: "team-1", activeRound: 1 }),
+    );
+    const current = {
+      ...submitted,
+      events: [
+        {
+          ...submitted.events[0],
+          activeRunId: "team-3",
+        },
+      ],
+    };
+
+    expect(workspaceSaveNeedsFollowUp(submitted, current, true)).toBe(true);
+  });
+
+  it("does not queue when the submitted snapshot is still current or clean", () => {
+    const submitted = workspace();
+    expect(workspaceSaveNeedsFollowUp(submitted, submitted, true)).toBe(false);
+    expect(
+      workspaceSaveNeedsFollowUp(submitted, { ...submitted }, false),
+    ).toBe(false);
+  });
 });
 
 describe("public routing", () => {

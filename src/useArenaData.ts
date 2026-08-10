@@ -345,6 +345,14 @@ export function remoteWorkspaceIsNewer(
   return revision(remote) > revision(current);
 }
 
+export function workspaceSaveNeedsFollowUp(
+  submitted: ArenaData,
+  current: ArenaData,
+  localDirty: boolean,
+) {
+  return localDirty && current !== submitted;
+}
+
 export function useArenaData() {
   const [data, setData] = useState<ArenaData>(loadLocalData);
   const [status, setStatus] = useState<PersistenceStatus>("loading");
@@ -515,6 +523,16 @@ export function useArenaData() {
       throw error;
     } finally {
       saveInFlight.current = false;
+      if (
+        workspaceSaveNeedsFollowUp(
+          submitted,
+          dataRef.current,
+          localDirty.current,
+        )
+      ) {
+        setStatus("saving");
+        setData((current) => ({ ...current }));
+      }
     }
   }, []);
 
@@ -672,6 +690,16 @@ export function useArenaData() {
         }
       } finally {
         saveInFlight.current = false;
+        if (
+          workspaceSaveNeedsFollowUp(
+            submitted,
+            dataRef.current,
+            localDirty.current,
+          )
+        ) {
+          setStatus("saving");
+          setData((current) => ({ ...current }));
+        }
       }
     }, 500);
 
