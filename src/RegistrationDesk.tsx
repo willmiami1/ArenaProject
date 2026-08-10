@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   Banknote,
@@ -114,6 +114,7 @@ export function RegistrationDesk() {
   const [pinConfirmation, setPinConfirmation] = useState("");
   const [profile, setProfile] =
     useState<RegistrationDeskContestantInput>(emptyContestant);
+  const addContestantNameRef = useRef<HTMLInputElement>(null);
   const [horseName, setHorseName] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -230,6 +231,12 @@ export function RegistrationDesk() {
     setMessage("");
   };
 
+  useEffect(() => {
+    if (profileOpen && !profile.id) {
+      addContestantNameRef.current?.focus();
+    }
+  }, [profile.id, profileOpen]);
+
   const saveProfile = async (formEvent: FormEvent) => {
     formEvent.preventDefault();
     setBusy(true);
@@ -282,7 +289,7 @@ export function RegistrationDesk() {
         </button>
       </div>
       <form className="registration-profile-form" onSubmit={saveProfile}>
-        <label>Full name<input required maxLength={100} autoCapitalize="characters" value={profile.name} onChange={(change) => setProfile({ ...profile, name: change.target.value.toUpperCase() })} /></label>
+        <label>Full name<input ref={addContestantNameRef} required maxLength={100} autoCapitalize="characters" value={profile.name} onChange={(change) => setProfile({ ...profile, name: change.target.value.toUpperCase() })} /></label>
         <label>Roping position<select value={profile.role} onChange={(change) => setProfile({ ...profile, role: change.target.value as Contestant["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
         <label>Header handicap<input required type="number" min={0} max={20} step={0.5} value={profile.headerHandicap} onChange={(change) => setProfile({ ...profile, headerHandicap: Number(change.target.value) })} /></label>
         <label>Heeler handicap<input required type="number" min={0} max={20} step={0.5} value={profile.heelerHandicap} onChange={(change) => setProfile({ ...profile, heelerHandicap: Number(change.target.value) })} /></label>
@@ -484,10 +491,28 @@ export function RegistrationDesk() {
             <section className="registration-desk-panel">
               <div className="registration-desk-panel-heading">
                 <div><span>Step 1</span><h2>Choose contestant</h2></div>
-                <button type="button" onClick={() => editProfile()}>
+                <button
+                  type="button"
+                  aria-controls="registration-add-contestant"
+                  aria-expanded={profileOpen && !profile.id}
+                  onClick={() => editProfile()}
+                >
                   <Plus size={16} /> Add contestant
                 </button>
               </div>
+              {showStandaloneRegistrationProfile(
+                profileOpen,
+                profile.id,
+                contestant?.id,
+              ) && (
+                <section
+                  id="registration-add-contestant"
+                  className="registration-add-profile"
+                  aria-label="Add contestant"
+                >
+                  {profileEditor}
+                </section>
+              )}
               <label className="registration-search">
                 <Search size={17} />
                 <input value={search} onChange={(change) => setSearch(change.target.value)} placeholder="Search name, email, or phone" />
@@ -842,15 +867,6 @@ export function RegistrationDesk() {
           </div>
         )}
 
-        {showStandaloneRegistrationProfile(
-          profileOpen,
-          profile.id,
-          contestant?.id,
-        ) && (
-          <section className="registration-desk-panel registration-profile-panel">
-            {profileEditor}
-          </section>
-        )}
         {message && <p className="registration-desk-message" role="status">{message}</p>}
       </main>
     </div>

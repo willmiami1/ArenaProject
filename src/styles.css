@@ -818,6 +818,9 @@ main { grid-column: 2; min-width: 0; }
 .registration-pin-panel button { grid-column: 1 / -1; min-height: 42px; background: #49301f; border-color: #765036; }
 .registration-inline-profile { overflow: hidden; background: #120d0a; border: 1px solid #5a3e2b; border-radius: 8px; }
 .registration-inline-profile .registration-profile-form { grid-template-columns: 1fr 1fr; padding: 16px; }
+.registration-add-profile { background: #120d0a; border-bottom: 1px solid #5a3e2b; }
+.registration-add-profile .registration-desk-panel-heading { min-height: 64px; padding-block: 12px; }
+.registration-add-profile .registration-profile-form { grid-template-columns: 1fr 1fr; padding: 18px 20px 22px; }
 .registration-entry-divider { display: flex; align-items: center; gap: 10px; color: #d8b98f; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .12em; }
 .registration-entry-divider::before,.registration-entry-divider::after { content: ""; flex: 1; height: 1px; background: #563d2b; }
 .registration-entry-hint { margin: -8px 0 0; color: #c99468; font-size: 11px; line-height: 1.5; }
@@ -856,7 +859,6 @@ main { grid-column: 2; min-width: 0; }
 .registration-payment-confirmation small { margin-top: 4px; color: #9fc4a4; font-size: 10px; line-height: 1.5; text-transform: none; letter-spacing: 0; }
 .registration-entry-form .primary,.registration-profile-form .primary { min-height: 48px; margin-top: 5px; background: #875538; border-color: #a46b47; }
 .registration-desk-empty { min-height: 290px; display: grid; place-items: center; align-content: center; gap: 12px; color: #796a5b; text-align: center; }
-.registration-profile-panel { margin-top: 22px; }
 .registration-profile-form { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; padding: 22px; }
 .registration-horse-editor { grid-column: 1 / -1; padding: 15px; background: #120d0a; border: 1px solid #5a4434; border-radius: 7px; }
 .registration-horse-editor > span { display: block; margin-bottom: 8px; color: #cdb9a3; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
@@ -950,6 +952,7 @@ main { grid-column: 2; min-width: 0; }
 }
 
 @media (max-width: 520px) {
+  .registration-add-profile .registration-profile-form { grid-template-columns: 1fr; }
   .registration-desk-shortcut span { display: none; }
   .stat-grid { grid-template-columns: 1fr; }
   .two-column { grid-template-columns: minmax(0, 1fr); }
