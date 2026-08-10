@@ -3,6 +3,7 @@ import type { PublicCompetition, PublicPredictionRun } from "./publicData";
 import {
   effectiveActivePredictionRun,
   PublicPollGuard,
+  publicRefreshInterval,
   submissionMatchesCurrentRun,
 } from "./publicSpectatorSync";
 
@@ -70,5 +71,14 @@ describe("public spectator active-run synchronization", () => {
     expect(submissionMatchesCurrentRun("run-1", "run-2", "run-1")).toBe(false);
     expect(submissionMatchesCurrentRun("run-1", "run-1", "run-2")).toBe(false);
     expect(submissionMatchesCurrentRun("run-1", "run-1", undefined)).toBe(false);
+  });
+
+  it("polls public listings without changing the spectator cadence", () => {
+    expect(publicRefreshInterval("spectator")).toBe(1500);
+    expect(publicRefreshInterval("home")).toBe(15000);
+    expect(publicRefreshInterval("events")).toBe(15000);
+    expect(publicRefreshInterval("event")).toBe(15000);
+    expect(publicRefreshInterval("competition")).toBe(15000);
+    expect(publicRefreshInterval("signup")).toBeUndefined();
   });
 });

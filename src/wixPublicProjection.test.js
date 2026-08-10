@@ -4,6 +4,7 @@ import {
   effectivePublicPredictionState,
   publicPredictionRunProjection,
   publicRegisteredRiders,
+  publicRoundRobinRoleCapacities,
 } from "../wix/backend/public-prediction-projection.js";
 
 const predictionEvent = {
@@ -65,8 +66,68 @@ describe("Wix public registered rider projection", () => {
         { id: "both", name: "Cal Both", photo: undefined, horseNames: ["Switch"] },
       ],
     });
+
     expect(JSON.stringify(projected)).not.toContain("private@example.com");
     expect(JSON.stringify(projected)).not.toContain("Profile Horse");
+  });
+});
+
+describe("Wix public Round Robin capacities", () => {
+  it("projects configured roles with entered positive-entry semantics", () => {
+    const event = {
+      id: "event",
+      competitionType: "round-robin",
+      maxHeaders: 5,
+      maxHeelers: 4,
+    };
+    const registrations = [
+      { eventId: "event", role: "Header", status: "entered", entries: 2 },
+      { eventId: "event", role: "Header", status: "entered", entries: 4 },
+      { eventId: "event", role: "Header", status: "waitlist", entries: 9 },
+      { eventId: "event", role: "Heeler", status: "entered", entries: 0 },
+      { eventId: "other", role: "Heeler", status: "entered", entries: 4 },
+    ];
+
+    expect(publicRoundRobinRoleCapacities(event, registrations)).toEqual([
+      {
+        role: "Header",
+        registered: 6,
+        maximum: 5,
+        full: true,
+      },
+      {
+        role: "Heeler",
+        registered: 0,
+        maximum: 4,
+        full: false,
+      },
+    ]);
+  });
+
+  it("handles one-sided caps and omits unlimited legacy roles", () => {
+    expect(
+      publicRoundRobinRoleCapacities(
+        {
+          id: "event",
+          competitionType: "round-robin",
+          maxHeaders: 5,
+        },
+        [],
+      ),
+    ).toEqual([
+      {
+        role: "Header",
+        registered: 0,
+        maximum: 5,
+        full: false,
+      },
+    ]);
+    expect(
+      publicRoundRobinRoleCapacities(
+        { id: "event", competitionType: "round-robin" },
+        [],
+      ),
+    ).toEqual([]);
   });
 });
 

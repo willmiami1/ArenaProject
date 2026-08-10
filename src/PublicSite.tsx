@@ -58,8 +58,13 @@ import {
 import {
   effectiveActivePredictionRun,
   PublicPollGuard,
+  publicRefreshInterval,
   submissionMatchesCurrentRun,
 } from "./publicSpectatorSync";
+import {
+  publicRoleCapacityLabel,
+  type PublicRopingRole,
+} from "./publicRoleCapacity";
 import type { ContestantAccountRequest } from "./contestantAccount";
 import type { ArenaData } from "./types";
 import { isBrowserStoragePreview } from "./adminAccess";
@@ -294,10 +299,16 @@ function RopingCard({
           <RiderRoleRoster
             label="Headers"
             riders={competition.registeredRiders?.headers ?? []}
+            capacity={competition.roleCapacities?.find(
+              ({ role }) => role === "Header",
+            )}
           />
           <RiderRoleRoster
             label="Heelers"
             riders={competition.registeredRiders?.heelers ?? []}
+            capacity={competition.roleCapacities?.find(
+              ({ role }) => role === "Heeler",
+            )}
           />
         </div>
       </div>
@@ -836,10 +847,16 @@ function CompetitionRow({ competition }: { competition: PublicCompetition }) {
         <RiderRoleRoster
           label="Headers"
           riders={competition.registeredRiders?.headers ?? []}
+          capacity={competition.roleCapacities?.find(
+            ({ role }) => role === "Header",
+          )}
         />
         <RiderRoleRoster
           label="Heelers"
           riders={competition.registeredRiders?.heelers ?? []}
+          capacity={competition.roleCapacities?.find(
+            ({ role }) => role === "Heeler",
+          )}
         />
       </div>
     </article>
@@ -849,16 +866,28 @@ function CompetitionRow({ competition }: { competition: PublicCompetition }) {
 function RiderRoleRoster({
   label,
   riders,
+  capacity,
 }: {
   label: "Headers" | "Heelers";
   riders: PublicRegisteredRider[];
+  capacity?: {
+    role: PublicRopingRole;
+    registered: number;
+    maximum: number;
+    full: boolean;
+  };
 }) {
+  const capacityLabel = publicRoleCapacityLabel(capacity);
   return (
     <section
       className="public-rider-role"
       aria-label={`${label} registered riders`}
     >
-      <h4>{label}</h4>
+      <h4>
+        {label}
+        {capacity && <span> · {capacity.registered} registered</span>}
+        {capacityLabel && <span> · {capacityLabel}</span>}
+      </h4>
       {riders.length ? (
         <ul aria-label={`Registered ${label.toLowerCase()}`}>
           {riders.map((rider) => (
@@ -1462,8 +1491,11 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
     void refresh();
     window.addEventListener("focus", refreshWhenVisible);
     document.addEventListener("visibilitychange", refreshWhenVisible);
+    const refreshInterval = publicRefreshInterval(route.kind);
     const interval =
-      route.kind === "spectator" ? window.setInterval(refresh, 1500) : undefined;
+      refreshInterval === undefined
+        ? undefined
+        : window.setInterval(refresh, refreshInterval);
     return () => {
       cancelled = true;
       pollGuard.cancel();

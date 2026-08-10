@@ -18,6 +18,8 @@ import {
   onlineRegistrationClosesAt,
   onlineRegistrationIsOpen,
 } from "./registrationWindow";
+import { roundRobinRoleCapacity } from "./roundRobinCapacity";
+import type { PublicRoleCapacity } from "./publicRoleCapacity";
 
 export type PublicRoute =
   | { kind: "home" }
@@ -88,6 +90,7 @@ export interface PublicCompetition {
     headers: PublicRegisteredRider[];
     heelers: PublicRegisteredRider[];
   };
+  roleCapacities?: PublicRoleCapacity[];
   results: PublicStandingRow[];
   activePredictionRunId?: string;
   predictionRuns: PublicPredictionRun[];
@@ -288,6 +291,18 @@ export function projectPublicArenaData(
       .reduce((sum, registration) => sum + registration.entries, 0);
     const predictionTeams = predictionRunsForEvent(event, data.teams);
     const activeRun = activePredictionRun(event, data.teams);
+    const roleCapacities = (["Header", "Heeler"] as const)
+      .map((role) => roundRobinRoleCapacity(event, data.registrations, role))
+      .filter(
+        (capacity): capacity is typeof capacity & { maximum: number } =>
+          capacity.maximum !== null,
+      )
+      .map(({ role, registered, maximum, full }) => ({
+        role,
+        registered,
+        maximum,
+        full,
+      }));
     return {
       id: event.id,
       parentEventId: event.parentEventId,
@@ -324,6 +339,7 @@ export function projectPublicArenaData(
         data,
         contestantsById,
       ),
+      ...(roleCapacities.length ? { roleCapacities } : {}),
       results: publicStandingRows(event, data.teams, data.contestants),
       activePredictionRunId: activeRun?.id,
       predictionRuns: predictionTeams

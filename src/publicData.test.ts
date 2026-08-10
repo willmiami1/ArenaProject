@@ -476,6 +476,83 @@ describe("public grouping and privacy", () => {
     expect(serialized).not.toContain("Profile Horse");
   });
 
+  it("projects entered positive-entry Round Robin capacities independently", () => {
+    const data = workspace(
+      event({
+        competitionType: "round-robin",
+        maxHeaders: 5,
+        maxHeelers: undefined,
+      }),
+    );
+    data.registrations = [
+      {
+        id: "entered-header",
+        eventId: "competition-1",
+        contestantId: "header",
+        role: "Header",
+        entries: 2,
+        checkedIn: false,
+        status: "entered",
+        notes: "",
+      },
+      {
+        id: "waitlisted-header",
+        eventId: "competition-1",
+        contestantId: "header",
+        role: "Header",
+        entries: 8,
+        checkedIn: false,
+        status: "waitlist",
+        notes: "",
+      },
+      {
+        id: "invalid-header",
+        eventId: "competition-1",
+        contestantId: "header",
+        role: "Header",
+        entries: 0,
+        checkedIn: false,
+        status: "entered",
+        notes: "",
+      },
+      {
+        id: "entered-heeler",
+        eventId: "competition-1",
+        contestantId: "heeler",
+        role: "Heeler",
+        entries: 4,
+        checkedIn: false,
+        status: "entered",
+        notes: "",
+      },
+    ];
+
+    expect(projectPublicArenaData(data, today).competitions[0].roleCapacities)
+      .toEqual([
+        {
+          role: "Header",
+          registered: 2,
+          maximum: 5,
+          full: false,
+        },
+      ]);
+  });
+
+  it("omits capacities for unlimited legacy and non-Round Robin events", () => {
+    expect(
+      projectPublicArenaData(
+        workspace(event({ competitionType: "round-robin" })),
+        today,
+      ).competitions[0].roleCapacities,
+    ).toBeUndefined();
+    expect(
+      projectPublicArenaData(
+        workspace(event({ competitionType: "draw-pot", maxHeaders: 5 })),
+        today,
+      ).competitions[0].roleCapacities,
+    ).toBeUndefined();
+  });
+
   it("projects profile photos only for the current prediction team", () => {
     const projected = projectPublicArenaData(
       workspace(event({ status: "Live" }), [

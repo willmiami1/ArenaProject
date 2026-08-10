@@ -9,6 +9,7 @@ import {
   assertSpectatorPredictionRunIsActive,
   publicPredictionRunProjection,
   publicRegisteredRiders,
+  publicRoundRobinRoleCapacities,
 } from "./public-prediction-projection";
 import {
   PublicSignupError,
@@ -678,6 +679,13 @@ function publicProjection(workspace) {
         workspace.teams,
         contestantsById,
       ),
+      ...(() => {
+        const roleCapacities = publicRoundRobinRoleCapacities(
+          event,
+          workspace.registrations,
+        );
+        return roleCapacities.length ? { roleCapacities } : {};
+      })(),
       results: publishedResults(event, workspace.teams, workspace.contestants),
       spectatorLeaderboards: Array.from(
         { length: Math.max(Number(event.rounds || 1), 1) },

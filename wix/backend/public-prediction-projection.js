@@ -74,6 +74,34 @@ export const publicRegisteredRiders = (
   };
 };
 
+export const publicRoundRobinRoleCapacities = (event, registrations) => {
+  if (event.competitionType !== "round-robin") return [];
+  return [
+    ["Header", event.maxHeaders],
+    ["Heeler", event.maxHeelers],
+  ].flatMap(([role, configuredMaximum]) => {
+    const maximum = Number(configuredMaximum);
+    if (!Number.isInteger(maximum) || maximum <= 0) return [];
+    const registered = registrations
+      .filter(
+        (registration) =>
+          registration.eventId === event.id &&
+          registration.role === role &&
+          registration.status === "entered",
+      )
+      .reduce((total, registration) => {
+        const entries = Number(registration.entries);
+        return total + (Number.isInteger(entries) && entries > 0 ? entries : 0);
+      }, 0);
+    return [{
+      role,
+      registered,
+      maximum,
+      full: registered >= maximum,
+    }];
+  });
+};
+
 export const spectatorPicksAreOpen = (team, now = Date.now()) =>
   !team.scratched &&
   !team.rolled &&

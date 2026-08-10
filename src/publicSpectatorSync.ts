@@ -1,4 +1,5 @@
 import type { PublicCompetition, PublicPredictionRun } from "./publicData";
+import type { PublicRoute } from "./publicData";
 
 export function effectiveActivePredictionRun(
   competition: PublicCompetition | undefined,
@@ -19,6 +20,21 @@ export function submissionMatchesCurrentRun(
       submittedRunId === currentRunId &&
       submittedRunId === responseRunId,
   );
+}
+
+export function publicRefreshInterval(
+  routeKind: PublicRoute["kind"],
+): number | undefined {
+  if (routeKind === "spectator") return 1500;
+  if (
+    routeKind === "home" ||
+    routeKind === "events" ||
+    routeKind === "event" ||
+    routeKind === "competition"
+  ) {
+    return 15000;
+  }
+  return undefined;
 }
 
 export class PublicPollGuard {
