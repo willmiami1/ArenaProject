@@ -792,6 +792,17 @@ main { grid-column: 2; min-width: 0; }
 .registration-desk :is(input,select) { width: 100%; min-height: 46px; padding: 10px 12px; color: #eadcc6; background: #0d0a08; border: 1px solid #5a4434; border-radius: 6px; }
 .registration-desk-events select { max-width: 650px; margin-top: 7px; }
 .registration-desk-events p { margin: 8px 0 0; color: #bd9b75; }
+.registration-desk-roster { margin-bottom: 22px; overflow: hidden; background: #17110d; border: 1px solid #3e2e23; border-radius: 10px; }
+.registration-desk-roster-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 20px; border-bottom: 1px solid #3e2e23; }
+.registration-desk-roster-heading span { color: #b88458; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
+.registration-desk-roster-heading h2 { margin: 3px 0 0; font-family: "Manrope",sans-serif; font-size: 18px; }
+.registration-desk-roster-heading>strong { display: grid; width: 38px; height: 38px; place-items: center; color: #f1d4ac; background: #3b281b; border: 1px solid #68482e; border-radius: 50%; }
+.registration-desk-roster>p { margin: 0; padding: 20px; color: #9b8673; font-size: 11px; }
+.registration-desk-roster ul { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 1px; margin: 0; padding: 0; background: #3e2e23; list-style: none; }
+.registration-desk-roster li { min-width: 0; padding: 13px 20px; background: #17110d; }
+.registration-desk-roster li strong,.registration-desk-roster li span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.registration-desk-roster li strong { color: #eadcc6; font-size: 12px; }
+.registration-desk-roster li span { margin-top: 4px; color: #a9937d; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
 .registration-desk-columns { display: grid; grid-template-columns: minmax(0,1fr) minmax(340px,.8fr); gap: 22px; align-items: start; }
 .registration-desk-panel { overflow: hidden; background: #17110d; border: 1px solid #3e2e23; border-radius: 10px; box-shadow: 0 14px 32px rgba(0,0,0,.2); }
 .registration-desk-panel-heading { min-height: 75px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px 20px; border-bottom: 1px solid #3e2e23; }

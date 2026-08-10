@@ -31,6 +31,7 @@ import type { ArenaData, Contestant } from "./types";
 import { roundRobinRoleCapacity } from "./roundRobinCapacity";
 import { registrationDeskWorkspaceHref } from "./registrationDeskNavigation";
 import { showStandaloneRegistrationProfile } from "./registrationDeskProfile";
+import { registrationDeskEventRoster } from "./registrationDeskRoster";
 import {
   isWixEmbed,
   loadRegistrationDeskData,
@@ -140,6 +141,10 @@ export function RegistrationDesk() {
   }, [data, eventId]);
 
   const event = data?.events.find((item) => item.id === eventId);
+  const eventRoster = useMemo(
+    () => registrationDeskEventRoster(data, eventId),
+    [data, eventId],
+  );
   const entryUnavailableMessage = !event
     ? ""
     : !event.registrationOpen
@@ -485,6 +490,45 @@ export function RegistrationDesk() {
           )}
           {entryUnavailableMessage && <p>{entryUnavailableMessage}</p>}
         </section>
+
+        {data && (
+          <section
+            className="registration-desk-roster"
+            aria-labelledby="registration-desk-roster-heading"
+          >
+            <div className="registration-desk-roster-heading">
+              <div>
+                <span>Current signups</span>
+                <h2 id="registration-desk-roster-heading">
+                  Competition roster
+                </h2>
+              </div>
+              <strong>{eventRoster.length}</strong>
+            </div>
+            {!event ? (
+              <p>Choose a live competition to view its roster.</p>
+            ) : !eventRoster.length ? (
+              <p>No contestants are signed up for this competition.</p>
+            ) : (
+              <ul>
+                {eventRoster.map((rosterContestant) => (
+                  <li key={rosterContestant.id}>
+                    <strong>{rosterContestant.name}</strong>
+                    <span>
+                      {rosterContestant.roles
+                        .map((rosterRole) =>
+                          `${rosterRole} ${rosterRole === "Header"
+                            ? rosterContestant.headerHandicap
+                            : rosterContestant.heelerHandicap}`,
+                        )
+                        .join(" · ")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
         {event && data && (
           <div className="registration-desk-columns">
