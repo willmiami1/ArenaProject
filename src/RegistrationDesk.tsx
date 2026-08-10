@@ -29,6 +29,7 @@ import {
 } from "./registrationDeskData";
 import type { ArenaData, Contestant } from "./types";
 import { roundRobinRoleCapacity } from "./roundRobinCapacity";
+import { registrationDeskWorkspaceHref } from "./registrationDeskNavigation";
 import {
   isWixEmbed,
   loadRegistrationDeskData,
@@ -444,7 +445,9 @@ export function RegistrationDesk() {
           <h1><ClipboardPen /> Registration Desk</h1>
           <p>Contestant profiles and event entries only.</p>
         </div>
-        <a href="?page=home"><ArrowLeft size={17} /> Public website</a>
+        <a href={registrationDeskWorkspaceHref(window.location.href)}>
+          <ArrowLeft size={17} /> Return to Workspace
+        </a>
       </header>
       <main className="registration-desk-main">
         <section className="registration-desk-events">
