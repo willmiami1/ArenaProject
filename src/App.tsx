@@ -72,6 +72,7 @@ import {
   normalizedRunDeskRound,
   runDeskSelectionToPersist,
 } from "./runDeskActiveSelection";
+import type { ActiveRunSelection } from "./activeRunSaveQueue";
 import {
   authenticateContestant,
   isWixEmbed,
@@ -261,7 +262,14 @@ const teamQualifiedTotal = (
     );
 
 function StaffApp() {
-  const [data, setData, persistenceStatus, refreshFromWix, saveImmediately] = useArenaData();
+  const [
+    data,
+    setData,
+    persistenceStatus,
+    refreshFromWix,
+    saveImmediately,
+    saveActiveRunImmediately,
+  ] = useArenaData();
   const [view, setView] = useState<View>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [workspaceMessage, setWorkspaceMessage] = useState("");
@@ -883,6 +891,7 @@ function StaffApp() {
               teams={data.teams}
               registrations={data.registrations}
               contestants={data.contestants}
+              onSelectActiveRun={saveActiveRunImmediately}
               onUpdateEvent={(updatedEvent) =>
                 setData((current) => ({
                   ...current,
@@ -3351,6 +3360,7 @@ function RunDesk({
   teams,
   registrations,
   contestants,
+  onSelectActiveRun,
   onUpdateEvent,
   onSave,
   onAddRideIn,
@@ -3361,6 +3371,7 @@ function RunDesk({
   teams: Team[];
   registrations: EventRegistration[];
   contestants: Contestant[];
+  onSelectActiveRun: (selection: ActiveRunSelection) => Promise<ArenaData>;
   onUpdateEvent: (event: ArenaEvent) => void;
   onSave: (teamId: string, update: Partial<Team>) => void;
   onAddRideIn: (team: Team) => void;
@@ -3376,6 +3387,12 @@ function RunDesk({
   );
   const [showRideInForm, setShowRideInForm] = useState(false);
   const [rideInMessage, setRideInMessage] = useState("");
+  const [activeRunSaveStatus, setActiveRunSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [activeRunSaveError, setActiveRunSaveError] = useState("");
+  const [pendingActiveSelection, setPendingActiveSelection] =
+    useState<ActiveRunSelection | null>(null);
   const [timeSheetPreview, setTimeSheetPreview] = useState<{
     html: string;
     fileName: string;
@@ -3450,7 +3467,40 @@ function RunDesk({
     persistedRound,
     runDeskTeamState,
   ]);
-  const selectActiveRun = (teamId: string | null, round = activeRound) => {
+  const selectActiveRun = async (
+    teamId: string | null,
+    round = activeRound,
+  ) => {
+    setSelectedRound(round);
+    setSelectedId(teamId);
+    if (!event) return;
+    const selection = {
+      eventId: event.id,
+      activeRunId: teamId ?? undefined,
+      activeRound: round,
+    };
+    setPendingActiveSelection(selection);
+    setActiveRunSaveStatus("saving");
+    setActiveRunSaveError("");
+    try {
+      await onSelectActiveRun(selection);
+      setPendingActiveSelection(null);
+      setActiveRunSaveStatus("saved");
+    } catch (error) {
+      setSelectedRound(normalizedRunDeskRound(event.activeRound, roundCount));
+      setSelectedId(event.activeRunId ?? null);
+      setActiveRunSaveStatus("error");
+      setActiveRunSaveError(
+        error instanceof Error
+          ? error.message
+          : "Wix did not confirm the Roping Now selection.",
+      );
+    }
+  };
+  const selectActiveRunDeferred = (
+    teamId: string | null,
+    round = activeRound,
+  ) => {
     setSelectedRound(round);
     setSelectedId(teamId);
     if (
@@ -3623,7 +3673,7 @@ function RunDesk({
   }, [eventTeams, event, contestants]);
 
   const chooseTeam = (team: Team) => {
-    selectActiveRun(team.id);
+    void selectActiveRun(team.id);
     setRawTime(team.rawTime?.toString() ?? "");
     setPenalties(team.penalties.toString());
     setNotes(team.notes);
@@ -3648,7 +3698,7 @@ function RunDesk({
               !candidate.rolled,
           )
         : team;
-      selectActiveRun(followingTeam?.id ?? null);
+      selectActiveRunDeferred(followingTeam?.id ?? null);
       setRawTime("");
       setPenalties("0");
       setNotes("");
@@ -3692,7 +3742,7 @@ function RunDesk({
       points: status === "complete" && !exceededLimit ? 1 : 0,
       rolled: false,
     });
-    selectActiveRun(followingTeam?.id ?? null);
+    selectActiveRunDeferred(followingTeam?.id ?? null);
     setRawTime("");
     setPenalties("0");
     setNotes("");
@@ -3708,7 +3758,7 @@ function RunDesk({
       points: 0,
       rolled: false,
     });
-    selectActiveRun(selected.id);
+    selectActiveRunDeferred(selected.id);
     setRawTime("");
     setPenalties("0");
     setNotes("");
@@ -3718,7 +3768,7 @@ function RunDesk({
     const nextRoundTeam =
       roundTeams.find((team) => team.status === "ready" && !team.rolled) ??
       roundTeams.find((team) => team.status === "ready");
-    selectActiveRun(nextRoundTeam?.id ?? null, round);
+    selectActiveRunDeferred(nextRoundTeam?.id ?? null, round);
     setRawTime("");
     setPenalties("0");
     setNotes("");
@@ -3773,7 +3823,7 @@ function RunDesk({
       heelerEntryNumber: pairingRun,
     };
     onAddRideIn(rideInTeam);
-    selectActiveRun(rideInTeam.id, 1);
+    selectActiveRunDeferred(rideInTeam.id, 1);
     setShowRideInForm(false);
     setRideInMessage(
       `Ride-in team added as Draw #${team.drawPosition} in Round 1.`,
@@ -3783,6 +3833,35 @@ function RunDesk({
   return (
     <>
       <PageIntro title="Run desk" text={event ? `Record times and publish standings for ${event.name}.` : "Select an event to open the run desk."} />
+      {activeRunSaveStatus === "saving" && (
+        <div className="notice">
+          <span>Saving Roping Now to Wix…</span>
+        </div>
+      )}
+      {activeRunSaveStatus === "saved" && (
+        <div className="notice success">
+          <span>Roping Now saved.</span>
+        </div>
+      )}
+      {activeRunSaveStatus === "error" && (
+        <div className="notice error">
+          <span>
+            Roping Now was not saved. {activeRunSaveError}
+          </span>
+          {pendingActiveSelection && (
+            <button
+              onClick={() =>
+                void selectActiveRun(
+                  pendingActiveSelection.activeRunId ?? null,
+                  pendingActiveSelection.activeRound,
+                )
+              }
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      )}
       {event && event.drawApproved !== true && (
         <div className="notice">
           <span>
@@ -3888,7 +3967,7 @@ function RunDesk({
       )}
       <div className="run-desk-grid">
         <section className={`panel desk-entry ${selected?.headerFreeRun || selected?.heelerFreeRun ? "free-run-panel" : ""} ${selected && repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) ? "repeat-team-panel" : ""}`}>
-          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>Round {activeRound} · {isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Team #${selected.originalTeamNumber ?? selected.drawPosition}${activeRound > 1 ? ` · Draw #${selected.drawPosition}` : ""}` : "Round complete"}</h3></div></div>
+          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>Round {activeRound} · {activeRunSaveStatus === "saving" ? "Saving Roping Now…" : activeRunSaveStatus === "error" ? "Roping Now save failed" : activeRunSaveStatus === "saved" ? "Roping Now saved" : isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Team #${selected.originalTeamNumber ?? selected.drawPosition}${activeRound > 1 ? ` · Draw #${selected.drawPosition}` : ""}` : "Round complete"}</h3></div></div>
           {selected ? (
             <>
               <div className="active-team">

@@ -765,6 +765,9 @@ main { grid-column: 2; min-width: 0; }
 .app-shell select option { color: #eadcc6; background: #15100d; }
 .app-shell .row-actions button { color: #c5b29d; background: #241a14; border-color: #49372b; }
 .app-shell .notice { color: #e1bd84; background: #2b2013; border-color: #62492d; }
+.app-shell .notice.success { color: #bfe3c3; background: #17271a; border-color: #365c3b; }
+.app-shell .notice.error { color: #efb1aa; background: #351b18; border-color: #6f3c36; }
+.app-shell .notice.error button { padding: 6px 10px; border: 1px solid currentColor; border-radius: 6px; font-weight: 800; }
 .app-shell .form-error { color: #efb1aa; background: #351b18; border-color: #6f3c36; }
 .app-shell .tag.amber,
 .app-shell .tag.upcoming { color: #edc181; background: #3a2916; }

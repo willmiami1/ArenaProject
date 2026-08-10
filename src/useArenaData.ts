@@ -14,6 +14,11 @@ import {
   publishPublicSchedule,
   requestWixData,
 } from "./wixBridge";
+import {
+  applyActiveRunSelection,
+  LatestActiveRunSaveQueue,
+  type ActiveRunSelection,
+} from "./activeRunSaveQueue";
 
 const STORAGE_KEY = "arena-command-data-v1";
 const PARTICIPANT_DATABASE_VERSION = 4;
@@ -366,11 +371,19 @@ export function useArenaData() {
   const automaticRetryCount = useRef(0);
   const lastFailedSnapshot = useRef("");
   const saveRetryTimer = useRef(0);
+  const saveIdleWaiters = useRef<Array<() => void>>([]);
+  const activeRunSaveQueue = useRef<LatestActiveRunSaveQueue<ArenaData> | null>(
+    null,
+  );
   const dataRef = useRef(data);
   const persistedDataRef = useRef(data);
   const statusRef = useRef(status);
   dataRef.current = data;
   statusRef.current = status;
+  const releaseSaveIdleWaiters = () => {
+    const waiters = saveIdleWaiters.current.splice(0);
+    waiters.forEach((resolve) => resolve());
+  };
   const refreshFromWix = useCallback(async () => {
     if (!isWixEmbed()) {
       throw new Error("Open Arena Command from the published Wix site to refresh live data.");
@@ -421,10 +434,7 @@ export function useArenaData() {
       localDirty.current = false;
       return normalized;
     }
-    if (
-      saveInFlight.current ||
-      (localDirty.current && statusRef.current !== "error")
-    ) {
+    if (saveInFlight.current) {
       throw new Error("Wait for the current workspace save to finish, then try again.");
     }
     if (statusRef.current === "error") {
@@ -523,6 +533,7 @@ export function useArenaData() {
       throw error;
     } finally {
       saveInFlight.current = false;
+      releaseSaveIdleWaiters();
       if (
         workspaceSaveNeedsFollowUp(
           submitted,
@@ -535,6 +546,56 @@ export function useArenaData() {
       }
     }
   }, []);
+
+  const saveActiveRunImmediately = useCallback(
+    (selection: ActiveRunSelection) => {
+      if (!activeRunSaveQueue.current) {
+        activeRunSaveQueue.current = new LatestActiveRunSaveQueue(
+          async (latestSelection) => {
+            while (saveInFlight.current) {
+              await new Promise<void>((resolve) => {
+                saveIdleWaiters.current.push(resolve);
+              });
+            }
+            const previousEvent = dataRef.current.events.find(
+              (event) => event.id === latestSelection.eventId,
+            );
+            try {
+              return await saveImmediately(
+                applyActiveRunSelection(dataRef.current, latestSelection),
+              );
+            } catch (error) {
+              const currentEvent = dataRef.current.events.find(
+                (event) => event.id === latestSelection.eventId,
+              );
+              if (
+                currentEvent?.activeRunId === latestSelection.activeRunId &&
+                currentEvent?.activeRound === latestSelection.activeRound
+              ) {
+                const reverted = applyActiveRunSelection(dataRef.current, {
+                  eventId: latestSelection.eventId,
+                  activeRunId: previousEvent?.activeRunId,
+                  activeRound: previousEvent?.activeRound,
+                });
+                dataRef.current = reverted;
+                localDirty.current =
+                  JSON.stringify(reverted) !==
+                  JSON.stringify(persistedDataRef.current);
+                setData(reverted);
+                window.localStorage.setItem(
+                  STORAGE_KEY,
+                  JSON.stringify(reverted),
+                );
+              }
+              throw error;
+            }
+          },
+        );
+      }
+      return activeRunSaveQueue.current.enqueue(selection);
+    },
+    [saveImmediately],
+  );
 
   useEffect(
     () => () => window.clearTimeout(saveRetryTimer.current),
@@ -690,6 +751,7 @@ export function useArenaData() {
         }
       } finally {
         saveInFlight.current = false;
+        releaseSaveIdleWaiters();
         if (
           workspaceSaveNeedsFollowUp(
             submitted,
@@ -790,5 +852,12 @@ export function useArenaData() {
     };
   }, [ready, wixConnected]);
 
-  return [data, setData, status, refreshFromWix, saveImmediately] as const;
+  return [
+    data,
+    setData,
+    status,
+    refreshFromWix,
+    saveImmediately,
+    saveActiveRunImmediately,
+  ] as const;
 }
