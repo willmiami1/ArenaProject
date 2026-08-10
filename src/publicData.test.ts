@@ -38,6 +38,7 @@ import {
   createSpectatorPrediction,
   spectatorLeaderboard,
 } from "./spectatorPredictions";
+import { runDeskSelectionToPersist } from "./runDeskActiveSelection";
 
 const event = (overrides: Partial<ArenaEvent> = {}): ArenaEvent => ({
   ...defaultCompetitionSettings,
@@ -154,6 +155,54 @@ describe("public routing", () => {
 });
 
 describe("staff save reconciliation", () => {
+  it("keeps explicit draw 3 queued after the older draw 1 save returns", () => {
+    const drawOne = run({
+      id: "draw-1",
+      drawPosition: 1,
+      status: "ready",
+      rawTime: null,
+    });
+    const drawThree = run({
+      id: "draw-3",
+      drawPosition: 3,
+      status: "ready",
+      rawTime: null,
+    });
+    const submitted = workspace(
+      event({ activeRunId: drawOne.id, activeRound: 1 }),
+      [drawOne, drawThree],
+    );
+    const current = {
+      ...submitted,
+      events: [
+        {
+          ...submitted.events[0],
+          activeRunId: drawThree.id,
+        },
+      ],
+    };
+    const saved = {
+      ...submitted,
+      revision: 2,
+      staffRevision: 2,
+    };
+
+    const merged = mergeConcurrentSavedArenaData(
+      submitted,
+      current,
+      saved,
+    );
+
+    expect(merged.events[0]).toMatchObject({
+      activeRunId: drawThree.id,
+      activeRound: 1,
+    });
+    expect(workspaceSaveNeedsFollowUp(submitted, merged, true)).toBe(true);
+    expect(
+      runDeskSelectionToPersist(merged.events[0], merged.teams, 1),
+    ).toBeNull();
+  });
+
   it("detects newer cross-device workspace revisions", () => {
     expect(
       remoteWorkspaceIsNewer(
