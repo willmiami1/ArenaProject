@@ -13,10 +13,14 @@ import {
   isWixEmbed,
   publishPublicSchedule,
   requestWixData,
+  setActiveRun,
 } from "./wixBridge";
 import {
-  applyActiveRunSelection,
+  activeRunConfirmationIsCurrent,
+  ActiveRunSaveError,
   LatestActiveRunSaveQueue,
+  reconcileActiveRunConfirmation,
+  type ActiveRunConfirmation,
   type ActiveRunSelection,
 } from "./activeRunSaveQueue";
 
@@ -367,14 +371,14 @@ export function useArenaData() {
   const preserveDirtyOnSkippedSave = useRef(false);
   const localDirty = useRef(false);
   const saveInFlight = useRef(false);
+  const activeRunSaveInFlight = useRef(false);
+  const saveIdleWaiters = useRef<Array<() => void>>([]);
   const conflictRetryCount = useRef(0);
   const automaticRetryCount = useRef(0);
   const lastFailedSnapshot = useRef("");
   const saveRetryTimer = useRef(0);
-  const saveIdleWaiters = useRef<Array<() => void>>([]);
-  const activeRunSaveQueue = useRef<LatestActiveRunSaveQueue<ArenaData> | null>(
-    null,
-  );
+  const activeRunSaveQueue =
+    useRef<LatestActiveRunSaveQueue<ActiveRunConfirmation> | null>(null);
   const dataRef = useRef(data);
   const persistedDataRef = useRef(data);
   const statusRef = useRef(status);
@@ -391,6 +395,7 @@ export function useArenaData() {
     const writePending = () =>
       localDirty.current ||
       saveInFlight.current ||
+      activeRunSaveInFlight.current ||
       statusRef.current === "saving";
     if (writePending()) {
       throw new Error("Wait for the current workspace changes to finish saving before refreshing.");
@@ -434,7 +439,7 @@ export function useArenaData() {
       localDirty.current = false;
       return normalized;
     }
-    if (saveInFlight.current) {
+    if (saveInFlight.current || activeRunSaveInFlight.current) {
       throw new Error("Wait for the current workspace save to finish, then try again.");
     }
     if (statusRef.current === "error") {
@@ -549,52 +554,67 @@ export function useArenaData() {
 
   const saveActiveRunImmediately = useCallback(
     (selection: ActiveRunSelection) => {
+      const applyConfirmation = (confirmation: ActiveRunConfirmation) => {
+        if (!activeRunConfirmationIsCurrent(dataRef.current, confirmation)) {
+          return;
+        }
+        const currentWasDirty = localDirty.current;
+        const reconciled = reconcileActiveRunConfirmation(
+          dataRef.current,
+          confirmation,
+        );
+        persistedDataRef.current = reconcileActiveRunConfirmation(
+          persistedDataRef.current,
+          confirmation,
+        );
+        skipNextSave.current = !currentWasDirty;
+        preserveDirtyOnSkippedSave.current = false;
+        localDirty.current = currentWasDirty;
+        dataRef.current = reconciled;
+        setData(reconciled);
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(reconciled));
+        setStatus(currentWasDirty ? "saving" : "saved");
+      };
       if (!activeRunSaveQueue.current) {
         activeRunSaveQueue.current = new LatestActiveRunSaveQueue(
           async (latestSelection) => {
+            if (!latestSelection.activeRunId) {
+              throw new Error("Select a valid team for Roping Now.");
+            }
             while (saveInFlight.current) {
               await new Promise<void>((resolve) => {
                 saveIdleWaiters.current.push(resolve);
               });
             }
-            const previousEvent = dataRef.current.events.find(
-              (event) => event.id === latestSelection.eventId,
-            );
+            activeRunSaveInFlight.current = true;
             try {
-              return await saveImmediately(
-                applyActiveRunSelection(dataRef.current, latestSelection),
-              );
-            } catch (error) {
-              const currentEvent = dataRef.current.events.find(
-                (event) => event.id === latestSelection.eventId,
-              );
-              if (
-                currentEvent?.activeRunId === latestSelection.activeRunId &&
-                currentEvent?.activeRound === latestSelection.activeRound
-              ) {
-                const reverted = applyActiveRunSelection(dataRef.current, {
-                  eventId: latestSelection.eventId,
-                  activeRunId: previousEvent?.activeRunId,
-                  activeRound: previousEvent?.activeRound,
-                });
-                dataRef.current = reverted;
-                localDirty.current =
-                  JSON.stringify(reverted) !==
-                  JSON.stringify(persistedDataRef.current);
-                setData(reverted);
-                window.localStorage.setItem(
-                  STORAGE_KEY,
-                  JSON.stringify(reverted),
-                );
+              return await setActiveRun({
+                eventId: latestSelection.eventId,
+                teamId: latestSelection.activeRunId,
+              });
+            } finally {
+              activeRunSaveInFlight.current = false;
+              if (localDirty.current) {
+                setStatus("saving");
+                setData((current) => ({ ...current }));
               }
-              throw error;
             }
           },
+          applyConfirmation,
         );
       }
-      return activeRunSaveQueue.current.enqueue(selection);
+      return activeRunSaveQueue.current.enqueue(selection).catch((error) => {
+        const confirmedEvent = dataRef.current.events.find(
+          (event) => event.id === selection.eventId,
+        );
+        throw new ActiveRunSaveError(error, {
+          eventId: selection.eventId,
+          activeRunId: confirmedEvent?.activeRunId,
+          activeRound: confirmedEvent?.activeRound,
+        });
+      });
     },
-    [saveImmediately],
+    [],
   );
 
   useEffect(
@@ -676,7 +696,7 @@ export function useArenaData() {
     localDirty.current = true;
     setStatus("saving");
     const timeout = window.setTimeout(async () => {
-      if (saveInFlight.current) return;
+      if (saveInFlight.current || activeRunSaveInFlight.current) return;
       saveInFlight.current = true;
       const submitted = data;
       try {
@@ -792,6 +812,7 @@ export function useArenaData() {
     const localWriteIsPending = () =>
       localDirty.current ||
       saveInFlight.current ||
+      activeRunSaveInFlight.current ||
       statusRef.current === "saving";
 
     const refreshNewerWorkspace = async () => {

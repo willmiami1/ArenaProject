@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyActiveRunSelection,
+  activeRunConfirmationIsCurrent,
   LatestActiveRunSaveQueue,
+  reconcileActiveRunConfirmation,
 } from "./activeRunSaveQueue";
 import { defaultCompetitionSettings } from "./competition";
 import type { ArenaData } from "./types";
@@ -34,17 +35,56 @@ const workspace = (): ArenaData => ({
 });
 
 describe("immediate active-run save queue", () => {
-  it("adds the explicit selection to the full workspace snapshot", () => {
-    const updated = applyActiveRunSelection(workspace(), {
+  it("reconciles only the confirmed event and revision metadata", () => {
+    const original = workspace();
+    const updated = reconcileActiveRunConfirmation(original, {
       eventId: "event",
       activeRunId: "draw-4",
       activeRound: 1,
+      revision: 7,
+      staffRevision: 6,
+      onlineRevision: 1,
+      loadedAt: "2026-08-10T18:50:00.000Z",
     });
 
     expect(updated.events[0]).toMatchObject({
       activeRunId: "draw-4",
       activeRound: 1,
     });
+    expect(updated).toMatchObject({
+      revision: 7,
+      staffRevision: 6,
+      onlineRevision: 1,
+      loadedAt: "2026-08-10T18:50:00.000Z",
+      teams: original.teams,
+      registrations: original.registrations,
+    });
+  });
+
+  it("rejects a confirmation older than the current workspace revision", () => {
+    expect(
+      activeRunConfirmationIsCurrent({ revision: 8 }, { revision: 7 }),
+    ).toBe(false);
+    expect(
+      activeRunConfirmationIsCurrent({ revision: 8 }, { revision: 8 }),
+    ).toBe(true);
+  });
+
+  it("reports each successful confirmation before a later request fails", async () => {
+    const confirmed: string[] = [];
+    const queue = new LatestActiveRunSaveQueue(
+      async (selection) => {
+        if (selection.activeRunId === "draw-4") throw new Error("rejected");
+        return selection.activeRunId ?? "";
+      },
+      (saved) => confirmed.push(saved),
+    );
+
+    const first = queue.enqueue({ eventId: "event", activeRunId: "draw-3" });
+    queue.enqueue({ eventId: "event", activeRunId: "draw-4" });
+
+    await expect(first).rejects.toThrow("rejected");
+    expect(confirmed).toEqual(["draw-3"]);
   });
 
   it("serializes behind an in-flight save and persists the latest selection", async () => {

@@ -15,10 +15,12 @@ import type {
   RegistrationDeskContestantInput,
   RegistrationDeskData,
 } from "./registrationDeskData";
+import type { ActiveRunConfirmation } from "./activeRunSaveQueue";
 
 type WixAction =
   | "load"
   | "save"
+  | "setActiveRun"
   | "authenticateContestant"
   | "setContestantPin"
   | "loadPublicArenaData"
@@ -247,6 +249,7 @@ export function subscribeToWixSectionNavigation(
 function sensitiveWixAction(action: WixAction) {
   return (
     action === "authenticateContestant" ||
+    action === "setActiveRun" ||
     action === "setContestantPin" ||
     action === "loadSignupOptions" ||
     action === "startPublicSignupPayment" ||
@@ -397,6 +400,20 @@ export function requestWixData(
   data?: ArenaData,
 ) {
   return requestWix<ArenaData>(action, data);
+}
+
+export async function setActiveRun(data: {
+  eventId: string;
+  teamId: string;
+}) {
+  const confirmation = await requestWix<ActiveRunConfirmation>(
+    "setActiveRun",
+    data,
+  );
+  if (!confirmation) {
+    throw new Error("Wix did not confirm the Roping Now selection.");
+  }
+  return confirmation;
 }
 
 export function loadPublicArenaData() {

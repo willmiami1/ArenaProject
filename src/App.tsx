@@ -72,7 +72,10 @@ import {
   normalizedRunDeskRound,
   runDeskSelectionToPersist,
 } from "./runDeskActiveSelection";
-import type { ActiveRunSelection } from "./activeRunSaveQueue";
+import {
+  ActiveRunSaveError,
+  type ActiveRunSelection,
+} from "./activeRunSaveQueue";
 import {
   authenticateContestant,
   isWixEmbed,
@@ -3371,7 +3374,7 @@ function RunDesk({
   teams: Team[];
   registrations: EventRegistration[];
   contestants: Contestant[];
-  onSelectActiveRun: (selection: ActiveRunSelection) => Promise<ArenaData>;
+  onSelectActiveRun: (selection: ActiveRunSelection) => Promise<unknown>;
   onUpdateEvent: (event: ArenaEvent) => void;
   onSave: (teamId: string, update: Partial<Team>) => void;
   onAddRideIn: (team: Team) => void;
@@ -3393,6 +3396,7 @@ function RunDesk({
   const [activeRunSaveError, setActiveRunSaveError] = useState("");
   const [pendingActiveSelection, setPendingActiveSelection] =
     useState<ActiveRunSelection | null>(null);
+  const activeRunRequestId = useRef(0);
   const [timeSheetPreview, setTimeSheetPreview] = useState<{
     html: string;
     fileName: string;
@@ -3479,16 +3483,28 @@ function RunDesk({
       activeRunId: teamId ?? undefined,
       activeRound: round,
     };
+    const requestId = ++activeRunRequestId.current;
     setPendingActiveSelection(selection);
     setActiveRunSaveStatus("saving");
     setActiveRunSaveError("");
     try {
       await onSelectActiveRun(selection);
+      if (requestId !== activeRunRequestId.current) return;
       setPendingActiveSelection(null);
       setActiveRunSaveStatus("saved");
     } catch (error) {
-      setSelectedRound(normalizedRunDeskRound(event.activeRound, roundCount));
-      setSelectedId(event.activeRunId ?? null);
+      if (requestId !== activeRunRequestId.current) return;
+      const confirmed =
+        error instanceof ActiveRunSaveError
+          ? error.confirmedSelection
+          : {
+              activeRound: event.activeRound,
+              activeRunId: event.activeRunId,
+            };
+      setSelectedRound(
+        normalizedRunDeskRound(confirmed.activeRound, roundCount),
+      );
+      setSelectedId(confirmed.activeRunId ?? null);
       setActiveRunSaveStatus("error");
       setActiveRunSaveError(
         error instanceof Error
