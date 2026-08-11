@@ -174,20 +174,10 @@ export function registrationDeskRoleCandidates(
   registrations: EventRegistration[],
   role: "Header" | "Heeler",
 ) {
-  const requiresDraw = event.competitionType === "pick-and-draw";
   return contestants.filter(
     (contestant) =>
       canFillRole(contestant, role) &&
-      withinRoleHandicap(event, contestant, role) &&
-      (!requiresDraw ||
-        registrations.some(
-          (registration) =>
-            registration.eventId === event.id &&
-            registration.contestantId === contestant.id &&
-            !registration.sourceTeamId &&
-            registration.status === "entered" &&
-            Number(registration.entries) > 0,
-        )),
+      withinRoleHandicap(event, contestant, role),
   );
 }
 
