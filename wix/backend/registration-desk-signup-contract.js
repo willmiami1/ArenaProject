@@ -450,7 +450,12 @@ const preparePickedTeams = (workspace, event, request) => {
 };
 
 export function supportedRegistrationDeskEntryTypes(event) {
-  return [...(ENTRY_TYPES_BY_COMPETITION[event?.competitionType] || [])];
+  const projected = event?.supportedEntryTypes?.filter((entryType) =>
+    ["draws", "picked-teams"].includes(entryType),
+  );
+  return projected?.length
+    ? [...new Set(projected)]
+    : [...(ENTRY_TYPES_BY_COMPETITION[event?.competitionType] || [])];
 }
 
 export const registrationDeskDrawRecordId = (submissionId) =>

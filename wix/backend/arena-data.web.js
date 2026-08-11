@@ -431,8 +431,11 @@ async function bumpRevision(revisionId, context) {
   });
 }
 
-async function readAll(collectionId) {
-  let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
+async function readAll(collectionId, { consistentRead = false } = {}) {
+  let result = await wixData
+    .query(collectionId)
+    .limit(1000)
+    .find({ ...OPTIONS, consistentRead });
   const items = [...result.items];
   while (result.hasNext()) {
     result = await result.next();
@@ -441,9 +444,9 @@ async function readAll(collectionId) {
   return items.map((item) => JSON.parse(item.payload));
 }
 
-async function readOptionalAll(collectionId) {
+async function readOptionalAll(collectionId, options) {
   try {
-    return await readAll(collectionId);
+    return await readAll(collectionId, options);
   } catch (error) {
     if (error?.code === "WDE0025" || error?.code === "WDE0026") return [];
     throw error;
@@ -497,27 +500,33 @@ async function replaceAll(collectionId, records) {
   }
 }
 
-async function readWorkspace({ includeSpectators = true } = {}) {
+async function readWorkspace({
+  includeSpectators = true,
+  consistentRead = false,
+} = {}) {
+  const readOptions = { ...OPTIONS, consistentRead };
   const [settings, staffRevision, onlineRevision] = await Promise.all([
-    wixData.get(SETTINGS_COLLECTION, SETTINGS_ID, OPTIONS).catch(() => null),
     wixData
-      .get(SETTINGS_COLLECTION, STAFF_REVISION_ID, OPTIONS)
+      .get(SETTINGS_COLLECTION, SETTINGS_ID, readOptions)
       .catch(() => null),
     wixData
-      .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
+      .get(SETTINGS_COLLECTION, STAFF_REVISION_ID, readOptions)
+      .catch(() => null),
+    wixData
+      .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, readOptions)
       .catch(() => null),
   ]);
   const [meets, events, contestants, teams, registrations, spectators, spectatorPredictions] = await Promise.all([
-    readAll(COLLECTIONS.meets),
-    readAll(COLLECTIONS.events),
-    readAll(COLLECTIONS.contestants),
-    readAll(COLLECTIONS.teams),
-    readAll(COLLECTIONS.registrations),
+    readAll(COLLECTIONS.meets, { consistentRead }),
+    readAll(COLLECTIONS.events, { consistentRead }),
+    readAll(COLLECTIONS.contestants, { consistentRead }),
+    readAll(COLLECTIONS.teams, { consistentRead }),
+    readAll(COLLECTIONS.registrations, { consistentRead }),
     includeSpectators
-      ? readOptionalAll(COLLECTIONS.spectators)
+      ? readOptionalAll(COLLECTIONS.spectators, { consistentRead })
       : Promise.resolve([]),
     includeSpectators
-      ? readOptionalAll(COLLECTIONS.spectatorPredictions)
+      ? readOptionalAll(COLLECTIONS.spectatorPredictions, { consistentRead })
       : Promise.resolve([]),
   ]);
   return {
@@ -1095,6 +1104,7 @@ function registrationDeskProjection(workspace) {
         maxContestantHandicap,
         maxHeaders,
         maxHeelers,
+        supportedEntryTypes,
       }) => ({
         id,
         parentEventId,
@@ -1117,6 +1127,7 @@ function registrationDeskProjection(workspace) {
         maxHeelers,
         supportedEntryTypes: supportedRegistrationDeskEntryTypes({
           competitionType,
+          supportedEntryTypes,
         }),
       }),
     ),
@@ -2093,62 +2104,147 @@ async function insertUniqueArenaRecord(collectionId, record) {
   }
 }
 
+async function withRegistrationDeskEventLock(eventId, callback) {
+  await ensureCredentialLockCollection();
+  const lockKey = `registration-desk:${eventId}`;
+  const owner = randomBytes(16).toString("hex");
+  const slotDuration = 10 * 60 * 1000;
+  for (let attempt = 1; attempt <= 30; attempt += 1) {
+    const currentSlot = Math.floor(Date.now() / slotDuration);
+    const slotKeys = [currentSlot, currentSlot + 1].map(
+      (slot) => `${lockKey}:${slot}`,
+    );
+    const insertedLockIds = [];
+    try {
+      for (const slotKey of slotKeys) {
+        const lockId = arenaRecordStorageId(
+          CREDENTIAL_LOCKS_COLLECTION,
+          slotKey,
+        );
+        await wixData.insert(
+          CREDENTIAL_LOCKS_COLLECTION,
+          {
+            _id: lockId,
+            emailNormalized: `${slotKey}:${owner}`,
+            expiresAt: new Date((currentSlot + 2) * slotDuration),
+          },
+          OPTIONS,
+        );
+        insertedLockIds.push(lockId);
+      }
+      try {
+        return await callback();
+      } finally {
+        await Promise.allSettled(
+          insertedLockIds.map((lockId) =>
+            wixData.remove(CREDENTIAL_LOCKS_COLLECTION, lockId, OPTIONS),
+          ),
+        );
+      }
+    } catch (error) {
+      await Promise.allSettled(
+        insertedLockIds.map((lockId) =>
+          wixData.remove(CREDENTIAL_LOCKS_COLLECTION, lockId, OPTIONS),
+        ),
+      );
+      const currentLocks = await Promise.all(
+        slotKeys.map((slotKey) =>
+          wixData
+            .get(
+              CREDENTIAL_LOCKS_COLLECTION,
+              arenaRecordStorageId(CREDENTIAL_LOCKS_COLLECTION, slotKey),
+              { ...OPTIONS, consistentRead: true },
+            )
+            .catch(() => null),
+        ),
+      );
+      if (!currentLocks.some(Boolean)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 25));
+    }
+  }
+  throw new Error("Registration is busy processing another entry. Try again.");
+}
+
 async function createRegistrationDeskSignupRecords(request) {
   const eventId = request?.eventId;
   if (!validAppId(eventId)) {
     throw new Error("Invalid signup request.");
   }
-  const workspace = await readWorkspace();
-  const event = workspace.events.find((item) => item.id === eventId);
-  if (!event) throw new Error("Competition not found.");
-  assertRegistrationDeskOpen(event);
-  const prepared = prepareRegistrationDeskSignup(workspace, request);
-  const submissionFingerprint = createHash("sha256")
-    .update(JSON.stringify(prepared.fingerprintPayload))
-    .digest("hex");
-  const repeated = registrationDeskSignupIsRetry(
-    workspace,
-    prepared,
-    submissionFingerprint,
-  );
-  const metadata = {
-    submissionFingerprint,
-    submittedAt: new Date().toISOString(),
-  };
-  const registrations = prepared.registrations.map((registration) => ({
-    ...registration,
-    ...metadata,
-  }));
-  const teams = prepared.teams.map((team) => ({ ...team, ...metadata }));
-
-  const insertResults = await Promise.allSettled([
-    ...teams.map((team) => insertUniqueArenaRecord(COLLECTIONS.teams, team)),
-    ...registrations.map((registration) =>
-      insertUniqueArenaRecord(COLLECTIONS.registrations, registration),
-    ),
-  ]);
-  const failedInsert = insertResults.find(
-    (result) => result.status === "rejected",
-  );
-  if (failedInsert) throw failedInsert.reason;
-  await bumpRevision(STAFF_REVISION_ID, {
-    action: "submitRegistrationDeskSignup",
-    entryType: prepared.canonicalRequest.entryType,
-    payerContestantId: prepared.canonicalRequest.payerContestantId,
-    competitionId: event.id,
-    submissionId: request.submissionId,
+  return withRegistrationDeskEventLock(eventId, async () => {
+    const workspace = await readWorkspace({ consistentRead: true });
+    const event = workspace.events.find((item) => item.id === eventId);
+    if (!event) throw new Error("Competition not found.");
+    assertRegistrationDeskOpen(event);
+    const prepared = prepareRegistrationDeskSignup(workspace, request);
+    const submissionFingerprint = createHash("sha256")
+      .update(JSON.stringify(prepared.fingerprintPayload))
+      .digest("hex");
+    const repeated = registrationDeskSignupIsRetry(
+      workspace,
+      prepared,
+      submissionFingerprint,
+    );
+    const metadata = {
+      submissionFingerprint,
+      submittedAt: new Date().toISOString(),
+    };
+    const records = [
+      ...prepared.teams.map((record) => ({
+        collectionId: COLLECTIONS.teams,
+        record: { ...record, ...metadata },
+      })),
+      ...prepared.registrations.map((record) => ({
+        collectionId: COLLECTIONS.registrations,
+        record: { ...record, ...metadata },
+      })),
+    ];
+    const inserted = [];
+    try {
+      for (const item of records) {
+        if (await insertUniqueArenaRecord(item.collectionId, item.record)) {
+          inserted.push(item);
+        }
+      }
+    } catch (error) {
+      const cleanupResults = await Promise.allSettled(
+        inserted.map(({ collectionId, record }) =>
+          wixData.remove(
+            collectionId,
+            arenaRecordStorageId(collectionId, record.id),
+            OPTIONS,
+          ),
+        ),
+      );
+      if (cleanupResults.some((result) => result.status === "rejected")) {
+        console.error("Registration Desk batch rollback failed.", {
+          eventId,
+          submissionId: request.submissionId,
+        });
+        throw new Error(
+          "The entry could not be completed or safely rolled back. Contact an administrator.",
+        );
+      }
+      throw error;
+    }
+    await bumpRevision(STAFF_REVISION_ID, {
+      action: "submitRegistrationDeskSignup",
+      entryType: prepared.canonicalRequest.entryType,
+      payerContestantId: prepared.canonicalRequest.payerContestantId,
+      competitionId: event.id,
+      submissionId: request.submissionId,
+    });
+    const freshWorkspace = await readWorkspace({ consistentRead: true });
+    await savePublicScheduleSnapshot(freshWorkspace);
+    return {
+      submissionId: request.submissionId,
+      competitionId: event.id,
+      entryType: prepared.canonicalRequest.entryType,
+      payerContestantId: prepared.canonicalRequest.payerContestantId,
+      recordIds: prepared.recordIds,
+      existing: repeated,
+      data: registrationDeskProjection(freshWorkspace),
+    };
   });
-  const freshWorkspace = await readWorkspace();
-  await savePublicScheduleSnapshot(freshWorkspace);
-  return {
-    submissionId: request.submissionId,
-    competitionId: event.id,
-    entryType: prepared.canonicalRequest.entryType,
-    payerContestantId: prepared.canonicalRequest.payerContestantId,
-    recordIds: prepared.recordIds,
-    existing: repeated,
-    data: registrationDeskProjection(freshWorkspace),
-  };
 }
 
 export const submitOnlineSignup = webMethod(
