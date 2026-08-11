@@ -199,29 +199,7 @@ describe("Registration Desk local mirror", () => {
     expect(result.result.recordIds.teams).toHaveLength(2);
   });
 
-  it("requires all Pick and Draw riders to have pre-existing draws", () => {
-    const selectedEvent = event("pick-and-draw");
-    const partial = workspace(selectedEvent, {
-      registrations: [drawRegistration(selectedEvent, "header-1")],
-    });
-    expect(() =>
-      submitLocalRegistrationDeskSignup(partial, picked(selectedEvent)),
-    ).toThrow(/Every rider/);
-
-    const complete = {
-      ...partial,
-      registrations: [
-        ...partial.registrations,
-        drawRegistration(selectedEvent, "heeler-1"),
-      ],
-    };
-    expect(
-      submitLocalRegistrationDeskSignup(complete, picked(selectedEvent)).data
-        .teams,
-    ).toHaveLength(1);
-  });
-
-  it.each(["pick-only", "slide"] as const)(
+  it.each(["pick-only", "pick-and-draw", "slide"] as const)(
     "allows %s teams without draw registrations",
     (competitionType) => {
       const selectedEvent = event(competitionType);

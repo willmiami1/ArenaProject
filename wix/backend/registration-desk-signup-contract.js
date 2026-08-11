@@ -106,22 +106,6 @@ const teamCountByRider = (teams) => {
   return counts;
 };
 
-const hasPreExistingDrawRegistration = (
-  workspace,
-  eventId,
-  contestantId,
-  submissionId,
-) =>
-  (workspace.registrations || []).some(
-    (registration) =>
-      registration.eventId === eventId &&
-      registration.contestantId === contestantId &&
-      !registration.sourceTeamId &&
-      !isCurrentStaffSubmission(registration, submissionId) &&
-      registration.status === "entered" &&
-      Number(registration.entries) > 0,
-  );
-
 const assertPayment = (request) => {
   if (!PAYMENT_METHODS.has(request.paymentMethod)) {
     fail("Choose paid in cash, paid with credit card, or open a tab.");
@@ -378,23 +362,6 @@ const preparePickedTeams = (workspace, event, request) => {
     !riders.has(request.payerContestantId)
   ) {
     fail("Choose one of the riders in this batch as the payer.");
-  }
-
-  if (event.competitionType === "pick-and-draw") {
-    riders.forEach((contestantId) => {
-      if (
-        !hasPreExistingDrawRegistration(
-          workspace,
-          event.id,
-          contestantId,
-          request.submissionId,
-        )
-      ) {
-        fail(
-          "Every rider on a picked team must already be entered in the draw.",
-        );
-      }
-    });
   }
 
   const existingTeamCounts = teamCountByRider(activeTeams);

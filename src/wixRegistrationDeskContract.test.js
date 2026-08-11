@@ -34,7 +34,7 @@ describe("Wix Registration Desk batch contract", () => {
   it("canonicalizes the discriminated picked-team request", () => {
     const prepared = prepareRegistrationDeskSignup(
       {
-        events: [event],
+        events: [{ ...event, competitionType: "pick-and-draw" }],
         contestants: [contestant("header"), contestant("heeler")],
         registrations: [],
         teams: [],
