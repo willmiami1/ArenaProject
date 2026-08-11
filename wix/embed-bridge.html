@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body, iframe { width: 100%; height: 100%; margin: 0; border: 0; }
+    body { overflow: hidden; }
+  </style>
+</head>
+<body>
+  <iframe
+    id="arena-app"
+    title="Destiny Ranch Arena"
+    src="https://willmiami1.github.io/ArenaProject/?wixHostOrigin=https%3A%2F%2Fwww.destinyrancharena.com"
+    allow="fullscreen"
+  ></iframe>
+  <script>
+    const app = document.getElementById("arena-app");
+    window.addEventListener("message", (event) => {
+      if (event.source === app.contentWindow) {
+        window.parent.postMessage(event.data, "*");
+      } else if (
+        event.source === window.parent &&
+        event.data?.source === "arena-wix-host"
+      ) {
+        app.contentWindow.postMessage(
+          event.data,
+          "https://willmiami1.github.io",
+        );
+      }
+    });
+  </script>
+</body>
+</html>
