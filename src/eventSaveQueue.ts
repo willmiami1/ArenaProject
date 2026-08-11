@@ -2,6 +2,7 @@ import type { ArenaData, ArenaEvent } from "./types";
 
 export interface EventSaveConfirmation {
   event: ArenaEvent;
+  saved?: boolean;
   revision: number;
   staffRevision: number;
   onlineRevision: number;

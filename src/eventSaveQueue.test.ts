@@ -110,6 +110,22 @@ describe("direct Event saves", () => {
     });
   });
 
+  it("accepts a saved:false acknowledgement as a successful no-op", () => {
+    const submitted = event();
+    const original = workspace(submitted);
+    const reconciled = reconcileEventSaveConfirmation(original, submitted, {
+      event: submitted,
+      saved: false,
+      revision: 10,
+      staffRevision: 7,
+      onlineRevision: 3,
+      loadedAt: "2026-08-10T22:00:00.000Z",
+    });
+
+    expect(reconciled.events[0]).toEqual(submitted);
+    expect(reconciled.revision).toBe(10);
+  });
+
   it("preserves activeRunId and activeRound during Event acknowledgement", () => {
     const submitted = event({ name: "CHANGED" });
     const current = workspace({
