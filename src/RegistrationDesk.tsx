@@ -174,13 +174,29 @@ export function RegistrationDesk() {
     () => registrationDeskEventRoster(data, eventId),
     [data, eventId],
   );
-  const rosterSections = (["Header", "Heeler"] as const).map((rosterRole) => ({
-    role: rosterRole,
-    title: `${rosterRole}s`,
-    entries: eventRoster.filter((rosterEntry) =>
-      rosterEntry.role === rosterRole,
-    ),
-  }));
+  const rosterSections = [
+    {
+      id: "header",
+      title: "Headers",
+      entries: eventRoster.filter(
+        (rosterEntry) => rosterEntry.role === "Header" && rosterEntry.recordType === "registration",
+      ),
+    },
+    {
+      id: "heeler",
+      title: "Heelers",
+      entries: eventRoster.filter(
+        (rosterEntry) => rosterEntry.role === "Heeler" && rosterEntry.recordType === "registration",
+      ),
+    },
+    {
+      id: "team",
+      title: "Picked Teams",
+      entries: eventRoster.filter(
+        (rosterEntry) => rosterEntry.recordType === "team",
+      ),
+    },
+  ];
   const entryUnavailableMessage = !event
     ? ""
     : !event.registrationOpen
@@ -775,12 +791,12 @@ export function RegistrationDesk() {
             ) : (
               <div className="registration-desk-roster-groups">
                 {rosterSections.map((section) => {
-                  const headingId = `registration-roster-${section.role.toLowerCase()}`;
+                  const headingId = `registration-roster-${section.id}`;
                   return (
                     <section
                       className="registration-desk-roster-group"
                       aria-labelledby={headingId}
-                      key={section.role}
+                      key={section.id}
                     >
                       <div className="registration-desk-roster-role-heading">
                         <h3 id={headingId}>{section.title}</h3>
