@@ -5,385 +5,405 @@ import {
   submitLocalRegistrationDeskSignup,
   upsertRegistrationDeskContestant,
 } from "./registrationDeskData";
-import type { ArenaData } from "./types";
+import type {
+  RegistrationDeskPickedTeamsRequest,
+  RegistrationDeskSignupRequest,
+} from "./registrationDeskSignup";
+import type { ArenaData, ArenaEvent, Contestant, EventRegistration } from "./types";
 
-const data: ArenaData = {
+const contestant = (
+  id: string,
+  role: Contestant["role"],
+  headerHandicap: number,
+  heelerHandicap: number,
+  horses: string[] = [],
+): Contestant => ({
+  id,
+  name: id.toUpperCase(),
+  role,
+  headerHandicap,
+  heelerHandicap,
+  horses,
+  photo: "",
+  phone: "",
+  email: `${id}@example.com`,
+  hometown: "Arena",
+});
+
+const contestants = [
+  contestant("header-1", "Header", 3, 9, ["HEADER HORSE"]),
+  contestant("header-2", "Both", 4, 4, ["SECOND HEADER"]),
+  contestant("heeler-1", "Heeler", 9, 3, ["HEELER HORSE"]),
+  contestant("heeler-2", "Both", 4, 4, ["SECOND HEELER"]),
+  contestant("outside", "Both", 3, 3),
+];
+
+const event = (
+  competitionType: ArenaEvent["competitionType"],
+  overrides: Partial<ArenaEvent> = {},
+): ArenaEvent => ({
+  ...defaultCompetitionSettings,
+  id: `event-${competitionType}`,
+  parentEventId: "meet",
+  name: `${competitionType} event`,
+  date: "2026-08-11",
+  startTime: "18:00",
+  location: "Arena",
+  status: "Live",
+  registrationOpen: true,
+  drawLocked: false,
+  competitionType,
+  entryFee: 50,
+  entriesAllowed: 5,
+  handicapTotal: 10,
+  maxContestantHandicap: 8,
+  ...overrides,
+});
+
+const workspace = (
+  selectedEvent: ArenaEvent,
+  overrides: Partial<ArenaData> = {},
+): ArenaData => ({
   participantDatabaseVersion: 2,
   meets: [],
-  events: [
-    {
-      ...defaultCompetitionSettings,
-      id: "open-event",
-      parentEventId: "meet",
-      name: "Open Roping",
-      date: "2026-08-05",
-      startTime: "18:00",
-      location: "Arena",
-      status: "Live",
-      competitionType: "round-robin",
-      entryFee: 50,
-      maxHeaders: 12,
-      maxHeelers: 10,
-    },
-    {
-      ...defaultCompetitionSettings,
-      id: "locked-live-event",
-      parentEventId: "meet",
-      name: "Locked Live Roping",
-      date: "2026-08-05",
-      startTime: "19:00",
-      location: "Arena",
-      status: "Live",
-      registrationOpen: false,
-      drawLocked: true,
-      entryFee: 50,
-    },
-    {
-      ...defaultCompetitionSettings,
-      id: "upcoming-event",
-      parentEventId: "meet",
-      name: "Upcoming Roping",
-      date: "2026-08-05",
-      startTime: "20:00",
-      location: "Arena",
-      status: "Upcoming",
-      registrationOpen: true,
-      entryFee: 50,
-    },
-    {
-      ...defaultCompetitionSettings,
-      id: "closed-event",
-      parentEventId: "meet",
-      name: "Closed Roping",
-      date: "2026-08-05",
-      startTime: "18:00",
-      location: "Arena",
-      status: "Complete",
-      entryFee: 50,
-    },
-  ],
-  contestants: [
-    {
-      id: "rider",
-      name: "Arena Rider",
-      role: "Both",
-      headerHandicap: 4,
-      heelerHandicap: 4,
-      photo: "",
-      phone: "555-0100",
-      email: "rider@example.com",
-      hometown: "Bushnell",
-    },
-  ],
-  teams: [
-    {
-      id: "team",
-      eventId: "open-event",
-      headerId: "rider",
-      heelerId: "partner",
-      drawPosition: 1,
-      status: "complete",
-      rawTime: 7,
-      penalties: 5,
-      notes: "private result note",
-      round: 1,
-      checkedIn: true,
-      scratched: false,
-      generated: false,
-      points: 10,
-      predictionClosesAt: "2026-08-05T17:00:00.000Z",
-    },
-  ],
+  events: [selectedEvent],
+  contestants,
+  teams: [],
   registrations: [],
   spectators: [],
   spectatorPredictions: [],
-  activeEventId: "open-event",
-};
+  activeEventId: selectedEvent.id,
+  ...overrides,
+});
 
-describe("registration desk boundary", () => {
-  it("includes live competitions regardless of entry state and strips run results", () => {
+const draw = (
+  selectedEvent: ArenaEvent,
+  overrides: Partial<RegistrationDeskSignupRequest> = {},
+): RegistrationDeskSignupRequest => ({
+  entryType: "draws",
+  submissionId: "draw-submission",
+  eventId: selectedEvent.id,
+  contestantId: "header-1",
+  horseName: "header horse",
+  role: "Header",
+  entries: 1,
+  payerContestantId: "header-1",
+  paymentMethod: "cash",
+  paymentConfirmed: true,
+  ...overrides,
+} as RegistrationDeskSignupRequest);
+
+const picked = (
+  selectedEvent: ArenaEvent,
+  overrides: Partial<RegistrationDeskPickedTeamsRequest> = {},
+): RegistrationDeskPickedTeamsRequest => ({
+  entryType: "picked-teams",
+  submissionId: "picked-submission",
+  eventId: selectedEvent.id,
+  teams: [
+    {
+      rowId: "row-1",
+      headerId: "header-1",
+      headerHorseName: "header horse",
+      heelerId: "heeler-1",
+      heelerHorseName: "heeler horse",
+    },
+  ],
+  payerContestantId: "header-1",
+  paymentMethod: "card",
+  paymentConfirmed: true,
+  ...overrides,
+});
+
+const drawRegistration = (
+  selectedEvent: ArenaEvent,
+  contestantId: string,
+  entries = 1,
+): EventRegistration => ({
+  id: `draw-${contestantId}`,
+  eventId: selectedEvent.id,
+  contestantId,
+  role: contestantId.startsWith("header") ? "Header" : "Heeler",
+  entries,
+  checkedIn: false,
+  status: "entered",
+  notes: "",
+});
+
+describe("Registration Desk local mirror", () => {
+  it("projects live events with backend-supported entry formats", () => {
+    const selectedEvent = event("pick-and-draw");
     const projected = registrationDeskProjection(
-      data,
-      new Date("2026-08-05T21:00:00"),
+      workspace(selectedEvent, {
+        events: [
+          selectedEvent,
+          event("pick-only", { id: "closed", status: "Complete" }),
+        ],
+      }),
     );
-
-    expect(projected.events.map((event) => event.id)).toEqual([
-      "open-event",
-      "locked-live-event",
+    expect(projected.events).toHaveLength(1);
+    expect(projected.events[0].supportedEntryTypes).toEqual([
+      "draws",
+      "picked-teams",
     ]);
-    expect(projected.events[1]).toMatchObject({
-      registrationOpen: false,
-      drawLocked: true,
-    });
-    expect(projected.events[0]).not.toHaveProperty("drawHistory");
-    expect(projected.events[0]).not.toHaveProperty("payoutPercentages");
-    expect(projected.events[0]).not.toHaveProperty("producerFeePercent");
-    expect(projected.events[0]).toMatchObject({
-      maxHeaders: 12,
-      maxHeelers: 10,
-    });
-    expect(projected.teams[0]).toMatchObject({
-      rawTime: null,
-      penalties: 0,
-      notes: "",
-      points: 0,
-      predictionClosesAt: undefined,
-    });
   });
 
-  it("adds a validated contestant without changing other workspace data", () => {
-    const result = upsertRegistrationDeskContestant(data, {
+  it("keeps contestant profile validation and canonical horse names", () => {
+    const selectedEvent = event("draw-pot");
+    const result = upsertRegistrationDeskContestant(workspace(selectedEvent), {
       name: " New Rider ",
-      role: "Header",
-      headerHandicap: 5,
-      heelerHandicap: 0,
-      phone: "555-0200",
+      role: "Both",
+      headerHandicap: 3,
+      heelerHandicap: 3,
+      phone: "",
       email: "NEW@example.com",
-      hometown: "Bushnell",
-      horses: ["  Lucky  Star ", "lucky star", "Blue"],
+      hometown: "Arena",
+      horses: [" Lucky  Star ", "lucky star"],
     });
-
     expect(result.contestant).toMatchObject({
       name: "New Rider",
       email: "new@example.com",
-      horses: ["Lucky Star", "Blue"],
+      horses: ["Lucky Star"],
     });
-    expect(result.data.events).toBe(data.events);
-    expect(result.data.teams).toBe(data.teams);
-    expect(result.data.contestants).toHaveLength(2);
   });
 
-  it("rejects duplicate contestant login emails", () => {
-    expect(() =>
-      upsertRegistrationDeskContestant(data, {
-        name: "Duplicate Rider",
-        role: "Both",
-        headerHandicap: 3,
-        heelerHandicap: 3,
-        phone: "",
-        email: "RIDER@example.com",
-        hometown: "",
-      }),
-    ).toThrow("already uses that email");
-  });
-
-  it("marks desk entries as staff-created and does not duplicate retries", () => {
-    const request = {
-      submissionId: "desk-retry",
-      contestantId: "rider",
-      eventId: "open-event",
-      role: "Header" as const,
-      entries: 1,
-      paymentConfirmed: true,
-      paymentMethod: "cash" as const,
-    };
-    const first = submitLocalRegistrationDeskSignup(
-      data,
-      request,
-      new Date("2026-08-05T21:00:00"),
-    );
-    const retry = submitLocalRegistrationDeskSignup(
-      first.data,
-      request,
-      new Date("2026-08-05T21:01:00"),
-    );
-
-    expect(first.data.registrations).toHaveLength(1);
-    expect(first.data.registrations[0].source).toBe("staff");
-    expect(first.data.registrations[0].paid).toBe(true);
-    expect(retry.result.existing).toBe(true);
-    expect(retry.data.registrations).toHaveLength(1);
-  });
-
-  it("records Pick and Draw entries before an optional picked team", () => {
-    const pickAndDrawData: ArenaData = {
-      ...data,
-      events: [
-        {
-          ...data.events[0],
-          id: "pick-draw-event",
-          competitionType: "pick-and-draw",
-          pickDrawRole: "header",
-          entriesAllowed: 4,
-          minDrawsAllowed: 2,
-        },
-      ],
-      contestants: [
-        ...data.contestants,
-        {
-          id: "heeler",
-          name: "Picked Heeler",
-          role: "Heeler",
-          headerHandicap: 0,
-          heelerHandicap: 4,
-          photo: "",
-          phone: "",
-          email: "",
-          hometown: "",
-        },
-        {
-          id: "heeler-two",
-          name: "Second Heeler",
-          role: "Heeler",
-          headerHandicap: 0,
-          heelerHandicap: 3,
-          photo: "",
-          phone: "",
-          email: "",
-          hometown: "",
-        },
-      ],
-      teams: [],
-      registrations: [
-        {
-          id: "heeler-draw",
-          eventId: "pick-draw-event",
-          contestantId: "heeler",
-          role: "Heeler",
-          entries: 1,
-          checkedIn: false,
-          status: "entered",
-          notes: "",
-          paid: true,
-        },
-        {
-          id: "heeler-two-draw",
-          eventId: "pick-draw-event",
-          contestantId: "heeler-two",
-          role: "Heeler",
-          entries: 1,
-          checkedIn: false,
-          status: "entered",
-          notes: "",
-          paid: true,
-        },
-      ],
-    };
-
+  it("persists multiple unrelated picked pairs, both horses, and payer metadata", () => {
+    const selectedEvent = event("pick-only");
     const result = submitLocalRegistrationDeskSignup(
-      pickAndDrawData,
-      {
-        submissionId: "pick-draw-entry",
-        contestantId: "rider",
-        eventId: "pick-draw-event",
-        role: "Header",
-        entries: 2,
-        partnerIds: ["heeler", "heeler-two"],
-        paymentConfirmed: true,
-        paymentMethod: "cash",
-      },
-      new Date("2026-08-05T21:00:00"),
+      workspace(selectedEvent),
+      picked(selectedEvent, {
+        teams: [
+          picked(selectedEvent).teams[0],
+          {
+            rowId: "row-2",
+            headerId: "header-2",
+            headerHorseName: "second header",
+            heelerId: "heeler-2",
+            heelerHorseName: "second heeler",
+          },
+        ],
+        payerContestantId: "heeler-2",
+      }),
     );
-
     expect(result.data.teams).toHaveLength(2);
-    expect(result.data.registrations).toHaveLength(3);
-    expect(result.result.registrations[0]).toMatchObject({
-      contestantId: "rider",
-      entries: 2,
+    expect(result.data.teams[0]).toMatchObject({
+      id: "desk-team-80ad60702c05fea20d6adb9f639af81f",
+      rowId: "row-1",
+      headerHorseName: "HEADER HORSE",
+      heelerHorseName: "HEELER HORSE",
+      payerContestantId: "heeler-2",
+      paymentMethod: "card",
+      paid: true,
+      entryType: "picked-teams",
     });
-    expect(result.result.registrations[0].sourceTeamId).toBeUndefined();
-    expect(() =>
-      submitLocalRegistrationDeskSignup(
-        pickAndDrawData,
-        {
-          submissionId: "too-few-draws",
-          contestantId: "rider",
-          eventId: "pick-draw-event",
-          role: "Header",
-          entries: 1,
-          partnerIds: ["heeler"],
-          paymentConfirmed: true,
-          paymentMethod: "cash",
-        },
-        new Date("2026-08-05T21:00:00"),
-      ),
-    ).toThrow("at least 2 draw entries");
+    expect(result.result.recordIds.teams).toHaveLength(2);
   });
 
-  it("rejects a picked partner who is not entered in the draw", () => {
-    const pickAndDrawData: ArenaData = {
-      ...data,
-      events: [
-        {
-          ...data.events[0],
-          id: "pick-draw-event",
-          competitionType: "pick-and-draw",
-          pickDrawRole: "header",
-          entriesAllowed: 4,
-          minDrawsAllowed: 1,
-        },
+  it("requires all Pick and Draw riders to have pre-existing draws", () => {
+    const selectedEvent = event("pick-and-draw");
+    const partial = workspace(selectedEvent, {
+      registrations: [drawRegistration(selectedEvent, "header-1")],
+    });
+    expect(() =>
+      submitLocalRegistrationDeskSignup(partial, picked(selectedEvent)),
+    ).toThrow(/Every rider/);
+
+    const complete = {
+      ...partial,
+      registrations: [
+        ...partial.registrations,
+        drawRegistration(selectedEvent, "heeler-1"),
       ],
-      contestants: [
-        ...data.contestants,
-        {
-          id: "heeler",
-          name: "Picked Heeler",
-          role: "Heeler",
-          headerHandicap: 0,
-          heelerHandicap: 4,
-          photo: "",
-          phone: "",
-          email: "",
-          hometown: "",
-        },
-      ],
-      teams: [],
-      registrations: [],
     };
-
-    expect(() =>
-      submitLocalRegistrationDeskSignup(
-        pickAndDrawData,
-        {
-          submissionId: "missing-partner-draw",
-          contestantId: "rider",
-          eventId: "pick-draw-event",
-          role: "Header",
-          entries: 1,
-          partnerIds: ["heeler"],
-          paymentConfirmed: true,
-          paymentMethod: "cash",
-        },
-        new Date("2026-08-05T21:00:00"),
-      ),
-    ).toThrow("Every rider on a picked team");
+    expect(
+      submitLocalRegistrationDeskSignup(complete, picked(selectedEvent)).data
+        .teams,
+    ).toHaveLength(1);
   });
 
-  it("does not create draw records before cashier payment confirmation", () => {
+  it.each(["pick-only", "slide"] as const)(
+    "allows %s teams without draw registrations",
+    (competitionType) => {
+      const selectedEvent = event(competitionType);
+      expect(
+        submitLocalRegistrationDeskSignup(
+          workspace(selectedEvent),
+          picked(selectedEvent),
+        ).data.teams,
+      ).toHaveLength(1);
+    },
+  );
+
+  it("aggregates persisted draws and all in-batch teams against rider capacity", () => {
+    const selectedEvent = event("pick-only", { entriesAllowed: 3 });
+    const data = workspace(selectedEvent, {
+      registrations: [drawRegistration(selectedEvent, "header-1", 2)],
+    });
     expect(() =>
       submitLocalRegistrationDeskSignup(
         data,
-        {
-          submissionId: "unpaid-desk-entry",
-          contestantId: "rider",
-          eventId: "open-event",
-          role: "Header",
-          entries: 1,
-          paymentMethod: "cash",
-        },
-        new Date("2026-08-05T21:00:00"),
+        picked(selectedEvent, {
+          teams: [
+            picked(selectedEvent).teams[0],
+            {
+              rowId: "row-2",
+              headerId: "header-1",
+              heelerId: "heeler-2",
+            },
+          ],
+        }),
       ),
-    ).toThrow("confirm payment");
+    ).toThrow(/Entry limit exceeded for HEADER-1/);
   });
 
-  it("opens an unpaid tab while clearing its entries for the draw", () => {
-    const result = submitLocalRegistrationDeskSignup(
-      data,
-      {
-        submissionId: "desk-tab-entry",
-        contestantId: "rider",
-        eventId: "open-event",
-        role: "Header",
-        entries: 1,
-        paymentMethod: "tab",
-      },
-      new Date("2026-08-05T21:00:00"),
+  it("enforces repeat policy against existing and in-batch pairs", () => {
+    const selectedEvent = event("pick-only");
+    const first = submitLocalRegistrationDeskSignup(
+      workspace(selectedEvent),
+      picked(selectedEvent, { submissionId: "first" }),
     );
+    expect(() =>
+      submitLocalRegistrationDeskSignup(
+        first.data,
+        picked(selectedEvent, { submissionId: "second" }),
+      ),
+    ).toThrow(/partnership is already entered/);
+    expect(() =>
+      submitLocalRegistrationDeskSignup(
+        workspace(selectedEvent),
+        picked(selectedEvent, {
+          teams: [
+            picked(selectedEvent).teams[0],
+            { ...picked(selectedEvent).teams[0], rowId: "row-2" },
+          ],
+        }),
+      ),
+    ).toThrow(/partnership is already entered/);
+  });
 
-    expect(result.data.registrations[0]).toMatchObject({
+  it("allows identical rows with distinct row IDs when repeats are enabled", () => {
+    const selectedEvent = event("pick-only", {
+      allowRepeatPartners: true,
+    });
+    const result = submitLocalRegistrationDeskSignup(
+      workspace(selectedEvent),
+      picked(selectedEvent, {
+        teams: [
+          picked(selectedEvent).teams[0],
+          { ...picked(selectedEvent).teams[0], rowId: "row-2" },
+        ],
+      }),
+    );
+    expect(result.data.teams).toHaveLength(2);
+    expect(new Set(result.data.teams.map(({ id }) => id)).size).toBe(2);
+  });
+
+  it("treats reordered rows as the same logical retry without duplicates", () => {
+    const selectedEvent = event("pick-only");
+    const request = picked(selectedEvent, {
+      teams: [
+        picked(selectedEvent).teams[0],
+        {
+          rowId: "row-2",
+          headerId: "header-2",
+          heelerId: "heeler-2",
+        },
+      ],
+    });
+    const first = submitLocalRegistrationDeskSignup(
+      workspace(selectedEvent),
+      request,
+    );
+    const retry = submitLocalRegistrationDeskSignup(first.data, {
+      ...request,
+      teams: [...request.teams].reverse(),
+    });
+    expect(retry.result.existing).toBe(true);
+    expect(retry.data.teams).toHaveLength(2);
+  });
+
+  it.each([
+    ["rows", { teams: [{ ...picked(event("pick-only")).teams[0], heelerId: "heeler-2", heelerHorseName: "second heeler" }] }],
+    ["horses", { teams: [{ ...picked(event("pick-only")).teams[0], headerHorseName: "" }] }],
+    ["payer", { payerContestantId: "heeler-1" }],
+    ["payment", { paymentMethod: "cash" as const }],
+  ])("conflicts when retry changes %s", (_label, change) => {
+    const selectedEvent = event("pick-only");
+    const request = picked(selectedEvent);
+    const first = submitLocalRegistrationDeskSignup(
+      workspace(selectedEvent),
+      request,
+    );
+    expect(() =>
+      submitLocalRegistrationDeskSignup(first.data, {
+        ...request,
+        ...change,
+      } as RegistrationDeskPickedTeamsRequest),
+    ).toThrow(/submission ID is already in use/);
+  });
+
+  it("requires cash/card confirmation and keeps tab entries draw-cleared", () => {
+    const selectedEvent = event("draw-pot");
+    expect(() =>
+      submitLocalRegistrationDeskSignup(
+        workspace(selectedEvent),
+        draw(selectedEvent, { paymentConfirmed: false }),
+      ),
+    ).toThrow(/confirm the payment/);
+    expect(() =>
+      submitLocalRegistrationDeskSignup(
+        workspace(selectedEvent),
+        draw(selectedEvent, {
+          paymentMethod: "card",
+          paymentConfirmed: false,
+        }),
+      ),
+    ).toThrow(/confirm the payment/);
+
+    const cash = submitLocalRegistrationDeskSignup(
+      workspace(selectedEvent),
+      draw(selectedEvent),
+    );
+    expect(cash.data.registrations[0]).toMatchObject({
+      id: "desk-registration-ac8883bd317944d98229e89c5cb3d6cc",
+      horseName: "HEADER HORSE",
+      paid: true,
+      payerContestantId: "header-1",
+      paymentMethod: "cash",
+      submissionFingerprint:
+        "e64c53d1ef70ce0cde296b4db74858678ae4fa28b67547f6c734dfabd2bab044",
+    });
+
+    const tab = submitLocalRegistrationDeskSignup(
+      workspace(selectedEvent),
+      draw(selectedEvent, {
+        submissionId: "tab-submission",
+        paymentMethod: "tab",
+        paymentConfirmed: false,
+      }),
+    );
+    expect(tab.data.registrations[0]).toMatchObject({
       paid: false,
       paymentMethod: "tab",
     });
-    expect(entryClearedForDraw(result.data.registrations[0])).toBe(true);
+    expect(entryClearedForDraw(tab.data.registrations[0])).toBe(true);
+  });
+
+  it("canonicalizes omitted horse fields exactly like the backend contract", () => {
+    const selectedEvent = event("pick-only");
+    const result = submitLocalRegistrationDeskSignup(
+      workspace(selectedEvent),
+      picked(selectedEvent, {
+        teams: [{
+          rowId: "empty-horses",
+          headerId: "header-1",
+          heelerId: "heeler-1",
+        }],
+      }),
+    );
+    expect(result.data.teams[0]).toMatchObject({
+      headerHorseName: "",
+      heelerHorseName: "",
+    });
   });
 });

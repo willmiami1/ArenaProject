@@ -13,6 +13,8 @@ export interface RegistrationDeskRosterEntry {
   horseName?: string;
   paid?: boolean;
   paymentMethod?: "cash" | "card" | "tab";
+  payerContestantId?: string;
+  payerName?: string;
   partnerName?: string;
   generated: boolean;
 }
@@ -51,6 +53,10 @@ export function registrationDeskEventRoster(
       horseName: registration.horseName,
       paid: registration.paid,
       paymentMethod: registration.paymentMethod,
+      payerContestantId: registration.payerContestantId,
+      payerName: registration.payerContestantId
+        ? contestants.get(registration.payerContestantId)?.name
+        : undefined,
       generated: false,
     }];
   });
@@ -73,6 +79,10 @@ export function registrationDeskEventRoster(
         horseName: team.headerHorseName,
         paid: team.paid,
         paymentMethod: team.paymentMethod,
+        payerContestantId: team.payerContestantId,
+        payerName: team.payerContestantId
+          ? contestants.get(team.payerContestantId)?.name
+          : undefined,
         partnerName: heeler?.name,
         generated: team.generated,
       });
@@ -90,6 +100,10 @@ export function registrationDeskEventRoster(
         horseName: team.heelerHorseName,
         paid: team.paid,
         paymentMethod: team.paymentMethod,
+        payerContestantId: team.payerContestantId,
+        payerName: team.payerContestantId
+          ? contestants.get(team.payerContestantId)?.name
+          : undefined,
         partnerName: header?.name,
         generated: team.generated,
       });

@@ -53,6 +53,8 @@ const team = (
   scratched,
   generated: false,
   points: 0,
+  payerContestantId: "heeler",
+  paymentMethod: "tab",
 });
 
 const data = (
@@ -89,6 +91,12 @@ describe("Registration Desk competition roster entries", () => {
     expect(roster.find((entry) => entry.key === "team:team-one:Header")).toMatchObject({
       partnerName: "Heeler",
       horseName: "HEADER HORSE",
+      payerName: "Heeler",
+      paymentMethod: "tab",
+    });
+    expect(roster.find((entry) => entry.key === "team:team-one:Heeler")).toMatchObject({
+      horseName: "HEELER HORSE",
+      payerName: "Heeler",
     });
     expect(roster[0]).not.toHaveProperty("phone");
     expect(roster[0]).not.toHaveProperty("email");

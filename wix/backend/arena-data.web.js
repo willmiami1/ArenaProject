@@ -21,6 +21,11 @@ import {
   getPublicSignupPaymentStatus as readPublicSignupPaymentStatus,
   loadPublicSignupOptions,
 } from "./public-signup-payments";
+import {
+  prepareRegistrationDeskSignup,
+  registrationDeskSignupIsRetry,
+  supportedRegistrationDeskEntryTypes,
+} from "./registration-desk-signup-contract";
 
 const COLLECTIONS = {
   meets: "ArenaMeets",
@@ -1088,6 +1093,8 @@ function registrationDeskProjection(workspace) {
         allowRepeatPartners,
         handicapTotal,
         maxContestantHandicap,
+        maxHeaders,
+        maxHeelers,
       }) => ({
         id,
         parentEventId,
@@ -1106,6 +1113,11 @@ function registrationDeskProjection(workspace) {
         allowRepeatPartners,
         handicapTotal,
         maxContestantHandicap,
+        maxHeaders,
+        maxHeelers,
+        supportedEntryTypes: supportedRegistrationDeskEntryTypes({
+          competitionType,
+        }),
       }),
     ),
     contestants: workspace.contestants,
@@ -1114,8 +1126,12 @@ function registrationDeskProjection(workspace) {
       .map((team) => ({
         id: team.id,
         eventId: team.eventId,
+        rowId: team.rowId,
+        entryType: team.entryType,
         headerId: team.headerId,
         heelerId: team.heelerId,
+        headerHorseName: team.headerHorseName || "",
+        heelerHorseName: team.heelerHorseName || "",
         drawPosition: Number(team.drawPosition || 0),
         originalTeamNumber: Number(
           team.originalTeamNumber || team.drawPosition || 0,
@@ -1130,6 +1146,8 @@ function registrationDeskProjection(workspace) {
         generated: team.generated === true,
         points: 0,
         paid: team.paid === true,
+        paymentMethod: team.paymentMethod,
+        payerContestantId: team.payerContestantId,
         source: team.source,
         submissionId: team.submissionId,
         submittedAt: team.submittedAt,
@@ -2076,373 +2094,60 @@ async function insertUniqueArenaRecord(collectionId, record) {
 }
 
 async function createRegistrationDeskSignupRecords(request) {
-  if (
-    !validAppId(request.competitionId || request.eventId) ||
-    !validAppId(request.contestantId) ||
-    !validAppId(request.submissionId)
-  ) {
+  const eventId = request?.eventId;
+  if (!validAppId(eventId)) {
     throw new Error("Invalid signup request.");
   }
-  if (!["cash", "card", "tab"].includes(request.paymentMethod)) {
-    throw new Error("Choose paid in cash, paid with credit card, or open a tab.");
-  }
-  if (
-    request.paymentMethod !== "tab" &&
-    request.paymentConfirmed !== true
-  ) {
-    throw new Error("Cashier must confirm the payment before sending entries.");
-  }
-
-  const eventId = request.competitionId || request.eventId;
   const workspace = await readWorkspace();
   const event = workspace.events.find((item) => item.id === eventId);
-  const contestant = workspace.contestants.find(
-    (item) => item.id === request.contestantId,
-  );
-  if (!event || !contestant) {
-    throw new Error("Competition or contestant not found.");
-  }
+  if (!event) throw new Error("Competition not found.");
   assertRegistrationDeskOpen(event);
-
-  const requestedHorse = String(request.horseName || "")
-    .trim()
-    .replace(/\s+/g, " ");
-  const normalizedPartnerIds =
-    event.competitionType === "pick-and-draw" &&
-    Array.isArray(request.partnerIds)
-      ? [...new Set(request.partnerIds)].sort()
-      : request.partnerId
-        ? [request.partnerId]
-        : [];
+  const prepared = prepareRegistrationDeskSignup(workspace, request);
   const submissionFingerprint = createHash("sha256")
-    .update(
-      JSON.stringify({
-        source: "staff",
-        eventId,
-        contestantId: contestant.id,
-        role: request.role || "",
-        drawRole: request.drawRole || "",
-        entries:
-          request.entries === undefined ? null : Number(request.entries),
-        partnerIds: normalizedPartnerIds,
-        horseName: requestedHorse.toLowerCase(),
-        paymentMethod: request.paymentMethod,
-      }),
-    )
+    .update(JSON.stringify(prepared.fingerprintPayload))
     .digest("hex");
-  const priorTeams = workspace.teams.filter(
-    (team) =>
-      team.submissionId === request.submissionId && team.source === "staff",
+  const repeated = registrationDeskSignupIsRetry(
+    workspace,
+    prepared,
+    submissionFingerprint,
   );
-  const priorRegistrations = workspace.registrations.filter(
-    (registration) =>
-      registration.submissionId === request.submissionId &&
-      registration.source === "staff",
-  );
-  const repeated = priorTeams.length > 0 || priorRegistrations.length > 0;
-  if (repeated) {
-    const priorRecords = [...priorTeams, ...priorRegistrations];
-    const belongsToRequest =
-      priorRecords.every((record) => record.eventId === event.id) &&
-      (priorTeams.some(
-        (team) =>
-          team.headerId === contestant.id || team.heelerId === contestant.id,
-      ) ||
-        priorRegistrations.some(
-          (registration) => registration.contestantId === contestant.id,
-        ));
-    if (
-      !belongsToRequest ||
-      priorRecords.some(
-        (record) =>
-          record.submissionFingerprint &&
-          record.submissionFingerprint !== submissionFingerprint,
-      )
-    ) {
-      throw new Error("That submission ID is already in use.");
-    }
-  }
-
-  const horseName = requestedHorse
-    ? (contestant.horses || []).find(
-        (horse) => horse.toLowerCase() === requestedHorse.toLowerCase(),
-      )
-    : undefined;
-  if (requestedHorse && !horseName) {
-    throw new Error("Choose a horse saved on this contestant profile.");
-  }
   const metadata = {
-    paid: request.paymentMethod !== "tab",
-    paymentMethod: request.paymentMethod,
-    paymentReference: request.submissionId,
-    source: "staff",
-    submissionId: request.submissionId,
     submissionFingerprint,
     submittedAt: new Date().toISOString(),
   };
-  const registrations = [];
-  const teams = [];
+  const registrations = prepared.registrations.map((registration) => ({
+    ...registration,
+    ...metadata,
+  }));
+  const teams = prepared.teams.map((team) => ({ ...team, ...metadata }));
 
-  if (
-    event.competitionType === "draw-pot" ||
-    event.competitionType === "round-robin" ||
-    (event.competitionType === "slide" &&
-      request.entries !== undefined &&
-      normalizedPartnerIds.length === 0)
-  ) {
-    const entries = Number(request.entries);
-    const minimumDraws = Math.max(1, Number(event.minDrawsAllowed ?? 0));
-    if (
-      !["Header", "Heeler"].includes(request.role) ||
-      !contestantCanRole(contestant, request.role) ||
-      !Number.isInteger(entries) ||
-      entries < minimumDraws ||
-      entries > Number(event.entriesAllowed || 1)
-    ) {
-      throw new Error(
-        `This competition requires at least ${minimumDraws} draw entr${minimumDraws === 1 ? "y" : "ies"}.`,
-      );
-    }
-    if (!contestantWithinHandicap(event, contestant, request.role)) {
-      throw new Error("Contestant handicap exceeds the competition limit.");
-    }
-    const entered = workspace.registrations
-      .filter(
-        (registration) =>
-          registration.eventId === event.id &&
-          registration.contestantId === contestant.id &&
-          !registration.sourceTeamId &&
-          registration.submissionId !== request.submissionId &&
-          registration.status !== "scratched",
-      )
-      .reduce(
-        (sum, registration) => sum + Number(registration.entries || 0),
-        0,
-      );
-    if (entered + entries > event.entriesAllowed) {
-      throw new Error("Entry limit exceeded.");
-    }
-    registrations.push({
-      id: `desk-registration-${request.submissionId}`,
-      eventId: event.id,
-      contestantId: contestant.id,
-      horseName,
-      role: request.role,
-      entries,
-      checkedIn: false,
-      status: "entered",
-      notes: "",
-      ...metadata,
-    });
-  } else {
-    if (normalizedPartnerIds.some((partnerId) => !validAppId(partnerId))) {
-      throw new Error("Choose an eligible partner.");
-    }
-    if (event.competitionType === "pick-and-draw") {
-      const entries = Number(request.entries ?? 0);
-      const minimumDraws = Math.max(1, Number(event.minDrawsAllowed ?? 0));
-      const drawRole = request.drawRole || request.role;
-      if (
-        !Number.isInteger(entries) ||
-        entries < minimumDraws ||
-        entries > Number(event.entriesAllowed || 1) ||
-        (entries > 0 &&
-          (!["Header", "Heeler"].includes(drawRole) ||
-            !contestantCanRole(contestant, drawRole) ||
-            !contestantWithinHandicap(event, contestant, drawRole)))
-      ) {
-        throw new Error(
-          `This competition requires at least ${minimumDraws} draw entr${minimumDraws === 1 ? "y" : "ies"}.`,
-        );
-      }
-      const standaloneEntries = workspace.registrations
-        .filter(
-          (registration) =>
-            registration.eventId === event.id &&
-            registration.contestantId === contestant.id &&
-            !registration.sourceTeamId &&
-            registration.submissionId !== request.submissionId &&
-            registration.status !== "scratched",
-        )
-        .reduce(
-          (sum, registration) => sum + Number(registration.entries || 0),
-          0,
-        );
-      const existingPickedTeams = workspace.teams.filter(
-        (team) =>
-          team.eventId === event.id &&
-          Number(team.round) === 1 &&
-          !team.scratched &&
-          !team.generated &&
-          team.submissionId !== request.submissionId &&
-          (team.headerId === contestant.id ||
-            team.heelerId === contestant.id),
-      ).length;
-      if (
-        standaloneEntries +
-          existingPickedTeams +
-          entries +
-          normalizedPartnerIds.length >
-        event.entriesAllowed
-      ) {
-        throw new Error("Draw entry limit exceeded.");
-      }
-      if (entries > 0) {
-        registrations.push({
-          id: `desk-registration-${request.submissionId}-draw`,
-          eventId: event.id,
-          contestantId: contestant.id,
-          horseName,
-          role: drawRole,
-          entries,
-          checkedIn: false,
-          status: "entered",
-          notes: "",
-          ...metadata,
-        });
-      }
-    }
-
-    if (!normalizedPartnerIds.length) {
-      if (event.competitionType !== "pick-and-draw") {
-        throw new Error("Choose an eligible partner.");
-      }
-    } else {
-      if (!["Header", "Heeler"].includes(request.role)) {
-        throw new Error("Choose your team position.");
-      }
-      const activeTeams = workspace.teams.filter(
-        (team) =>
-          team.eventId === event.id &&
-          team.round === 1 &&
-          !team.generated &&
-          !team.scratched &&
-          team.submissionId !== request.submissionId,
-      );
-      const entryCount = (contestantId) =>
-        activeTeams.filter(
-          (team) =>
-            team.headerId === contestantId ||
-            team.heelerId === contestantId,
-        ).length;
-      if (
-        entryCount(contestant.id) + normalizedPartnerIds.length >
-        event.entriesAllowed
-      ) {
-        throw new Error("Entry limit exceeded.");
-      }
-      normalizedPartnerIds.forEach((partnerId, partnerIndex) => {
-        const partner = workspace.contestants.find(
-          (item) => item.id === partnerId,
-        );
-        if (!partner || partner.id === contestant.id) {
-          throw new Error("Choose an eligible partner.");
-        }
-        const hasDrawRegistration = (contestantId) =>
-          [...workspace.registrations, ...registrations].some(
-            (registration) =>
-              registration.eventId === event.id &&
-              registration.contestantId === contestantId &&
-              !registration.sourceTeamId &&
-              registration.status === "entered" &&
-              Number(registration.entries) > 0,
-          );
-        if (
-          event.competitionType === "pick-and-draw" &&
-          (!hasDrawRegistration(contestant.id) ||
-            !hasDrawRegistration(partner.id))
-        ) {
-          throw new Error(
-            "Every rider on a picked team must already be entered in the draw.",
-          );
-        }
-        const header = request.role === "Header" ? contestant : partner;
-        const heeler = request.role === "Heeler" ? contestant : partner;
-        if (
-          !contestantCanRole(header, "Header") ||
-          !contestantCanRole(heeler, "Heeler") ||
-          !contestantWithinHandicap(event, header, "Header") ||
-          !contestantWithinHandicap(event, heeler, "Heeler")
-        ) {
-          throw new Error("A contestant handicap exceeds the competition limit.");
-        }
-        if (handicapTotal(header, heeler) > event.handicapTotal) {
-          throw new Error("Team handicap exceeds the competition limit.");
-        }
-        if (
-          !event.allowRepeatPartners &&
-          activeTeams.some(
-            (team) =>
-              team.headerId === header.id && team.heelerId === heeler.id,
-          )
-        ) {
-          throw new Error("That partnership is already entered.");
-        }
-        const partnerStandaloneEntries = workspace.registrations
-          .filter(
-            (registration) =>
-              registration.eventId === event.id &&
-              registration.contestantId === partner.id &&
-              !registration.sourceTeamId &&
-              registration.submissionId !== request.submissionId &&
-              registration.status !== "scratched",
-          )
-          .reduce(
-            (sum, registration) =>
-              sum + Number(registration.entries || 0),
-            0,
-          );
-        if (
-          partnerStandaloneEntries + entryCount(partner.id) + 1 >
-          event.entriesAllowed
-        ) {
-          throw new Error(`Entry limit exceeded for ${partner.name}.`);
-        }
-        const singlePick = normalizedPartnerIds.length === 1;
-        teams.push({
-          id: singlePick
-            ? `desk-team-${request.submissionId}`
-            : `desk-team-${request.submissionId}-pick-${partnerIndex + 1}`,
-          eventId: event.id,
-          headerId: header.id,
-          heelerId: heeler.id,
-          ...(request.role === "Header"
-            ? { headerHorseName: horseName }
-            : { heelerHorseName: horseName }),
-          drawPosition: 0,
-          status: "ready",
-          rawTime: null,
-          penalties: 0,
-          notes: "",
-          round: 1,
-          checkedIn: false,
-          scratched: false,
-          generated: false,
-          points: 0,
-          ...metadata,
-        });
-      });
-    }
-  }
-
-  await Promise.all([
-    ...teams.map((team) =>
-      insertUniqueArenaRecord(COLLECTIONS.teams, team),
-    ),
+  const insertResults = await Promise.allSettled([
+    ...teams.map((team) => insertUniqueArenaRecord(COLLECTIONS.teams, team)),
     ...registrations.map((registration) =>
       insertUniqueArenaRecord(COLLECTIONS.registrations, registration),
     ),
   ]);
+  const failedInsert = insertResults.find(
+    (result) => result.status === "rejected",
+  );
+  if (failedInsert) throw failedInsert.reason;
   await bumpRevision(STAFF_REVISION_ID, {
     action: "submitRegistrationDeskSignup",
-    contestantId: contestant.id,
+    entryType: prepared.canonicalRequest.entryType,
+    payerContestantId: prepared.canonicalRequest.payerContestantId,
     competitionId: event.id,
     submissionId: request.submissionId,
   });
+  const freshWorkspace = await readWorkspace();
+  await savePublicScheduleSnapshot(freshWorkspace);
   return {
     submissionId: request.submissionId,
     competitionId: event.id,
+    entryType: prepared.canonicalRequest.entryType,
+    payerContestantId: prepared.canonicalRequest.payerContestantId,
+    recordIds: prepared.recordIds,
     existing: repeated,
+    data: registrationDeskProjection(freshWorkspace),
   };
 }
 
@@ -2469,7 +2174,7 @@ export const submitRegistrationDeskSignup = webMethod(
         : request.paymentMethod === "tab"
           ? "Contestant tab opened. Entries were sent to the draw area."
           : "Payment recorded. Contestant entries were sent to the draw area.",
-      data: registrationDeskProjection(await readWorkspace()),
+      data: result.data,
     };
   },
 );

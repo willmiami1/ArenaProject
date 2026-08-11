@@ -17,6 +17,10 @@ import type {
 } from "./registrationDeskData";
 import type { ActiveRunConfirmation } from "./activeRunSaveQueue";
 import type { EventSaveConfirmation } from "./eventSaveQueue";
+import type {
+  RegistrationDeskSignupRequest,
+  RegistrationDeskSignupResponse,
+} from "./registrationDeskSignup";
 
 type WixAction =
   | "load"
@@ -567,11 +571,14 @@ export function saveRegistrationDeskContestant(
   }>("saveRegistrationDeskContestant", contestant);
 }
 
-export function submitRegistrationDeskSignup(signup: SignupRequest) {
-  return requestWix<{
-    summary: string;
-    data: RegistrationDeskData;
-  }>("submitRegistrationDeskSignup", signup);
+export function submitRegistrationDeskSignup(
+  signup: RegistrationDeskSignupRequest,
+) {
+  return requestWix<
+    Omit<RegistrationDeskSignupResponse, "data"> & {
+      data: RegistrationDeskData;
+    }
+  >("submitRegistrationDeskSignup", signup);
 }
 
 export interface RegistrationDeskEntryRequest {

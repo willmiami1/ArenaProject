@@ -59,6 +59,7 @@ export interface ArenaEvent {
   drawHistory: DrawSnapshot[];
   activeRunId?: string;
   activeRound?: number;
+  supportedEntryTypes?: Array<"draws" | "picked-teams">;
 }
 
 export interface Contestant {
@@ -112,6 +113,10 @@ export interface Team {
   source?: "online" | "staff";
   submissionId?: string;
   submittedAt?: string;
+  rowId?: string;
+  entryType?: "draws" | "picked-teams";
+  payerContestantId?: string;
+  submissionFingerprint?: string;
   predictionClosesAt?: string;
 }
 
@@ -155,6 +160,9 @@ export interface EventRegistration {
   source?: "online" | "staff";
   submissionId?: string;
   submittedAt?: string;
+  entryType?: "draws" | "picked-teams";
+  payerContestantId?: string;
+  submissionFingerprint?: string;
 }
 
 export interface ArenaData {

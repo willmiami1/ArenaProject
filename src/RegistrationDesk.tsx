@@ -17,7 +17,6 @@ import {
   contestantEligibleForRole,
   minimumDrawEntries,
 } from "./competition";
-import { eligibleSignupPartners, type SignupRequest } from "./onlineSignup";
 import {
   loadLocalRegistrationWorkspace,
   registrationDeskProjection,
@@ -27,6 +26,22 @@ import {
   type RegistrationDeskContestantInput,
   type RegistrationDeskData,
 } from "./registrationDeskData";
+import {
+  buildRegistrationDeskDrawRequest,
+  buildRegistrationDeskPickedTeamsRequest,
+  createRegistrationDeskTeamRow,
+  defaultRegistrationDeskMode,
+  pickedTeamRowsError,
+  registrationDeskPayerCandidates,
+  registrationDeskReviewComplete,
+  registrationDeskRoleCandidates,
+  registrationDeskTotals,
+  supportedRegistrationDeskModes,
+  type RegistrationDeskEntryMode,
+  type RegistrationDeskPaymentMethod,
+  type RegistrationDeskSignupRequest,
+  type RegistrationDeskTeamRow,
+} from "./registrationDeskSignup";
 import type { ArenaData, Contestant } from "./types";
 import { roundRobinRoleCapacity } from "./roundRobinCapacity";
 import { registrationDeskWorkspaceHref } from "./registrationDeskNavigation";
@@ -111,14 +126,15 @@ export function RegistrationDesk() {
   const [role, setRole] = useState<"Header" | "Heeler">("Header");
   const [entries, setEntries] = useState(1);
   const [entryHorseName, setEntryHorseName] = useState("");
-  const [addPick, setAddPick] = useState(false);
-  const [partnerId, setPartnerId] = useState("");
-  const [partnerIds, setPartnerIds] = useState<string[]>([]);
-  const [pickStage, setPickStage] = useState<"draws" | "picks">("draws");
-  const [slideEntryType, setSlideEntryType] = useState<"draw" | "pick">("draw");
-  const [paymentMethod, setPaymentMethod] = useState<
-    "" | "cash" | "card" | "tab"
-  >("");
+  const [entryMode, setEntryMode] = useState<RegistrationDeskEntryMode | "">("");
+  const [teamRows, setTeamRows] = useState<RegistrationDeskTeamRow[]>(() => [
+    createRegistrationDeskTeamRow(),
+  ]);
+  const [payerContestantId, setPayerContestantId] = useState("");
+  const [paymentMethod, setPaymentMethod] =
+    useState<RegistrationDeskPaymentMethod | "">("");
+  const [review, setReview] = useState(false);
+  const [submissionId, setSubmissionId] = useState("");
   const [search, setSearch] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
@@ -173,14 +189,8 @@ export function RegistrationDesk() {
         ? "This live competition is visible, but entries are blocked while the draw is locked."
         : "";
   const contestant = data?.contestants.find((item) => item.id === contestantId);
-  const slide = event?.competitionType === "slide";
-  const individual =
-    event?.competitionType === "draw-pot" ||
-    event?.competitionType === "round-robin" ||
-    (slide && slideEntryType === "draw");
-  const pickAndDraw = event?.competitionType === "pick-and-draw";
+  const supportedModes = supportedRegistrationDeskModes(event);
   const minimumDraws = event ? minimumDrawEntries(event) : 1;
-  const drawRole = role;
   const workspace = data ? asWorkspace(data) : null;
   const workspaceEvent = workspace?.events.find((item) => item.id === eventId);
   const roleCapacities = workspaceEvent
@@ -189,29 +199,98 @@ export function RegistrationDesk() {
         Heeler: roundRobinRoleCapacity(workspaceEvent, data?.registrations ?? [], "Heeler"),
       }
     : null;
-  const partners = useMemo(
+  const headerCandidates = useMemo(
     () =>
-      workspace && workspaceEvent && contestant
-        ? eligibleSignupPartners(workspace, workspaceEvent, contestant.id, role)
+      event && data
+        ? registrationDeskRoleCandidates(
+            data.contestants,
+            event,
+            data.registrations,
+            "Header",
+          )
         : [],
-    [workspace, workspaceEvent, contestant, role],
+    [data, event],
   );
-  const selectedPartners = partners.filter((partner) =>
-    partnerIds.includes(partner.id),
+  const heelerCandidates = useMemo(
+    () =>
+      event && data
+        ? registrationDeskRoleCandidates(
+            data.contestants,
+            event,
+            data.registrations,
+            "Heeler",
+          )
+        : [],
+    [data, event],
   );
-  const totalRuns = entries + partnerIds.length;
-  const totalDue = totalRuns * Number(event?.entryFee ?? 0);
+  const payerCandidates = useMemo(
+    () => registrationDeskPayerCandidates(teamRows, data?.contestants ?? []),
+    [data?.contestants, teamRows],
+  );
+  const totals = registrationDeskTotals(
+    entryMode || "draws",
+    entries,
+    teamRows,
+    Number(event?.entryFee ?? 0),
+  );
+  const pickedPairError = useMemo(() => {
+    if (!event || event.allowRepeatPartners) return "";
+    const pairs = new Set<string>();
+    for (const row of teamRows) {
+      if (!row.headerId || !row.heelerId) continue;
+      const pair = `${row.headerId}\0${row.heelerId}`;
+      if (
+        pairs.has(pair) ||
+        data?.teams.some(
+          (team) =>
+            team.eventId === event.id &&
+            Number(team.round) === 1 &&
+            !team.generated &&
+            !team.scratched &&
+            team.headerId === row.headerId &&
+            team.heelerId === row.heelerId,
+        )
+      ) {
+        return "That partnership is already entered.";
+      }
+      pairs.add(pair);
+    }
+    return "";
+  }, [data?.teams, event, teamRows]);
   const drawEligible =
     Boolean(workspaceEvent && contestant) &&
-    contestantEligibleForRole(workspaceEvent!, contestant, drawRole);
+    contestantEligibleForRole(workspaceEvent!, contestant, role);
 
   useEffect(() => {
     setEntries(minimumDraws);
   }, [eventId, minimumDraws]);
 
   useEffect(() => {
+    if (!event) return;
+    setEntryMode(defaultRegistrationDeskMode(event));
+    setTeamRows([createRegistrationDeskTeamRow()]);
+    setPayerContestantId("");
     setPaymentMethod("");
-  }, [contestantId, entries, entryHorseName, eventId, partnerId, partnerIds, role]);
+    setReview(false);
+    setSubmissionId("");
+  }, [event?.id]);
+
+  useEffect(() => {
+    if (
+      payerContestantId &&
+      !payerCandidates.some(({ id }) => id === payerContestantId)
+    ) {
+      setPayerContestantId("");
+      setReview(false);
+      setSubmissionId("");
+    }
+  }, [payerCandidates, payerContestantId]);
+
+  useEffect(() => {
+    setPaymentMethod("");
+    setReview(false);
+    setSubmissionId("");
+  }, [contestantId, entries, entryHorseName, role]);
   const normalizedSearch = search.trim().toLowerCase();
   const filteredContestants =
     normalizedSearch.length < 2
@@ -231,7 +310,6 @@ export function RegistrationDesk() {
   useEffect(() => {
     if (eligibleRoles.length && !eligibleRoles.includes(role)) {
       setRole(eligibleRoles[0]);
-      setPartnerId("");
     }
   }, [eligibleRoles, role]);
 
@@ -402,27 +480,22 @@ export function RegistrationDesk() {
     }
   };
 
-  const buildSignupRequest = (
-    submissionId: string,
-    method: "cash" | "card" | "tab",
-    signupEvent: { id: string },
-    signupContestant: Contestant,
-  ): SignupRequest => ({
-      submissionId,
-      eventId: signupEvent.id,
-      contestantId: signupContestant.id,
-      horseName: entryHorseName || undefined,
-      role,
-      drawRole: pickAndDraw ? drawRole : undefined,
-      entries: individual || pickAndDraw ? entries : undefined,
-      partnerId:
-        individual || pickAndDraw ? undefined : partnerId,
-      partnerIds: pickAndDraw && addPick ? partnerIds : undefined,
-      paymentConfirmed: method !== "tab",
-      paymentMethod: method,
-    });
+  const invalidateReview = () => {
+    setReview(false);
+    setSubmissionId("");
+  };
 
-  const finishSignup = async (request: SignupRequest) => {
+  const updateTeamRow = (
+    rowId: string,
+    patch: Partial<RegistrationDeskTeamRow>,
+  ) => {
+    setTeamRows((current) =>
+      current.map((row) => (row.rowId === rowId ? { ...row, ...patch } : row)),
+    );
+    invalidateReview();
+  };
+
+  const finishSignup = async (request: RegistrationDeskSignupRequest) => {
     if (!event) return;
     try {
       if (embedded) {
@@ -435,15 +508,15 @@ export function RegistrationDesk() {
         const result = submitLocalRegistrationDeskSignup(workspaceData, request);
         saveLocalRegistrationWorkspace(result.data);
         setData(registrationDeskProjection(result.data));
-        setMessage(`Entry saved for ${event.name}.`);
+        setMessage(result.result.summary);
       }
-      setPartnerId("");
-      setPartnerIds([]);
       setEntries(minimumDraws);
       setEntryHorseName("");
-      setAddPick(false);
-      setPickStage("draws");
+      setTeamRows([createRegistrationDeskTeamRow()]);
+      setPayerContestantId("");
       setPaymentMethod("");
+      setReview(false);
+      setSubmissionId("");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "The entry could not be saved.",
@@ -453,21 +526,73 @@ export function RegistrationDesk() {
     }
   };
 
-  const submitEntry = (formEvent: FormEvent) => {
+  const beginReview = (formEvent: FormEvent) => {
     formEvent.preventDefault();
     if (entryUnavailableMessage) {
       setMessage(entryUnavailableMessage);
       return;
     }
-    if (!event || !contestant || !paymentMethod) return;
+    if (!event || !paymentMethod || !entryMode) return;
+    const complete = registrationDeskReviewComplete(entryMode, {
+      contestantId: contestant?.id,
+      role,
+      entries,
+      minimumEntries: minimumDraws,
+      maximumEntries: event.entriesAllowed,
+      rows: teamRows,
+      payerContestantId:
+        entryMode === "draws" ? contestant?.id ?? "" : payerContestantId,
+      paymentMethod,
+    });
+    if (!complete || pickedPairError) {
+      setMessage(
+        entryMode === "picked-teams"
+          ? pickedPairError ||
+              pickedTeamRowsError(teamRows, payerContestantId) ||
+              "Complete every team and choose its payer and payment method."
+          : "Complete the draw entry before review.",
+      );
+      return;
+    }
+    setSubmissionId(
+      window.crypto.randomUUID?.() ??
+        `desk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    );
+    setReview(true);
+    setMessage("");
+  };
+
+  const submitEntry = () => {
+    if (
+      !event ||
+      !paymentMethod ||
+      !entryMode ||
+      !submissionId ||
+      (entryMode === "draws" && !contestant)
+    ) {
+      return;
+    }
+    const request =
+      entryMode === "draws"
+        ? buildRegistrationDeskDrawRequest({
+            submissionId,
+            eventId: event.id,
+            contestantId: contestant!.id,
+            horseName: entryHorseName,
+            role,
+            entries,
+            paymentMethod,
+          })
+        : buildRegistrationDeskPickedTeamsRequest({
+            submissionId,
+            eventId: event.id,
+            rows: teamRows,
+            payerContestantId,
+            paymentMethod,
+          });
     setBusy(true);
     setMessage("");
-    const submissionId =
-      window.crypto.randomUUID?.() ??
-      `desk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    void finishSignup(
-      buildSignupRequest(submissionId, paymentMethod, event, contestant),
-    );
+    void finishSignup(request);
   };
 
   const beginRosterEntryEdit = (entry: RegistrationDeskRosterEntry) => {
@@ -579,10 +704,6 @@ export function RegistrationDesk() {
             Live competition
             <select value={eventId} onChange={(change) => {
               setEventId(change.target.value);
-              setPartnerId("");
-              setPartnerIds([]);
-              setAddPick(false);
-              setPickStage("draws");
               setPinOpen(false);
               setPin("");
               setPinConfirmation("");
@@ -596,6 +717,37 @@ export function RegistrationDesk() {
               ))}
             </select>
           </label>
+          {event && supportedModes.length > 0 && (
+            <fieldset className="registration-entry-modes">
+              <legend>Entry choice</legend>
+              {supportedModes.map((mode) => (
+                <label className={entryMode === mode ? "selected" : ""} key={mode}>
+                  <input
+                    type="radio"
+                    name="registration-entry-mode"
+                    checked={entryMode === mode}
+                    onChange={() => {
+                      setEntryMode(mode);
+                      setTeamRows([createRegistrationDeskTeamRow()]);
+                      setEntries(minimumDraws);
+                      setEntryHorseName("");
+                      setPayerContestantId("");
+                      setPaymentMethod("");
+                      setReview(false);
+                      setSubmissionId("");
+                      setMessage("");
+                    }}
+                  />
+                  <strong>{mode === "draws" ? "Enter Draws" : "Pick Teams"}</strong>
+                  <small>
+                    {mode === "draws"
+                      ? "Add standalone draw entries."
+                      : "Build one or more complete Header / Heeler teams."}
+                  </small>
+                </label>
+              ))}
+            </fieldset>
+          )}
           {!data && <p>Loading registration desk…</p>}
           {data && !data.events.length && (
             <p>No live competitions are currently available.</p>
@@ -667,6 +819,13 @@ export function RegistrationDesk() {
                                       {" · "}Handicap {rosterEntry.handicap}
                                       {rosterEntry.horseName
                                         ? ` · ${rosterEntry.horseName}`
+                                        : ""}
+                                      {rosterEntry.payerName
+                                        ? ` · Payer: ${rosterEntry.payerName}${
+                                            rosterEntry.paymentMethod === "tab"
+                                              ? " (tab)"
+                                              : ""
+                                          }`
                                         : ""}
                                     </span>
                                   </div>
@@ -819,24 +978,22 @@ export function RegistrationDesk() {
           </section>
         )}
 
-        {event && data && (
+        {event && data && entryMode && (
           <div className="registration-desk-columns">
             <section className="registration-desk-panel">
               <div className="registration-desk-panel-heading">
-                <div><span>Step 1</span><h2>Choose contestant</h2></div>
-                <button
-                  type="button"
-                  aria-controls="registration-add-contestant"
-                  aria-expanded={profileOpen && !profile.id}
-                  onClick={() => editProfile()}
-                >
+                <div>
+                  <span>Step 1</span>
+                  <h2>{entryMode === "draws" ? "Choose contestant" : "Build teams"}</h2>
+                </div>
+                <button type="button" onClick={() => editProfile()}>
                   <Plus size={16} /> Add contestant
                 </button>
               </div>
               {showStandaloneRegistrationProfile(
                 profileOpen,
                 profile.id,
-                contestant?.id,
+                entryMode === "draws" ? contestant?.id : undefined,
               ) && (
                 <section
                   id="registration-add-contestant"
@@ -846,353 +1003,465 @@ export function RegistrationDesk() {
                   {profileEditor}
                 </section>
               )}
-              <label className="registration-search">
-                <Search size={17} />
-                <input value={search} onChange={(change) => setSearch(change.target.value)} placeholder="Search name, email, or phone" />
-              </label>
-              <div className="registration-contestant-list">
-                {filteredContestants.slice(0, 80).map((item) => (
+              {entryMode === "draws" ? (
+                <>
+                  <label className="registration-search">
+                    <Search size={17} />
+                    <input
+                      value={search}
+                      onChange={(change) => setSearch(change.target.value)}
+                      placeholder="Search name, email, or phone"
+                    />
+                  </label>
+                  <div className="registration-contestant-list">
+                    {filteredContestants.slice(0, 80).map((item) => (
+                      <button
+                        type="button"
+                        className={contestantId === item.id ? "selected" : ""}
+                        onClick={() => {
+                          setContestantId(item.id);
+                          setEntryHorseName("");
+                          setSearch("");
+                          setPinOpen(false);
+                          setPin("");
+                          setPinConfirmation("");
+                          setMessage("");
+                        }}
+                        key={item.id}
+                      >
+                        <span>
+                          <strong>{item.name}</strong>
+                          <small>{item.email || item.phone || "No contact information"}</small>
+                        </span>
+                      </button>
+                    ))}
+                    {normalizedSearch.length < 2 && (
+                      <p className="registration-search-hint">
+                        Enter at least two letters, an email, or a phone number.
+                      </p>
+                    )}
+                    {normalizedSearch.length >= 2 && !filteredContestants.length && (
+                      <p className="registration-search-hint">No contestants match that search.</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="registration-team-builder">
+                  {event.competitionType === "pick-and-draw" && (
+                    <p className="registration-entry-hint">
+                      Candidate lists include only riders with an active standalone draw entry.
+                    </p>
+                  )}
+                  <div className="registration-team-rows">
+                    {teamRows.map((row, index) => {
+                      const header = data.contestants.find(({ id }) => id === row.headerId);
+                      const heeler = data.contestants.find(({ id }) => id === row.heelerId);
+                      return (
+                        <fieldset className="registration-team-row" key={row.rowId}>
+                          <legend>Team {index + 1}</legend>
+                          <label>
+                            Header
+                            <select
+                              value={row.headerId}
+                              onChange={(change) =>
+                                updateTeamRow(row.rowId, {
+                                  headerId: change.target.value,
+                                  headerHorseName: "",
+                                })
+                              }
+                            >
+                              <option value="">Choose Header</option>
+                              {headerCandidates
+                                .filter(
+                                  (candidate) =>
+                                    candidate.id !== row.heelerId &&
+                                    (!heeler ||
+                                      Number(candidate.headerHandicap) +
+                                        Number(heeler.heelerHandicap) <=
+                                        Number(event.handicapTotal)),
+                                )
+                                .map((candidate) => (
+                                  <option value={candidate.id} key={candidate.id}>
+                                    {candidate.name} · #{candidate.headerHandicap}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                          <label>
+                            Header horse
+                            <select
+                              disabled={!header?.horses?.length}
+                              value={row.headerHorseName}
+                              onChange={(change) =>
+                                updateTeamRow(row.rowId, {
+                                  headerHorseName: change.target.value,
+                                })
+                              }
+                            >
+                              <option value="">No horse selected</option>
+                              {header?.horses?.map((horse) => (
+                                <option value={horse} key={horse}>{horse}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Heeler
+                            <select
+                              value={row.heelerId}
+                              onChange={(change) =>
+                                updateTeamRow(row.rowId, {
+                                  heelerId: change.target.value,
+                                  heelerHorseName: "",
+                                })
+                              }
+                            >
+                              <option value="">Choose Heeler</option>
+                              {heelerCandidates
+                                .filter(
+                                  (candidate) =>
+                                    candidate.id !== row.headerId &&
+                                    (!header ||
+                                      Number(header.headerHandicap) +
+                                        Number(candidate.heelerHandicap) <=
+                                        Number(event.handicapTotal)),
+                                )
+                                .map((candidate) => (
+                                  <option value={candidate.id} key={candidate.id}>
+                                    {candidate.name} · #{candidate.heelerHandicap}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                          <label>
+                            Heeler horse
+                            <select
+                              disabled={!heeler?.horses?.length}
+                              value={row.heelerHorseName}
+                              onChange={(change) =>
+                                updateTeamRow(row.rowId, {
+                                  heelerHorseName: change.target.value,
+                                })
+                              }
+                            >
+                              <option value="">No horse selected</option>
+                              {heeler?.horses?.map((horse) => (
+                                <option value={horse} key={horse}>{horse}</option>
+                              ))}
+                            </select>
+                          </label>
+                          {teamRows.length > 1 && (
+                            <button
+                              type="button"
+                              className="registration-remove-team"
+                              onClick={() => {
+                                setTeamRows((current) =>
+                                  current.filter(({ rowId }) => rowId !== row.rowId),
+                                );
+                                invalidateReview();
+                              }}
+                            >
+                              <Trash2 size={15} /> Remove team
+                            </button>
+                          )}
+                        </fieldset>
+                      );
+                    })}
+                  </div>
                   <button
                     type="button"
-                    className={contestantId === item.id ? "selected" : ""}
+                    className="registration-add-team"
+                    disabled={teamRows.length >= 100}
                     onClick={() => {
-                      setContestantId(item.id);
-                      setEntryHorseName("");
-                      setSearch("");
-                      setPartnerId("");
-                      setPartnerIds([]);
-                      setAddPick(false);
-                      setPickStage("draws");
-                      setPinOpen(false);
-                      setPin("");
-                      setPinConfirmation("");
-                      setMessage("");
+                      setTeamRows((current) => [
+                        ...current,
+                        createRegistrationDeskTeamRow(),
+                      ]);
+                      invalidateReview();
                     }}
-                    key={item.id}
                   >
-                    <span><strong>{item.name}</strong><small>{item.email || item.phone || "No contact information"}</small></span>
+                    <Plus size={16} /> Add another team
                   </button>
-                ))}
-                {normalizedSearch.length < 2 && (
-                  <p className="registration-search-hint">
-                    Enter at least two letters, an email, or a phone number.
-                  </p>
-                )}
-                {normalizedSearch.length >= 2 && !filteredContestants.length && (
-                  <p className="registration-search-hint">
-                    No contestants match that search.
-                  </p>
-                )}
-              </div>
+                </div>
+              )}
             </section>
 
             <section className="registration-desk-panel">
               <div className="registration-desk-panel-heading">
-                <div><span>Step 2</span><h2>Enter competition</h2></div>
+                <div><span>Step 2</span><h2>Payment and review</h2></div>
               </div>
-              {!contestant ? (
+              {entryMode === "draws" && !contestant ? (
                 <div className="registration-desk-empty">
                   <UserRoundPlus />
                   <p>Choose a contestant to prepare an entry.</p>
                 </div>
               ) : (
                 <div className="registration-entry-form">
-                  <div className="registration-selected-contestant">
-                    <CheckCircle2 />
-                    <span>Registering <strong>{contestant.name}</strong></span>
-                  </div>
-                  <div className="registration-contestant-actions">
-                    <button type="button" onClick={() => editProfile(contestant)}>
-                      <Pencil size={15} /> Edit contestant
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPinOpen((open) => !open);
-                        setMessage("");
-                      }}
-                    >
-                      <KeyRound size={15} /> Set 4-digit PIN
-                    </button>
-                  </div>
-                  {pinOpen && (
-                    <fieldset className="registration-pin-panel">
-                      <legend>Contestant login PIN</legend>
-                      <label>
-                        New 4-digit PIN
-                        <input
-                          required
-                          type="password"
-                          inputMode="numeric"
-                          pattern="\d{4}"
-                          maxLength={4}
-                          value={pin}
-                          onChange={(change) =>
-                            setPin(change.target.value.replace(/\D/g, "").slice(0, 4))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Confirm PIN
-                        <input
-                          required
-                          type="password"
-                          inputMode="numeric"
-                          pattern="\d{4}"
-                          maxLength={4}
-                          value={pinConfirmation}
-                          onChange={(change) =>
-                            setPinConfirmation(
-                              change.target.value.replace(/\D/g, "").slice(0, 4),
-                            )
-                          }
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void savePin()}
-                      >
-                        {busy ? "Saving…" : "Save PIN"}
-                      </button>
-                    </fieldset>
-                  )}
-                  {profileOpen && profile.id === contestant.id && (
-                    <section className="registration-inline-profile">
-                      {profileEditor}
-                    </section>
-                  )}
-                  <div className="registration-entry-divider">
-                    <span>Entries this competition</span>
-                  </div>
-                  <form className="registration-competition-form" onSubmit={submitEntry}>
-                  <label>
-                    Horse
-                    <select disabled={!contestant.horses?.length} value={entryHorseName} onChange={(change) => setEntryHorseName(change.target.value)}>
-                      <option value="">{contestant.horses?.length ? "No horse selected" : "No saved horses"}</option>
-                      {contestant.horses?.map((horse) => (
-                        <option value={horse} key={horse}>{horse}</option>
-                      ))}
-                    </select>
-                    {!contestant.horses?.length && <small>Add a horse in Edit contestant, then select it here.</small>}
-                  </label>
-                  {slide && (
-                   <fieldset>
-                     <legend>Entry type</legend>
-                     <label><input type="radio" name="slide-entry-type" checked={slideEntryType === "draw"} onChange={() => { setSlideEntryType("draw"); setPartnerId(""); }} /> Draw entry</label>
-                     <label><input type="radio" name="slide-entry-type" checked={slideEntryType === "pick"} onChange={() => setSlideEntryType("pick")} /> Picked team</label>
-                   </fieldset>
-                  )}
-                  <label>Position<select value={role} onChange={(change) => {
-                    setRole(change.target.value as "Header" | "Heeler");
-                    setPartnerId("");
-                    setPartnerIds([]);
-                  }}>
-                    {eligibleRoles.map((value) => <option key={value}>{value}</option>)}
-                  </select></label>
-                  {workspaceEvent?.competitionType === "round-robin" && roleCapacities && (
-                    <p className="registration-entry-hint">
-                      {(["Header", "Heeler"] as const).map((value) => {
-                        const capacity = roleCapacities[value];
-                        return `${value}: ${capacity.registered}${capacity.maximum === null ? " registered" : ` of ${capacity.maximum}${capacity.full ? " - FULL" : ""}`}`;
-                      }).join(" · ")}
-                    </p>
-                  )}
-                  {individual ? (
-                    <label>Number of entries<input type="number" min={minimumDraws} max={event.entriesAllowed} value={entries} onChange={(change) => setEntries(Number(change.target.value))} /><small>Competition minimum: {minimumDraws}</small></label>
-                  ) : pickAndDraw && pickStage === "draws" ? (
+                  {entryMode === "draws" && contestant && (
                     <>
-                      <label>
-                        Number of {drawRole.toLowerCase()} draw entries
-                        <input type="number" min={minimumDraws} max={event.entriesAllowed} value={entries} onChange={(change) => setEntries(Number(change.target.value))} />
-                      </label>
-                      <p className="registration-entry-hint">
-                        Minimum {minimumDraws} draw{minimumDraws === 1 ? "" : "s"}; maximum {event.entriesAllowed} total runs. Handicap limits are checked before confirmation.
-                      </p>
-                      {!drawEligible && (
-                        <p className="registration-entry-hint">
-                          This contestant is not eligible for {drawRole.toLowerCase()} draws and cannot enter a picked team.
-                        </p>
-                      )}
-                      <button
-                        type="button"
-                        className="primary"
-                        disabled={
-                          entries < minimumDraws ||
-                          entries > event.entriesAllowed ||
-                          (entries > 0 && !drawEligible)
-                        }
-                        onClick={() => setPickStage("picks")}
-                      >
-                        Continue to picked teams
-                      </button>
-                    </>
-                  ) : pickAndDraw ? (
-                    <>
-                      <div className="registration-step-summary">
-                        <strong>{entries} draw entr{entries === 1 ? "y" : "ies"}</strong>
-                        <button type="button" onClick={() => setPickStage("draws")}>Change draws</button>
+                      <div className="registration-selected-contestant">
+                        <CheckCircle2 />
+                        <span>Registering <strong>{contestant.name}</strong></span>
                       </div>
-                      <label className="registration-pick-toggle">
-                        <input
-                          type="checkbox"
-                          checked={addPick}
-                          onChange={(change) => {
-                            setAddPick(change.target.checked);
-                            if (!change.target.checked) setPartnerIds([]);
+                      <div className="registration-contestant-actions">
+                        <button type="button" onClick={() => editProfile(contestant)}>
+                          <Pencil size={15} /> Edit contestant
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPinOpen((open) => !open);
+                            setMessage("");
                           }}
-                        />
-                        <span>Enter picked teams</span>
-                      </label>
-                      {addPick && (
-                        <fieldset className="registration-partner-picks">
-                          <legend>Choose picked partners already entered in the draw</legend>
-                          {partners.map((partner) => (
-                            <label key={partner.id}>
-                              <input
-                                type="checkbox"
-                                checked={partnerIds.includes(partner.id)}
-                                disabled={
-                                  !partnerIds.includes(partner.id) &&
-                                  totalRuns >= event.entriesAllowed
-                                }
-                                onChange={(change) =>
-                                  setPartnerIds((current) =>
-                                    change.target.checked
-                                      ? [...current, partner.id]
-                                      : current.filter((id) => id !== partner.id),
-                                  )
-                                }
-                              />
-                              <span>{partner.name}</span>
-                            </label>
-                          ))}
-                          {!partners.length && (
-                            <p>No eligible partners are currently entered in the draw.</p>
-                          )}
+                        >
+                          <KeyRound size={15} /> Set 4-digit PIN
+                        </button>
+                      </div>
+                      {pinOpen && (
+                        <fieldset className="registration-pin-panel">
+                          <legend>Contestant login PIN</legend>
+                          <label>
+                            New 4-digit PIN
+                            <input
+                              required
+                              type="password"
+                              inputMode="numeric"
+                              pattern="\d{4}"
+                              maxLength={4}
+                              value={pin}
+                              onChange={(change) =>
+                                setPin(change.target.value.replace(/\D/g, "").slice(0, 4))
+                              }
+                            />
+                          </label>
+                          <label>
+                            Confirm PIN
+                            <input
+                              required
+                              type="password"
+                              inputMode="numeric"
+                              pattern="\d{4}"
+                              maxLength={4}
+                              value={pinConfirmation}
+                              onChange={(change) =>
+                                setPinConfirmation(
+                                  change.target.value.replace(/\D/g, "").slice(0, 4),
+                                )
+                              }
+                            />
+                          </label>
+                          <button type="button" disabled={busy} onClick={() => void savePin()}>
+                            {busy ? "Saving…" : "Save PIN"}
+                          </button>
                         </fieldset>
                       )}
-                      <section
-                        className="registration-entry-receipt"
-                        aria-label="Entry receipt"
-                      >
+                      {profileOpen && profile.id === contestant.id && (
+                        <section className="registration-inline-profile">{profileEditor}</section>
+                      )}
+                    </>
+                  )}
+                  <form className="registration-competition-form" onSubmit={beginReview}>
+                    {!review ? (
+                      <>
+                        {entryMode === "draws" && contestant ? (
+                          <>
+                            <label>
+                              Horse
+                              <select
+                                disabled={!contestant.horses?.length}
+                                value={entryHorseName}
+                                onChange={(change) => setEntryHorseName(change.target.value)}
+                              >
+                                <option value="">No horse selected</option>
+                                {contestant.horses?.map((horse) => (
+                                  <option value={horse} key={horse}>{horse}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <label>
+                              Position
+                              <select
+                                value={role}
+                                onChange={(change) =>
+                                  setRole(change.target.value as "Header" | "Heeler")
+                                }
+                              >
+                                {eligibleRoles.map((value) => (
+                                  <option key={value}>{value}</option>
+                                ))}
+                              </select>
+                            </label>
+                            {workspaceEvent?.competitionType === "round-robin" && roleCapacities && (
+                              <p className="registration-entry-hint">
+                                {(["Header", "Heeler"] as const).map((value) => {
+                                  const capacity = roleCapacities[value];
+                                  return `${value}: ${capacity.registered}${
+                                    capacity.maximum === null
+                                      ? " registered"
+                                      : ` of ${capacity.maximum}${capacity.full ? " - FULL" : ""}`
+                                  }`;
+                                }).join(" · ")}
+                              </p>
+                            )}
+                            <label>
+                              Number of entries
+                              <input
+                                type="number"
+                                min={minimumDraws}
+                                max={event.entriesAllowed}
+                                value={entries}
+                                onChange={(change) => setEntries(Number(change.target.value))}
+                              />
+                              <small>Competition minimum: {minimumDraws}</small>
+                            </label>
+                            {!drawEligible && (
+                              <p className="registration-entry-hint">
+                                This contestant is not eligible for this position.
+                              </p>
+                            )}
+                            <label>
+                              Payer
+                              <input value={contestant.name} readOnly />
+                            </label>
+                          </>
+                        ) : (
+                          <label>
+                            Batch payer
+                            <select
+                              required
+                              value={payerContestantId}
+                              onChange={(change) => {
+                                setPayerContestantId(change.target.value);
+                                invalidateReview();
+                              }}
+                            >
+                              <option value="">Choose a rider in these teams</option>
+                              {payerCandidates.map((candidate) => (
+                                <option value={candidate.id} key={candidate.id}>
+                                  {candidate.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        {pickedPairError && (
+                          <p className="registration-entry-hint">{pickedPairError}</p>
+                        )}
+                        <fieldset className="registration-payment-method">
+                          <legend>Cashier payment selection</legend>
+                          {([
+                            ["cash", Banknote, "Paid in cash", `${formatMoney(totals.amount)} received by cashier`],
+                            ["card", CreditCard, "Paid with credit card", `Charge ${formatMoney(totals.amount)} on the Square Terminal first`],
+                            ["tab", ClipboardPen, "Open a tab", `Add ${formatMoney(totals.amount)} to the selected payer's balance`],
+                          ] as const).map(([method, Icon, title, detail]) => (
+                            <label className={paymentMethod === method ? "selected" : ""} key={method}>
+                              <input
+                                type="radio"
+                                name="paymentMethod"
+                                checked={paymentMethod === method}
+                                onChange={() => {
+                                  setPaymentMethod(method);
+                                  invalidateReview();
+                                }}
+                              />
+                              <Icon />
+                              <span><strong>{title}</strong><small>{detail}</small></span>
+                            </label>
+                          ))}
+                        </fieldset>
+                        {paymentMethod && (
+                          <button
+                            className="primary"
+                            disabled={
+                              busy ||
+                              Boolean(entryUnavailableMessage) ||
+                              (entryMode === "draws" &&
+                                (!drawEligible || !eligibleRoles.length)) ||
+                              Boolean(pickedPairError) ||
+                              !registrationDeskReviewComplete(entryMode, {
+                                contestantId: contestant?.id,
+                                role,
+                                entries,
+                                minimumEntries: minimumDraws,
+                                maximumEntries: event.entriesAllowed,
+                                rows: teamRows,
+                                payerContestantId:
+                                  entryMode === "draws"
+                                    ? contestant?.id ?? ""
+                                    : payerContestantId,
+                                paymentMethod,
+                              })
+                            }
+                          >
+                            Review entry
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <section className="registration-entry-receipt" aria-label="Final entry review">
                         <div className="registration-receipt-heading">
-                          <span>Entry receipt</span>
-                          <strong>{contestant.name}</strong>
+                          <span>Final review</span>
+                          <strong>{event.name}</strong>
                         </div>
-                        <dl>
-                          <div>
-                            <dt>Draws</dt>
-                            <dd>{entries}</dd>
-                          </div>
-                          <div>
-                            <dt>Picked teams</dt>
-                            <dd>{partnerIds.length}</dd>
-                          </div>
-                          <div className="registration-receipt-total-runs">
-                            <dt>Total runs</dt>
-                            <dd>{totalRuns}</dd>
-                          </div>
-                          <div>
-                            <dt>Amount per run</dt>
-                            <dd>{formatMoney(event.entryFee)}</dd>
-                          </div>
-                          <div className="registration-receipt-total-due">
-                            <dt>Total due</dt>
-                            <dd>{formatMoney(totalDue)}</dd>
-                          </div>
-                        </dl>
-                        {selectedPartners.length ? (
-                          <div className="registration-receipt-teams">
-                            <span>Picked teams</span>
-                          <ul>
-                            {selectedPartners.map((partner) => (
-                              <li key={partner.id}>
-                                {role === "Header"
-                                  ? `${contestant.name} / ${partner.name}`
-                                  : `${partner.name} / ${contestant.name}`}
-                              </li>
-                            ))}
-                          </ul>
+                        {entryMode === "picked-teams" ? (
+                          <div className="registration-review-teams">
+                            {teamRows.map((row, index) => {
+                              const header = data.contestants.find(({ id }) => id === row.headerId);
+                              const heeler = data.contestants.find(({ id }) => id === row.heelerId);
+                              return (
+                                <div key={row.rowId}>
+                                  <strong>Team {index + 1}</strong>
+                                  <span>
+                                    {header?.name}{row.headerHorseName ? ` (${row.headerHorseName})` : ""}
+                                    {" / "}
+                                    {heeler?.name}{row.heelerHorseName ? ` (${row.heelerHorseName})` : ""}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
                         ) : (
-                          <p>No picked teams selected.</p>
+                          <p>
+                            {contestant?.name} · {role} · {entries} entr{entries === 1 ? "y" : "ies"}
+                            {entryHorseName ? ` · ${entryHorseName}` : ""}
+                          </p>
                         )}
+                        <dl>
+                          <div>
+                            <dt>Payer</dt>
+                            <dd>
+                              {entryMode === "draws"
+                                ? contestant?.name
+                                : payerCandidates.find(({ id }) => id === payerContestantId)?.name}
+                            </dd>
+                          </div>
+                          <div><dt>Payment</dt><dd>{paymentMethod}</dd></div>
+                          <div><dt>Run count</dt><dd>{totals.runCount}</dd></div>
+                          <div><dt>Entry fee</dt><dd>{formatMoney(event.entryFee)}</dd></div>
+                          <div className="registration-receipt-total-due">
+                            <dt>Amount</dt><dd>{formatMoney(totals.amount)}</dd>
+                          </div>
+                        </dl>
+                        <div className="registration-review-actions">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReview(false);
+                              setSubmissionId("");
+                            }}
+                          >
+                            Back / Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="primary"
+                            disabled={busy}
+                            onClick={submitEntry}
+                          >
+                            {busy ? "Sending…" : "Send to Draw Desk"}
+                          </button>
+                        </div>
                       </section>
-                    </>
-                  ) : (
-                    <label>Partner<select required value={partnerId} onChange={(change) => setPartnerId(change.target.value)}>
-                      <option value="">Choose eligible partner</option>
-                      {partners.map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}
-                    </select></label>
-                  )}
-                  {(!pickAndDraw || pickStage === "picks") && (
-                    <fieldset className="registration-payment-method">
-                      <legend>Cashier payment selection</legend>
-                      <label className={paymentMethod === "cash" ? "selected" : ""}>
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          checked={paymentMethod === "cash"}
-                          onChange={() => setPaymentMethod("cash")}
-                        />
-                        <Banknote />
-                        <span>
-                          <strong>Paid in cash</strong>
-                          <small>{formatMoney(totalDue)} received by cashier</small>
-                        </span>
-                      </label>
-                      <label className={paymentMethod === "card" ? "selected" : ""}>
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          checked={paymentMethod === "card"}
-                          onChange={() => setPaymentMethod("card")}
-                        />
-                        <CreditCard />
-                        <span>
-                          <strong>Paid with credit card</strong>
-                          <small>Charge {formatMoney(totalDue)} on the portable Square Terminal first</small>
-                        </span>
-                      </label>
-                      <label className={paymentMethod === "tab" ? "selected" : ""}>
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          checked={paymentMethod === "tab"}
-                          onChange={() => setPaymentMethod("tab")}
-                        />
-                        <ClipboardPen />
-                        <span>
-                          <strong>Open a tab</strong>
-                          <small>Add {formatMoney(totalDue)} to this contestant's balance</small>
-                        </span>
-                      </label>
-                    </fieldset>
-                  )}
-                  {(!pickAndDraw || pickStage === "picks") && paymentMethod && (
-                    <button
-                      className="primary"
-                      disabled={
-                        busy ||
-                        Boolean(entryUnavailableMessage) ||
-                        !eligibleRoles.length ||
-                        (!individual &&
-                          !pickAndDraw &&
-                          !partnerId) ||
-                        (pickAndDraw &&
-                          ((entries < 1 && !addPick) ||
-                            (addPick && !partnerIds.length) ||
-                            totalRuns > event.entriesAllowed))
-                      }
-                    >
-                      {busy
-                        ? "Saving…"
-                        : paymentMethod === "tab"
-                          ? "Open tab and send entries to draw"
-                          : "Record payment and send entries to draw"}
-                    </button>
-                  )}
+                    )}
                   </form>
                 </div>
               )}

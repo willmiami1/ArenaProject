@@ -801,6 +801,13 @@ main { grid-column: 2; min-width: 0; }
 .registration-desk :is(input,select) { width: 100%; min-height: 46px; padding: 10px 12px; color: #eadcc6; background: #0d0a08; border: 1px solid #5a4434; border-radius: 6px; }
 .registration-desk-events select { max-width: 650px; margin-top: 7px; }
 .registration-desk-events p { margin: 8px 0 0; color: #bd9b75; }
+.registration-entry-modes { display: grid; grid-template-columns: repeat(2,minmax(0,280px)); gap: 10px; margin: 18px 0 0; padding: 0; border: 0; }
+.registration-entry-modes legend { margin-bottom: 8px; color: #b88458; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
+.registration-entry-modes label { display: grid; grid-template-columns: auto 1fr; column-gap: 9px; align-items: center; min-height: 70px; padding: 12px; background: #100c09; border: 1px solid #49372b; border-radius: 8px; cursor: pointer; }
+.registration-entry-modes label.selected { background: #213322; border-color: #6e946f; box-shadow: inset 0 0 0 1px #6e946f; }
+.registration-entry-modes input { grid-row: 1 / span 2; width: 18px; min-height: 18px; accent-color: #a46b47; }
+.registration-entry-modes strong { color: #eadcc6; font-size: 12px; }
+.registration-entry-modes small { color: #a9937d; font-size: 9px; line-height: 1.4; }
 .registration-desk-roster { margin-bottom: 22px; overflow: hidden; background: #17110d; border: 1px solid #3e2e23; border-radius: 10px; }
 .registration-desk-roster-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 20px; border-bottom: 1px solid #3e2e23; }
 .registration-desk-roster-heading span { color: #b88458; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
@@ -848,6 +855,13 @@ main { grid-column: 2; min-width: 0; }
 .registration-search-hint { margin: 0; padding: 24px 14px; color: #8e7b69; font-size: 11px; line-height: 1.5; text-align: center; }
 .registration-entry-form { display: grid; gap: 17px; padding: 24px; }
 .registration-competition-form { display: grid; gap: 17px; }
+.registration-team-builder { display: grid; gap: 15px; padding: 20px; }
+.registration-team-rows { display: grid; gap: 14px; }
+.registration-team-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 0; padding: 16px; border: 1px solid #563d2b; border-radius: 8px; }
+.registration-team-row legend { padding: 0 7px; color: #d8b98f; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .09em; }
+.registration-team-row label { display: grid; gap: 7px; color: #cdb9a3; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.registration-remove-team { grid-column: 1 / -1; justify-self: end; display: inline-flex; align-items: center; gap: 6px; color: #e8b2a9; background: transparent; border: 1px solid #71453e; border-radius: 6px; }
+.registration-add-team { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; color: #eadcc6; background: #2b2119; border: 1px solid #66503d; border-radius: 7px; }
 .registration-selected-contestant { display: flex; align-items: center; gap: 10px; padding: 14px; color: #e4c494; background: #2c2015; border: 1px solid #5b422a; border-radius: 7px; font-size: 12px; }
 .registration-contestant-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .registration-contestant-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; color: #d7c0a7; background: #17110d; border: 1px solid #543d2c; border-radius: 6px; }
@@ -883,6 +897,12 @@ main { grid-column: 2; min-width: 0; }
 .registration-receipt-teams>span { color: #6e5742; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
 .registration-receipt-teams ul { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 18px; font-size: 11px; }
 .registration-entry-receipt p { margin: 0; padding: 12px 16px 15px; color: #7a6652; font-size: 11px; }
+.registration-review-teams { display: grid; gap: 1px; padding: 8px 16px; background: #cbb395; }
+.registration-review-teams>div { display: grid; gap: 3px; padding: 10px; background: #f3e8d6; }
+.registration-review-teams strong { font-size: 10px; text-transform: uppercase; }
+.registration-review-teams span { font-size: 11px; }
+.registration-review-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 9px; padding: 14px 16px 16px; }
+.registration-review-actions button { min-height: 46px; border-radius: 6px; }
 .registration-payment-method { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; margin: 0; padding: 14px; border: 1px solid #5b422f; border-radius: 8px; }
 .registration-payment-method legend { padding: 0 7px; color: #d8b98f; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .09em; }
 .registration-payment-method label { grid-template-columns: auto auto 1fr; align-items: center; gap: 9px; min-height: 78px; padding: 12px; background: #17110d; border: 1px solid #493426; border-radius: 7px; cursor: pointer; }
@@ -936,6 +956,8 @@ main { grid-column: 2; min-width: 0; }
   .registration-pin-panel { grid-template-columns: 1fr; }
   .registration-contestant-actions { grid-template-columns: 1fr; }
   .registration-payment-method { grid-template-columns: 1fr; }
+  .registration-entry-modes { grid-template-columns: 1fr 1fr; }
+  .registration-team-row { grid-template-columns: 1fr; }
   .topbar { min-height: 68px; padding: 12px 16px; }
   .topbar .eyebrow { display: none; }
   .topbar h1 { font-size: 17px; }
@@ -991,6 +1013,13 @@ main { grid-column: 2; min-width: 0; }
   .report-metric-grid { grid-template-columns: repeat(2, 1fr); }
   .portal-summary { grid-template-columns: repeat(2, 1fr); }
   .portal-registration-row { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 560px) {
+  .registration-entry-modes { grid-template-columns: 1fr; }
+  .registration-team-builder { padding: 14px; }
+  .registration-team-row { padding: 13px; }
+  .registration-review-actions { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {
