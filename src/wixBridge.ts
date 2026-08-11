@@ -16,11 +16,13 @@ import type {
   RegistrationDeskData,
 } from "./registrationDeskData";
 import type { ActiveRunConfirmation } from "./activeRunSaveQueue";
+import type { EventSaveConfirmation } from "./eventSaveQueue";
 
 type WixAction =
   | "load"
   | "save"
   | "saveContestant"
+  | "saveEvent"
   | "saveRegistration"
   | "setActiveRun"
   | "authenticateContestant"
@@ -289,6 +291,7 @@ export function sensitiveWixAction(action: WixAction) {
   return (
     action === "authenticateContestant" ||
     action === "saveContestant" ||
+    action === "saveEvent" ||
     action === "saveRegistration" ||
     action === "setActiveRun" ||
     action === "setContestantPin" ||
@@ -454,6 +457,33 @@ export async function saveContestant(contestant: Contestant) {
   );
   if (!confirmation) {
     throw new Error("Wix did not confirm the contestant save.");
+  }
+  return confirmation;
+}
+
+export interface EventSaveRequest {
+  event: ArenaEvent;
+  revision: number;
+  staffRevision: number;
+  onlineRevision: number;
+}
+
+export function eventSaveRequest(data: ArenaData, event: ArenaEvent): EventSaveRequest {
+  return {
+    event,
+    revision: Number(data.revision ?? 0),
+    staffRevision: Number(data.staffRevision ?? data.revision ?? 0),
+    onlineRevision: Number(data.onlineRevision ?? 0),
+  };
+}
+
+export async function saveEvent(data: ArenaData, event: ArenaEvent) {
+  const confirmation = await requestWix<EventSaveConfirmation>(
+    "saveEvent",
+    eventSaveRequest(data, event),
+  );
+  if (!confirmation) {
+    throw new Error("Wix did not confirm the event save.");
   }
   return confirmation;
 }

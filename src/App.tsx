@@ -272,6 +272,7 @@ function StaffApp() {
     refreshFromWix,
     saveImmediately,
     saveContestantImmediately,
+    saveEventImmediately,
     saveRegistrationImmediately,
     saveActiveRunImmediately,
     lastSaveError,
@@ -650,13 +651,7 @@ function StaffApp() {
               meets={data.meets}
               teams={data.teams}
               activeEventId={data.activeEventId}
-              onAdd={(event) =>
-                setData((current) => ({
-                  ...current,
-                  events: [...current.events, event],
-                  activeEventId: event.id,
-                }))
-              }
+              onAdd={saveEventImmediately}
               onAddMeet={(meet) =>
                 setData((current) => ({
                   ...current,
@@ -706,12 +701,7 @@ function StaffApp() {
                 })
               }
               onSelect={setActiveEvent}
-              onUpdate={(event) =>
-                setData((current) => ({
-                  ...current,
-                  events: current.events.map((item) => item.id === event.id ? event : item),
-                }))
-              }
+              onUpdate={saveEventImmediately}
               onDelete={(eventId) =>
                 setData((current) => {
                   const events = current.events.filter((event) => event.id !== eventId);
@@ -1640,9 +1630,9 @@ function Events({
   onAddMeet: (meet: ArenaMeet) => void;
   onUpdateMeet: (meet: ArenaMeet) => void;
   onDeleteMeet: (id: string) => void;
-  onAdd: (event: ArenaEvent) => void;
+  onAdd: (event: ArenaEvent) => void | Promise<ArenaEvent>;
   onSelect: (id: string) => void;
-  onUpdate: (event: ArenaEvent) => void;
+  onUpdate: (event: ArenaEvent) => void | Promise<ArenaEvent>;
   onDelete: (id: string) => void;
 }) {
   const [showMeetForm, setShowMeetForm] = useState(false);
@@ -1718,12 +1708,16 @@ function Events({
                   event={editing ?? undefined}
                   parent={meet}
                   competitionType={selectedType ?? editing?.competitionType}
-                  onSubmit={(event) => {
-                    if (editing) onUpdate(event);
-                    else onAdd(event);
-                    setEditing(null);
-                    setSelectedType(null);
-                    setSelectedParentId(null);
+                  onSubmit={async (event) => {
+                    try {
+                      if (editing) await onUpdate(event);
+                      else await onAdd(event);
+                      setEditing(null);
+                      setSelectedType(null);
+                      setSelectedParentId(null);
+                    } catch {
+                      // The workspace error banner reports the relay failure.
+                    }
                   }}
                   onCancel={() => {
                     setEditing(null);
@@ -1877,7 +1871,7 @@ function EventForm({
   event?: ArenaEvent;
   parent: ArenaMeet;
   competitionType?: CompetitionType;
-  onSubmit: (event: ArenaEvent) => void;
+  onSubmit: (event: ArenaEvent) => void | Promise<void>;
   onCancel: () => void;
 }) {
   const initialCompetitionType =

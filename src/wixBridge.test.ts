@@ -63,6 +63,10 @@ describe("trusted Wix relay origin", () => {
       expect(sensitiveWixAction("saveContestant")).toBe(true);
     });
 
+    it("requires the trusted Wix relay for direct Event saves", () => {
+      expect(sensitiveWixAction("saveEvent")).toBe(true);
+    });
+
     it("requires the trusted Wix relay for direct registration saves", () => {
       expect(sensitiveWixAction("saveRegistration")).toBe(true);
     });

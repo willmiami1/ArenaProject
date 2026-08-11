@@ -10,6 +10,7 @@ import {
 import { normalizeHorseNames } from "./contestantHorses";
 import type {
   ArenaData,
+  ArenaEvent,
   ArenaMeet,
   Contestant,
   EventRegistration,
@@ -20,6 +21,7 @@ import {
   publishPublicSchedule,
   requestWixData,
   saveContestant,
+  saveEvent,
   saveRegistration,
   setActiveRun,
   type ContestantSaveConfirmation,
@@ -34,6 +36,17 @@ import {
   type ActiveRunConfirmation,
   type ActiveRunSelection,
 } from "./activeRunSaveQueue";
+import {
+  applyEventLocally,
+  EventSaveFailureTracker,
+  EventSaveQueue,
+  eventSaveHasPendingChanges,
+  eventSaveHasUnrelatedChanges,
+  eventSubmissionIsNoOp,
+  preserveEventActiveSelection,
+  reconcileEventSaveConfirmation,
+  type EventSaveConfirmation,
+} from "./eventSaveQueue";
 
 const STORAGE_KEY = "arena-command-data-v1";
 const PARTICIPANT_DATABASE_VERSION = 4;
@@ -508,6 +521,10 @@ export function useArenaData() {
   const activeRunSaveInFlight = useRef(false);
   const contestantSaveInFlight = useRef(false);
   const contestantSaveQueue = useRef<Promise<void>>(Promise.resolve());
+  const eventSaveInFlight = useRef(false);
+  const eventSaveQueue = useRef<EventSaveQueue<EventSaveConfirmation> | null>(null);
+  const eventSaveFailures = useRef(new EventSaveFailureTracker());
+  const eventWorkspaceFollowUpNeeded = useRef(false);
   const registrationSaveInFlight = useRef(false);
   const registrationSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveIdleWaiters = useRef<Array<() => void>>([]);
@@ -533,6 +550,8 @@ export function useArenaData() {
       saveInFlight.current ||
       activeRunSaveInFlight.current ||
       contestantSaveInFlight.current ||
+      eventSaveInFlight.current ||
+      eventSaveFailures.current.hasFailures ||
       registrationSaveInFlight.current
     ) {
       return;
@@ -553,6 +572,7 @@ export function useArenaData() {
       saveInFlight.current ||
       activeRunSaveInFlight.current ||
       contestantSaveInFlight.current ||
+      eventSaveInFlight.current ||
       registrationSaveInFlight.current ||
       statusRef.current === "saving";
     if (writePending()) {
@@ -587,6 +607,11 @@ export function useArenaData() {
     }
   }, []);
   const saveImmediately = useCallback(async (submitted: ArenaData) => {
+    if (eventSaveFailures.current.hasFailures) {
+      throw new Error(
+        "Resolve the failed Event save before saving the full workspace.",
+      );
+    }
     if (!isWixEmbed()) {
       const normalized = normalizeData(submitted);
       skipNextSave.current = true;
@@ -600,6 +625,7 @@ export function useArenaData() {
       saveInFlight.current ||
       activeRunSaveInFlight.current ||
       contestantSaveInFlight.current ||
+      eventSaveInFlight.current ||
       registrationSaveInFlight.current
     ) {
       throw new Error("Wait for the current workspace save to finish, then try again.");
@@ -728,6 +754,7 @@ export function useArenaData() {
         while (
           saveInFlight.current ||
           activeRunSaveInFlight.current ||
+          eventSaveInFlight.current ||
           registrationSaveInFlight.current
         ) {
           await new Promise<void>((resolve) => {
@@ -776,7 +803,9 @@ export function useArenaData() {
           dataRef.current = reconciled;
           setData(reconciled);
           window.localStorage.setItem(STORAGE_KEY, JSON.stringify(reconciled));
-          setLastSaveError("");
+          if (!eventSaveFailures.current.hasFailures) {
+            setLastSaveError("");
+          }
           automaticRetryCount.current = 0;
           conflictRetryCount.current = 0;
           lastFailedSnapshot.current = "";
@@ -800,13 +829,147 @@ export function useArenaData() {
     [],
   );
 
+  const saveEventImmediately = useCallback((event: ArenaEvent) => {
+    const existing = dataRef.current.events.find((item) => item.id === event.id);
+    const submittedEvent = preserveEventActiveSelection(existing, event);
+    const persistedEvent = persistedDataRef.current.events.find(
+      (item) => item.id === event.id,
+    );
+    if (eventSubmissionIsNoOp(persistedEvent, existing, submittedEvent)) {
+      return Promise.resolve(existing ?? submittedEvent);
+    }
+
+    const submittedData = applyEventLocally(dataRef.current, submittedEvent);
+    skipNextSave.current = true;
+    preserveDirtyOnSkippedSave.current = true;
+    localDirty.current = isWixEmbed();
+    dataRef.current = submittedData;
+    setData(submittedData);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(submittedData));
+
+    if (!isWixEmbed()) {
+      setStatus("local");
+      return Promise.resolve(submittedEvent);
+    }
+
+    setStatus("saving");
+    if (!eventSaveQueue.current) {
+      eventSaveQueue.current = new EventSaveQueue(async (submittedEvent) => {
+        let scheduleWorkspaceFollowUp = false;
+        while (
+          saveInFlight.current ||
+          activeRunSaveInFlight.current ||
+          contestantSaveInFlight.current ||
+          registrationSaveInFlight.current
+        ) {
+          await new Promise<void>((resolve) => {
+            saveIdleWaiters.current.push(resolve);
+          });
+        }
+        eventSaveInFlight.current = true;
+        try {
+          window.clearTimeout(saveRetryTimer.current);
+          saveRetryTimer.current = 0;
+          const confirmation = await saveEvent(
+            dataRef.current,
+            submittedEvent,
+          );
+          scheduleWorkspaceFollowUp =
+            localDirty.current &&
+            eventSaveHasUnrelatedChanges(
+              dataRef.current,
+              persistedDataRef.current,
+              submittedEvent,
+            );
+          const currentWasDirty = eventSaveHasPendingChanges(
+            dataRef.current,
+            persistedDataRef.current,
+            submittedEvent,
+          );
+          const reconciled = reconcileEventSaveConfirmation(
+            dataRef.current,
+            submittedEvent,
+            confirmation,
+          );
+          persistedDataRef.current = reconcileEventSaveConfirmation(
+            persistedDataRef.current,
+            submittedEvent,
+            confirmation,
+          );
+          eventSaveFailures.current.recordSuccess(submittedEvent.id);
+          eventWorkspaceFollowUpNeeded.current ||= scheduleWorkspaceFollowUp;
+          skipNextSave.current = true;
+          directMutationReconciliationSnapshot.current = JSON.stringify(reconciled);
+          preserveDirtyOnSkippedSave.current = currentWasDirty;
+          localDirty.current = currentWasDirty;
+          dataRef.current = reconciled;
+          setData(reconciled);
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(reconciled));
+          if (!eventSaveFailures.current.hasFailures) {
+            setLastSaveError("");
+          }
+          automaticRetryCount.current = 0;
+          conflictRetryCount.current = 0;
+          lastFailedSnapshot.current = "";
+          setStatus(
+            eventSaveFailures.current.hasFailures
+              ? "error"
+              : currentWasDirty
+                ? "saving"
+                : "saved",
+          );
+          return confirmation;
+        } catch (error) {
+          eventSaveFailures.current.recordFailure(submittedEvent.id);
+          localDirty.current = true;
+          setLastSaveError(error instanceof Error ? error.message : String(error));
+          setStatus("error");
+          throw error;
+        } finally {
+          eventSaveInFlight.current = false;
+          releaseSaveIdleWaiters();
+        }
+      });
+    }
+    const queue = eventSaveQueue.current;
+    if (queue.isIdle) {
+      eventWorkspaceFollowUpNeeded.current = false;
+    }
+    return queue.enqueue(submittedEvent).then(
+      (confirmation) => {
+        if (
+          queue.isIdle &&
+          !eventSaveFailures.current.hasFailures &&
+          eventWorkspaceFollowUpNeeded.current
+        ) {
+          eventWorkspaceFollowUpNeeded.current = false;
+          skipNextSave.current = false;
+          directMutationReconciliationSnapshot.current = "";
+          preserveDirtyOnSkippedSave.current = false;
+          setStatus("saving");
+          setData((current) => ({ ...current }));
+        } else if (queue.isIdle && eventSaveFailures.current.hasFailures) {
+          eventWorkspaceFollowUpNeeded.current = false;
+        }
+        return confirmation.event;
+      },
+      (error) => {
+        if (queue.isIdle) {
+          eventWorkspaceFollowUpNeeded.current = false;
+        }
+        throw error;
+      },
+    );
+  }, []);
+
   const saveRegistrationImmediately = useCallback(
     (registration: EventRegistration) => {
       const operation = registrationSaveQueue.current.then(async () => {
         while (
           saveInFlight.current ||
           activeRunSaveInFlight.current ||
-          contestantSaveInFlight.current
+          contestantSaveInFlight.current ||
+          eventSaveInFlight.current
         ) {
           await new Promise<void>((resolve) => {
             saveIdleWaiters.current.push(resolve);
@@ -854,7 +1017,9 @@ export function useArenaData() {
           dataRef.current = reconciled;
           setData(reconciled);
           window.localStorage.setItem(STORAGE_KEY, JSON.stringify(reconciled));
-          setLastSaveError("");
+          if (!eventSaveFailures.current.hasFailures) {
+            setLastSaveError("");
+          }
           automaticRetryCount.current = 0;
           conflictRetryCount.current = 0;
           lastFailedSnapshot.current = "";
@@ -910,6 +1075,7 @@ export function useArenaData() {
             while (
               saveInFlight.current ||
               contestantSaveInFlight.current ||
+              eventSaveInFlight.current ||
               registrationSaveInFlight.current
             ) {
               await new Promise<void>((resolve) => {
@@ -1018,6 +1184,11 @@ export function useArenaData() {
       }
       if (shouldSkip) return;
     }
+    if (eventSaveFailures.current.hasFailures) {
+      localDirty.current = true;
+      setStatus("error");
+      return;
+    }
     if (!wixConnected) {
       if (status !== "error") setStatus("local");
       return;
@@ -1040,6 +1211,7 @@ export function useArenaData() {
         saveInFlight.current ||
         activeRunSaveInFlight.current ||
         contestantSaveInFlight.current ||
+        eventSaveInFlight.current ||
         registrationSaveInFlight.current
       ) {
         return;
@@ -1185,6 +1357,7 @@ export function useArenaData() {
       saveInFlight.current ||
       activeRunSaveInFlight.current ||
       contestantSaveInFlight.current ||
+      eventSaveInFlight.current ||
       registrationSaveInFlight.current ||
       statusRef.current === "saving";
 
@@ -1276,6 +1449,7 @@ export function useArenaData() {
     refreshFromWix,
     saveImmediately,
     saveContestantImmediately,
+    saveEventImmediately,
     saveRegistrationImmediately,
     saveActiveRunImmediately,
     lastSaveError,
