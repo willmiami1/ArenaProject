@@ -582,19 +582,6 @@ export function submitLocalRegistrationDeskSignup(
     if (!riders.has(request.payerContestantId)) {
       fail("Choose one of the riders in this batch as the payer.");
     }
-    if (event.competitionType === "pick-and-draw") {
-      for (const contestantId of riders) {
-        const hasDraw = activeRegistrations.some(
-          (registration) =>
-            registration.contestantId === contestantId &&
-            registration.status === "entered" &&
-            Number(registration.entries) > 0,
-        );
-        if (!hasDraw) {
-          fail("Every rider on a picked team must already be entered in the draw.");
-        }
-      }
-    }
     for (const contestantId of riders) {
       if (
         standaloneEntries(contestantId) +
