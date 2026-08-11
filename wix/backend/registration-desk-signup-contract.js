@@ -380,22 +380,6 @@ const preparePickedTeams = (workspace, event, request) => {
     fail("Choose one of the riders in this batch as the payer.");
   }
 
-  if (event.competitionType === "pick-and-draw") {
-    riders.forEach((contestantId) => {
-      if (
-        !hasPreExistingDrawRegistration(
-          workspace,
-          event.id,
-          contestantId,
-          request.submissionId,
-        )
-      ) {
-        fail(
-          "Every rider on a picked team must already be entered in the draw.",
-        );
-      }
-    });
-  }
 
   const existingTeamCounts = teamCountByRider(activeTeams);
   const batchTeamCounts = teamCountByRider(rows);
