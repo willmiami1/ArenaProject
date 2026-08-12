@@ -18,6 +18,7 @@ import {
   saveRegistrationDeskContestant,
   setRegistrationDeskContestantPin,
   submitRegistrationDeskSignup,
+  submitRegistrationDeskWaiver,
 } from "backend/arena-data.web";
 import { authentication } from "wix-members-frontend";
 import wixPayFrontend from "wix-pay-frontend";
@@ -168,6 +169,8 @@ $w.onReady(() => {
         data = await setRegistrationDeskContestantPin(message.data);
       } else if (message.action === "submitRegistrationDeskSignup") {
         data = await submitRegistrationDeskSignup(message.data);
+      } else if (message.action === "submitRegistrationDeskWaiver") {
+        data = await submitRegistrationDeskWaiver(message.data);
       } else if (ADMIN_LOGOUT_ACTIONS.has(message.action)) {
         await authentication.logout();
         data = { loggedOut: true };

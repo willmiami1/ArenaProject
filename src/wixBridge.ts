@@ -14,6 +14,8 @@ import type { ContestantAccountRequest } from "./contestantAccount";
 import type {
   RegistrationDeskContestantInput,
   RegistrationDeskData,
+  RegistrationDeskWaiverRequest,
+  RegistrationDeskWaiverResponse,
 } from "./registrationDeskData";
 import type { ActiveRunConfirmation } from "./activeRunSaveQueue";
 import type { EventSaveConfirmation } from "./eventSaveQueue";
@@ -50,6 +52,7 @@ type WixAction =
   | "saveRegistrationDeskContestant"
   | "setRegistrationDeskContestantPin"
   | "submitRegistrationDeskSignup"
+  | "submitRegistrationDeskWaiver"
   | "updateRegistrationDeskEntry"
   | "scratchRegistrationDeskEntry";
 
@@ -315,6 +318,7 @@ export function sensitiveWixAction(action: WixAction) {
     action === "saveRegistrationDeskContestant" ||
     action === "setRegistrationDeskContestantPin" ||
     action === "submitRegistrationDeskSignup" ||
+    action === "submitRegistrationDeskWaiver" ||
     action === "updateRegistrationDeskEntry" ||
     action === "scratchRegistrationDeskEntry"
   );
@@ -411,7 +415,8 @@ function requestWixFromOrigin<T>(
       action === "promptRegistrationDeskLogin" ||
       action === "startPublicSignupPayment"
         ? 5 * 60 * 1000
-        : action === "save"
+        : action === "save" ||
+            action === "submitRegistrationDeskWaiver"
           ? 30 * 1000
         : 8000;
     const timeout = window.setTimeout(() => {
@@ -579,6 +584,15 @@ export function submitRegistrationDeskSignup(
       data: RegistrationDeskData;
     }
   >("submitRegistrationDeskSignup", signup);
+}
+
+export function submitRegistrationDeskWaiver(
+  waiver: RegistrationDeskWaiverRequest,
+) {
+  return requestWix<RegistrationDeskWaiverResponse>(
+    "submitRegistrationDeskWaiver",
+    waiver,
+  );
 }
 
 export interface RegistrationDeskEntryRequest {

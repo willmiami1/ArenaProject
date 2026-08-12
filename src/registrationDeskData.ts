@@ -13,11 +13,43 @@ import type {
   Team,
 } from "./types";
 
+export interface RegistrationDeskWaiverDocument {
+  title: string;
+  version: string;
+  text: string;
+  available: boolean;
+}
+
+export interface RegistrationDeskWaiverSignature {
+  id: string;
+  eventId: string;
+  contestantId: string;
+  contestantName: string;
+  signerName: string;
+  signedAt: string;
+  waiverVersion: string;
+}
+
+export interface RegistrationDeskWaiverRequest {
+  eventId: string;
+  contestantId: string;
+  signerName: string;
+  signatureDataUrl: string;
+  accepted: true;
+}
+
 export interface RegistrationDeskData {
   events: RegistrationDeskEvent[];
   contestants: Contestant[];
   teams: Team[];
   registrations: EventRegistration[];
+  waiverDocument: RegistrationDeskWaiverDocument;
+  waiverSignatures: RegistrationDeskWaiverSignature[];
+}
+
+export interface RegistrationDeskWaiverResponse {
+  signature: RegistrationDeskWaiverSignature;
+  data: RegistrationDeskData;
 }
 
 export type RegistrationDeskEvent = Pick<
@@ -58,6 +90,64 @@ export interface RegistrationDeskContestantInput {
 
 const registrationWorkspaceKey = "arena-command-data-v1";
 const validRegistrationDeskId = /^[A-Za-z0-9_-]{1,100}$/;
+
+export const unavailableRegistrationDeskWaiverDocument:
+  RegistrationDeskWaiverDocument = {
+    title: "",
+    version: "",
+    text: "",
+    available: false,
+  };
+
+type RegistrationDeskDataInput = Omit<
+  RegistrationDeskData,
+  "waiverDocument" | "waiverSignatures"
+> &
+  Partial<
+    Pick<RegistrationDeskData, "waiverDocument" | "waiverSignatures">
+  >;
+
+export function normalizeRegistrationDeskData(
+  data: RegistrationDeskDataInput,
+): RegistrationDeskData {
+  const sourceDocument = data.waiverDocument;
+  const title =
+    typeof sourceDocument?.title === "string" ? sourceDocument.title.trim() : "";
+  const version =
+    typeof sourceDocument?.version === "string"
+      ? sourceDocument.version.trim()
+      : "";
+  const text =
+    typeof sourceDocument?.text === "string" ? sourceDocument.text.trim() : "";
+  const waiverDocument = {
+    title,
+    version,
+    text,
+    available:
+      sourceDocument?.available === true &&
+      Boolean(title && version && text),
+  };
+  const waiverSignatures = Array.isArray(data.waiverSignatures)
+    ? data.waiverSignatures.filter(
+        (signature): signature is RegistrationDeskWaiverSignature =>
+          Boolean(
+            signature &&
+              typeof signature.id === "string" &&
+              typeof signature.eventId === "string" &&
+              typeof signature.contestantId === "string" &&
+              typeof signature.contestantName === "string" &&
+              typeof signature.signerName === "string" &&
+              typeof signature.signedAt === "string" &&
+              typeof signature.waiverVersion === "string",
+          ),
+      )
+    : [];
+  return {
+    ...data,
+    waiverDocument,
+    waiverSignatures,
+  };
+}
 
 function sha256(value: string) {
   const constants = [
@@ -221,6 +311,8 @@ export function registrationDeskProjection(
     registrations: data.registrations
       .filter((registration) => eventIds.has(registration.eventId))
       .map((registration) => ({ ...registration, notes: "" })),
+    waiverDocument: unavailableRegistrationDeskWaiverDocument,
+    waiverSignatures: [],
   };
 }
 
