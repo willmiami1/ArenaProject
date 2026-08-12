@@ -40,6 +40,7 @@ designed to run as an embedded web app inside a Wix site.
 - Financial, payout, draw, results, stock, contestant, team, judge, and arena-statistics reports
 - Role-based report access for administrators, producers, secretaries, announcers, and read-only users
 - Searchable report history with one-click regeneration and saved per-role column preferences
+- Registration Desk-only tablet waiver signatures with event-specific participant status
 - Browser-based persistence with no server required
 
 ## Development
@@ -62,7 +63,7 @@ The default URL opens the public home page. Public routes use `?page=events`,
 `?portal=contestant` and `?display=leaderboard` routes remain available.
 `?app=registration` opens the restricted Registration Desk for staff who may
 maintain contestant profiles, configure contestant four-digit login PINs, and
-submit eligible entries but may not access event configuration, Run Desk,
+submit eligible entries and participant waivers but may not access event configuration, Run Desk,
 reports, results, payouts, or LED controls. At checkout, the cashier selects
 **Paid in cash**, **Paid with credit card**, or **Open a tab**. Credit cards are
 charged separately on the arena's portable Square Terminal before the cashier
@@ -74,13 +75,19 @@ remain visibly unpaid for settlement but are authorized to enter the draw.
 1. Enable Velo developer mode in Wix.
 2. Create these Wix Data collections: `ArenaMeets`, `ArenaCompetitions`,
    `ArenaContestants`, `ArenaTeams`, `ArenaRegistrations`, `ArenaSpectators`,
-   `ArenaSpectatorPredictions`, `ArenaSettings`, and `ArenaContestantCredentials`.
-3. Add `appId` and `payload` text fields to the first seven collections. Online
+   `ArenaSpectatorPredictions`, `ArenaWaiverSignatures`, `ArenaSettings`, and
+   `ArenaContestantCredentials`.
+3. Add `appId` and `payload` text fields to the first eight collections. Online
    team and registration payloads may also contain optional `source`,
    `submissionId`, and `submittedAt` properties. Add
    `activeEventId` (text), `participantDatabaseVersion` (number), and `updatedAt`
    (date/time) to `ArenaSettings`, plus `value` (number, default `0`) for the
    separate staff and online revision records created by the backend.
+   In `ArenaSettings`, create the record
+   `arena-registration-desk-waiver-document`; its `payload` must be JSON with
+   the authoritative non-empty `title`, `version`, and `text`. Until all three
+   values are configured, the backend returns `available: false` and the
+   Registration Desk disables signing without displaying placeholder text.
 4. Set every collection's permissions to **Admin only**. Public access is
    provided only by the backend's purpose-built `Permissions.Anyone` methods;
    visitors never query collections directly.
@@ -130,6 +137,12 @@ for both option loading and submission and are never stored in browser storage.
 Online teams and registrations start unpaid and do not enter generated draws
 until staff confirms payment. Revision-aware staff saves preserve online
 records submitted after the staff workspace was loaded.
+
+Waiver PNG evidence is stored only in the admin-only
+`ArenaWaiverSignatures` collection. Generic Arena workspace saves, browser
+`localStorage`, contestant account creation, and public projections never
+receive that evidence; the Registration Desk receives only signature status
+metadata after submission.
 
 ### Owner payment notification
 

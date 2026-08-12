@@ -26,6 +26,11 @@ import {
   registrationDeskSignupIsRetry,
   supportedRegistrationDeskEntryTypes,
 } from "./registration-desk-signup-contract";
+import {
+  normalizeRegistrationDeskWaiverDocument,
+  prepareRegistrationDeskWaiver,
+  registrationDeskWaiverSignatureProjection,
+} from "./registration-desk-waiver-contract";
 
 const COLLECTIONS = {
   meets: "ArenaMeets",
@@ -52,10 +57,12 @@ const PAYLOAD_FIELDS = [
 const SETTINGS_COLLECTION = "ArenaSettings";
 const CREDENTIALS_COLLECTION = "ArenaContestantCredentials";
 const CREDENTIAL_LOCKS_COLLECTION = "ArenaContestantCredentialLocks";
+const WAIVER_SIGNATURES_COLLECTION = "ArenaWaiverSignatures";
 const SETTINGS_ID = "arena-command-settings";
 const STAFF_REVISION_ID = "arena-command-staff-revision";
 const ONLINE_REVISION_ID = "arena-command-online-revision";
 const PUBLIC_SCHEDULE_ID = "arena-command-public-schedule";
+const WAIVER_DOCUMENT_SETTINGS_ID = "arena-registration-desk-waiver-document";
 const OPTIONS = { suppressAuth: true };
 const PIN_PEPPER_SECRET = "ArenaContestantPinPepper";
 const ADMIN_ROLE_SECRET = "ArenaAdminRoleId";
@@ -301,6 +308,22 @@ async function readOptionalItem(collectionId, itemId) {
     if (error?.code === "WDE0025" || error?.code === "WDE0026") return null;
     throw error;
   }
+}
+
+async function readRegistrationDeskWaiverDocument() {
+  const record = await readOptionalItem(
+    SETTINGS_COLLECTION,
+    WAIVER_DOCUMENT_SETTINGS_ID,
+  );
+  return normalizeRegistrationDeskWaiverDocument(record);
+}
+
+async function readRegistrationDeskWaiverSignatures(eventIds) {
+  const evidence = await readOptionalAll(WAIVER_SIGNATURES_COLLECTION);
+  return evidence.flatMap((record) => {
+    const signature = registrationDeskWaiverSignatureProjection(record);
+    return signature && eventIds.has(signature.eventId) ? [signature] : [];
+  });
 }
 
 const publicContestantAccountResult = (workspace, event, contestant) => {
@@ -831,6 +854,14 @@ async function ensureWorkspaceCollections() {
   }
 }
 
+async function ensureRegistrationDeskWaiverCollection() {
+  await ensureCollection(
+    WAIVER_SIGNATURES_COLLECTION,
+    "Arena Waiver Signatures",
+    PAYLOAD_FIELDS,
+  );
+}
+
 async function ensureRiderAccountCollections() {
   await ensureSettingsCollection();
   await ensureCollection(
@@ -1079,9 +1110,13 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
   return readWorkspace();
 });
 
-function registrationDeskProjection(workspace) {
+async function registrationDeskProjection(workspace) {
   const events = workspace.events.filter(registrationDeskIsVisible);
   const eventIds = new Set(events.map((event) => event.id));
+  const [waiverDocument, waiverSignatures] = await Promise.all([
+    readRegistrationDeskWaiverDocument(),
+    readRegistrationDeskWaiverSignatures(eventIds),
+  ]);
   return {
     events: events.map(
       ({
@@ -1166,6 +1201,8 @@ function registrationDeskProjection(workspace) {
     registrations: workspace.registrations
       .filter((registration) => eventIds.has(registration.eventId))
       .map((registration) => ({ ...registration, notes: "" })),
+    waiverDocument,
+    waiverSignatures,
   };
 }
 
@@ -1291,7 +1328,7 @@ export const saveRegistrationDeskContestant = webMethod(
     });
     return {
       contestant,
-      data: registrationDeskProjection(await readWorkspace()),
+      data: await registrationDeskProjection(await readWorkspace()),
     };
   },
 );
@@ -2242,7 +2279,7 @@ async function createRegistrationDeskSignupRecords(request) {
       payerContestantId: prepared.canonicalRequest.payerContestantId,
       recordIds: prepared.recordIds,
       existing: repeated,
-      data: registrationDeskProjection(freshWorkspace),
+      data: await registrationDeskProjection(freshWorkspace),
     };
   });
 }
@@ -2271,6 +2308,66 @@ export const submitRegistrationDeskSignup = webMethod(
           ? "Contestant tab opened. Entries were sent to the draw area."
           : "Payment recorded. Contestant entries were sent to the draw area.",
       data: result.data,
+    };
+  },
+);
+
+export const submitRegistrationDeskWaiver = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireRegistrationDesk();
+    const workspace = await readWorkspace({ consistentRead: true });
+    const waiverDocument = await readRegistrationDeskWaiverDocument();
+    const signatureId = `waiver-${createHash("sha256")
+      .update(
+        JSON.stringify([
+          request?.eventId,
+          request?.contestantId,
+          waiverDocument.version,
+        ]),
+      )
+      .digest("hex")
+      .slice(0, 32)}`;
+    const prepared = prepareRegistrationDeskWaiver(
+      workspace,
+      waiverDocument,
+      request,
+      { id: signatureId },
+    );
+    await ensureRegistrationDeskWaiverCollection();
+    const inserted = await insertUniqueArenaRecord(
+      WAIVER_SIGNATURES_COLLECTION,
+      prepared.evidence,
+    );
+    let signature = prepared.signature;
+    if (!inserted) {
+      const existing = await readOptionalItem(
+        WAIVER_SIGNATURES_COLLECTION,
+        arenaRecordStorageId(WAIVER_SIGNATURES_COLLECTION, signatureId),
+      );
+      let evidence;
+      try {
+        evidence =
+          typeof existing?.payload === "string"
+            ? JSON.parse(existing.payload)
+            : existing?.payload;
+      } catch {
+        evidence = null;
+      }
+      signature = registrationDeskWaiverSignatureProjection(evidence);
+      if (!signature) {
+        throw new Error("The existing waiver signature could not be verified.");
+      }
+    }
+    const projected = await registrationDeskProjection(workspace);
+    return {
+      signature,
+      data: projected.waiverSignatures.some(({ id }) => id === signature.id)
+        ? projected
+        : {
+            ...projected,
+            waiverSignatures: [...projected.waiverSignatures, signature],
+          },
     };
   },
 );

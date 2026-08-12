@@ -799,8 +799,10 @@ main { grid-column: 2; min-width: 0; }
 .registration-desk-events { margin-bottom: 22px; padding: 20px; background: #17110d; border: 1px solid #3e2e23; border-radius: 10px; }
 .registration-desk-events label,.registration-entry-form label,.registration-profile-form label { display: grid; gap: 7px; color: #cdb9a3; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
 .registration-desk :is(input,select) { width: 100%; min-height: 46px; padding: 10px 12px; color: #eadcc6; background: #0d0a08; border: 1px solid #5a4434; border-radius: 6px; }
+.registration-desk :is(button,a,input,select,canvas):focus-visible { outline: 3px solid #f2b879; outline-offset: 3px; }
 .registration-desk-events select { max-width: 650px; margin-top: 7px; }
 .registration-desk-events p { margin: 8px 0 0; color: #bd9b75; }
+.registration-waiver-setup-message { max-width: 850px; padding: 12px 14px; color: #f0cf9e !important; background: #35240f; border: 1px solid #805d2f; border-radius: 7px; line-height: 1.55; }
 .registration-entry-modes { display: grid; grid-template-columns: repeat(2,minmax(0,280px)); gap: 10px; margin: 18px 0 0; padding: 0; border: 0; }
 .registration-entry-modes legend { margin-bottom: 8px; color: #b88458; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
 .registration-entry-modes label { display: grid; grid-template-columns: auto 1fr; column-gap: 9px; align-items: center; min-height: 70px; padding: 12px; background: #100c09; border: 1px solid #49372b; border-radius: 8px; cursor: pointer; }
@@ -813,6 +815,18 @@ main { grid-column: 2; min-width: 0; }
 .registration-desk-roster-heading span { color: #b88458; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
 .registration-desk-roster-heading h2 { margin: 3px 0 0; font-family: "Manrope",sans-serif; font-size: 18px; }
 .registration-desk-roster-empty { margin: 0; padding: 20px; color: #9b8673; font-size: 11px; }
+.registration-waiver-roster { display: grid; gap: 13px; padding: 16px 20px 19px; background: #110d0a; border-bottom: 1px solid #3e2e23; }
+.registration-waiver-roster>div h3 { margin: 0; color: #e4c494; font-family: "Manrope",sans-serif; font-size: 14px; }
+.registration-waiver-roster>div p { margin: 4px 0 0; color: #9f8a76; font-size: 10px; line-height: 1.5; }
+.registration-waiver-roster ul { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; background: transparent; }
+.registration-waiver-roster li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; padding: 10px 12px; background: #1b140f; border: 1px solid #49372b; border-radius: 7px; }
+.registration-waiver-roster li>strong { min-width: 0; }
+.registration-waiver-status-control { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.registration-waiver-badge { width: fit-content; margin: 0 !important; padding: 6px 8px; border: 1px solid; border-radius: 999px; font-size: 9px !important; font-weight: 900; letter-spacing: .04em !important; line-height: 1.2; text-transform: none !important; }
+.registration-waiver-badge.signed { color: #c8e9c9 !important; background: #19301f; border-color: #477052; }
+.registration-waiver-badge.needed { color: #f0c596 !important; background: #35240f; border-color: #805d2f; }
+.registration-waiver-status-control button { min-height: 40px; padding: 8px 11px; color: #fff; background: #875538; border: 1px solid #a46b47; border-radius: 6px; font-size: 10px; font-weight: 800; }
+.registration-waiver-status-control button:disabled { color: #9f8a76; background: #211810; border-color: #49372b; opacity: .7; }
 .registration-desk-roster-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #3e2e23; }
 .registration-desk-roster-group { min-width: 0; background: #17110d; }
 .registration-desk-roster-role-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 20px; background: #211810; border-bottom: 1px solid #3e2e23; }
@@ -863,6 +877,7 @@ main { grid-column: 2; min-width: 0; }
 .registration-remove-team { grid-column: 1 / -1; justify-self: end; display: inline-flex; align-items: center; gap: 6px; color: #e8b2a9; background: transparent; border: 1px solid #71453e; border-radius: 6px; }
 .registration-add-team { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; color: #eadcc6; background: #2b2119; border: 1px solid #66503d; border-radius: 7px; }
 .registration-selected-contestant { display: flex; align-items: center; gap: 10px; padding: 14px; color: #e4c494; background: #2c2015; border: 1px solid #5b422a; border-radius: 7px; font-size: 12px; }
+.registration-entry-form>.registration-waiver-status-control { justify-content: space-between; padding: 11px 12px; background: #110d0a; border: 1px solid #49372b; border-radius: 7px; }
 .registration-contestant-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .registration-contestant-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; color: #d7c0a7; background: #17110d; border: 1px solid #543d2c; border-radius: 6px; }
 .registration-pin-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; padding: 14px; border: 1px solid #68482e; border-radius: 7px; }
@@ -925,6 +940,49 @@ main { grid-column: 2; min-width: 0; }
 .registration-profile-form .primary { align-self: end; }
 .registration-desk-message { position: sticky; bottom: 16px; margin: 20px auto 0; padding: 14px 18px; color: #2a1b0f; background: #e2bc83; border: 1px solid #b47b44; border-radius: 7px; font-size: 12px; font-weight: 800; box-shadow: 0 10px 28px rgba(0,0,0,.28); }
 
+.registration-waiver-overlay { position: fixed; z-index: 1000; inset: 0; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; color: #eadcc6; background: #0d0a08; }
+.registration-waiver-dialog { width: 100%; height: 100%; display: grid; grid-template-rows: auto minmax(0,1fr) auto; overflow: hidden; background: #0d0a08; }
+.registration-waiver-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: max(18px,env(safe-area-inset-top)) clamp(18px,4vw,46px) 18px; background: #17110d; border-bottom: 1px solid #49372b; }
+.registration-waiver-header>div { min-width: 0; }
+.registration-waiver-header span { color: #d49a61; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
+.registration-waiver-header h1 { margin: 4px 0; overflow: hidden; font-family: "Manrope",sans-serif; font-size: clamp(22px,3vw,34px); text-overflow: ellipsis; white-space: nowrap; }
+.registration-waiver-header p { margin: 0; color: #ac9680; font-size: 11px; }
+.registration-waiver-close { width: 50px; min-width: 50px; height: 50px; display: grid; place-items: center; color: #eadcc6; background: #251a13; border: 1px solid #654a38; border-radius: 50%; }
+.registration-waiver-content { min-height: 0; display: grid; grid-template-columns: minmax(0,1.15fr) minmax(360px,.85fr); gap: clamp(16px,3vw,32px); padding: clamp(16px,3vw,32px); overflow-y: auto; overscroll-behavior: contain; }
+.registration-waiver-document,.registration-waiver-signing { min-width: 0; padding: clamp(19px,3vw,32px); border-radius: 10px; }
+.registration-waiver-document { color: #2d2117; background: #f7f0e5; border: 1px solid #bca68a; box-shadow: 0 12px 30px rgba(0,0,0,.28); }
+.registration-waiver-document h2 { margin: 0 0 20px; padding-bottom: 14px; color: #23170f; border-bottom: 2px solid #bd9c74; font-family: "Manrope",sans-serif; font-size: clamp(20px,2.5vw,30px); }
+.registration-waiver-document>div { color: #36291f; font-family: Georgia,"Times New Roman",serif; font-size: clamp(15px,1.8vw,18px); line-height: 1.7; white-space: pre-wrap; }
+.registration-waiver-signing { align-self: start; display: grid; gap: 17px; background: #17110d; border: 1px solid #49372b; }
+.registration-waiver-signing>h2 { margin: 0; font-family: "Manrope",sans-serif; font-size: 20px; }
+.registration-waiver-acceptance { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 12px; min-height: 66px; padding: 13px; background: #201810; border: 1px solid #65472f; border-radius: 8px; cursor: pointer; }
+.registration-waiver-acceptance input { width: 23px !important; min-height: 23px !important; margin: 1px 0 0; }
+.registration-waiver-acceptance strong,.registration-waiver-acceptance small { display: block; }
+.registration-waiver-acceptance strong { color: #f1dec4; font-size: 12px; line-height: 1.4; }
+.registration-waiver-acceptance small { margin-top: 5px; color: #aa947f; font-size: 10px; line-height: 1.45; }
+.registration-waiver-name { display: grid; gap: 7px; color: #d8b98f; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
+.registration-waiver-name input { font-size: 16px; text-transform: none; letter-spacing: normal; }
+.registration-waiver-canvas-field { display: grid; gap: 8px; }
+.registration-waiver-canvas-field>div strong,.registration-waiver-canvas-field>div small { display: block; }
+.registration-waiver-canvas-field>div strong { color: #d8b98f; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.registration-waiver-canvas-field>div small { margin-top: 4px; color: #aa947f; font-size: 10px; line-height: 1.45; }
+.registration-waiver-canvas { width: 100%; height: clamp(190px,25dvh,300px); display: block; background: #fff; border: 3px solid #7d6047; border-radius: 8px; cursor: crosshair; touch-action: none; user-select: none; }
+.registration-waiver-canvas[aria-invalid="false"] { border-color: #5c8a62; }
+.registration-waiver-mark-status { margin: 0; color: #bda78f; font-size: 10px; }
+.registration-waiver-error { margin: 0; padding: 11px 12px; color: #ffd2cb; background: #3a1d1a; border: 1px solid #81473f; border-radius: 7px; font-size: 11px; line-height: 1.45; }
+.registration-waiver-unavailable { align-self: center; justify-self: center; max-width: 720px; margin: 24px; padding: clamp(28px,6vw,60px); color: #f0cf9e; background: #261a0e; border: 1px solid #805d2f; border-radius: 12px; text-align: center; }
+.registration-waiver-unavailable strong { font-family: "Manrope",sans-serif; font-size: clamp(22px,3vw,34px); }
+.registration-waiver-unavailable p { margin: 14px 0 0; color: #d4b98f; font-size: 14px; line-height: 1.7; }
+.registration-waiver-actions { display: flex; align-items: center; justify-content: flex-end; gap: 11px; padding: 15px clamp(18px,4vw,46px) max(15px,env(safe-area-inset-bottom)); background: #17110d; border-top: 1px solid #49372b; }
+.registration-waiver-actions button { min-width: 132px; min-height: 50px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: #eadcc6; background: #251a13; border: 1px solid #654a38; border-radius: 7px; font-size: 12px; font-weight: 900; }
+.registration-waiver-actions button.primary { color: #fff; background: #875538; border-color: #ba7d54; }
+.registration-waiver-actions button:disabled { opacity: .48; }
+
+@media (max-width: 900px) {
+  .registration-waiver-content { grid-template-columns: 1fr; }
+  .registration-waiver-signing { align-self: stretch; }
+}
+
 @media (max-width: 1100px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .two-column, .run-desk-grid { grid-template-columns: 1fr; }
@@ -951,6 +1009,7 @@ main { grid-column: 2; min-width: 0; }
 
 @media (max-width: 760px) {
   .registration-desk-roster-groups { grid-template-columns: 1fr; }
+  .registration-waiver-roster ul { grid-template-columns: 1fr; }
   .registration-desk-header { align-items: flex-start; flex-direction: column; }
   .registration-profile-form { grid-template-columns: 1fr 1fr; }
   .registration-pin-panel { grid-template-columns: 1fr; }
@@ -958,6 +1017,14 @@ main { grid-column: 2; min-width: 0; }
   .registration-payment-method { grid-template-columns: 1fr; }
   .registration-entry-modes { grid-template-columns: 1fr 1fr; }
   .registration-team-row { grid-template-columns: 1fr; }
+  .registration-waiver-header { align-items: flex-start; padding-inline: 15px; }
+  .registration-waiver-header h1 { font-size: 20px; white-space: normal; }
+  .registration-waiver-header p { line-height: 1.45; }
+  .registration-waiver-content { padding: 12px; }
+  .registration-waiver-document,.registration-waiver-signing { padding: 17px; }
+  .registration-waiver-actions { display: grid; grid-template-columns: 1fr 1fr; padding-inline: 12px; }
+  .registration-waiver-actions button { min-width: 0; }
+  .registration-waiver-actions button.primary { grid-column: 1 / -1; grid-row: 1; }
   .topbar { min-height: 68px; padding: 12px 16px; }
   .topbar .eyebrow { display: none; }
   .topbar h1 { font-size: 17px; }

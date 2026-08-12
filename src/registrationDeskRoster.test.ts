@@ -66,6 +66,13 @@ const data = (
   contestants,
   registrations,
   teams,
+  waiverDocument: {
+    title: "",
+    version: "",
+    text: "",
+    available: false,
+  },
+  waiverSignatures: [],
 });
 
 describe("Registration Desk competition roster entries", () => {

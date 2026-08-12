@@ -19,12 +19,14 @@ import {
 } from "./competition";
 import {
   loadLocalRegistrationWorkspace,
+  normalizeRegistrationDeskData,
   registrationDeskProjection,
   saveLocalRegistrationWorkspace,
   submitLocalRegistrationDeskSignup,
   upsertRegistrationDeskContestant,
   type RegistrationDeskContestantInput,
   type RegistrationDeskData,
+  type RegistrationDeskWaiverSignature,
 } from "./registrationDeskData";
 import {
   buildRegistrationDeskDrawRequest,
@@ -57,12 +59,19 @@ import {
   type RegistrationDeskRosterEntry,
 } from "./registrationDeskRoster";
 import {
+  registrationDeskWaiverParticipants,
+  registrationDeskWaiverSignature,
+  submitLocalRegistrationDeskWaiver,
+} from "./registrationDeskWaiver";
+import { RegistrationDeskWaiverDialog } from "./RegistrationDeskWaiverDialog";
+import {
   isWixEmbed,
   loadRegistrationDeskData,
   saveRegistrationDeskContestant,
   scratchRegistrationDeskEntry,
   setRegistrationDeskContestantPin,
   submitRegistrationDeskSignup,
+  submitRegistrationDeskWaiver,
   updateRegistrationDeskEntry,
 } from "./wixBridge";
 
@@ -82,6 +91,59 @@ const formatMoney = (value: number) =>
     style: "currency",
     currency: "USD",
   });
+
+const formatWaiverSignedAt = (value: string) => {
+  const signedAt = new Date(value);
+  return Number.isNaN(signedAt.getTime())
+    ? value
+    : signedAt.toLocaleString("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+};
+
+function WaiverStatusControl({
+  contestantName,
+  signature,
+  available,
+  disabled,
+  onSign,
+}: {
+  contestantName: string;
+  signature?: RegistrationDeskWaiverSignature;
+  available: boolean;
+  disabled: boolean;
+  onSign: () => void;
+}) {
+  return (
+    <div className="registration-waiver-status-control">
+      <span
+        className={`registration-waiver-badge ${
+          signature ? "signed" : "needed"
+        }`}
+        role="status"
+      >
+        {signature
+          ? `Signed ${formatWaiverSignedAt(signature.signedAt)}`
+          : "Waiver needed"}
+      </span>
+      {!signature && (
+        <button
+          type="button"
+          disabled={disabled || !available}
+          title={
+            available
+              ? `Open the waiver for ${contestantName}`
+              : "Staff must configure the authoritative waiver before signing."
+          }
+          onClick={onSign}
+        >
+          {available ? "Sign waiver" : "Signing unavailable"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function asWorkspace(data: RegistrationDeskData): ArenaData {
   return {
@@ -148,11 +210,16 @@ export function RegistrationDesk() {
   const [message, setMessage] = useState("");
   const [rosterEntryEdit, setRosterEntryEdit] =
     useState<RegistrationDeskEntryDraft | null>(null);
+  const [waiverContestantId, setWaiverContestantId] = useState("");
+  const [waiverBusy, setWaiverBusy] = useState(false);
+  const [waiverError, setWaiverError] = useState("");
 
   useEffect(() => {
     if (!embedded) return;
     loadRegistrationDeskData()
-      .then((result) => setData(result))
+      .then((result) =>
+        setData(result ? normalizeRegistrationDeskData(result) : null),
+      )
       .catch((error) =>
         setMessage(
           error instanceof Error
@@ -173,6 +240,10 @@ export function RegistrationDesk() {
   const eventRoster = useMemo(
     () => registrationDeskEventRoster(data, eventId),
     [data, eventId],
+  );
+  const waiverParticipants = useMemo(
+    () => registrationDeskWaiverParticipants(eventRoster),
+    [eventRoster],
   );
   const rosterSections = [
     {
@@ -205,6 +276,9 @@ export function RegistrationDesk() {
         ? "This live competition is visible, but entries are blocked while the draw is locked."
         : "";
   const contestant = data?.contestants.find((item) => item.id === contestantId);
+  const waiverContestant = data?.contestants.find(
+    (item) => item.id === waiverContestantId,
+  );
   const supportedModes = supportedRegistrationDeskModes(event);
   const minimumDraws = event ? minimumDrawEntries(event) : 1;
   const workspace = data ? asWorkspace(data) : null;
@@ -289,6 +363,8 @@ export function RegistrationDesk() {
     setPaymentMethod("");
     setReview(false);
     setSubmissionId("");
+    setWaiverContestantId("");
+    setWaiverError("");
   }, [event?.id]);
 
   useEffect(() => {
@@ -373,7 +449,7 @@ export function RegistrationDesk() {
       if (embedded) {
         const result = await saveRegistrationDeskContestant(normalizedProfile);
         if (!result) throw new Error("The contestant profile was not saved.");
-        setData(result.data);
+        setData(normalizeRegistrationDeskData(result.data));
         setContestantId(result.contestant.id);
       } else {
         const workspaceData = loadLocalRegistrationWorkspace();
@@ -517,7 +593,7 @@ export function RegistrationDesk() {
       if (embedded) {
         const result = await submitRegistrationDeskSignup(request);
         if (!result) throw new Error("The entry was not saved.");
-        setData(result.data);
+        setData(normalizeRegistrationDeskData(result.data));
         setMessage(result.summary);
       } else {
         const workspaceData = loadLocalRegistrationWorkspace();
@@ -646,7 +722,7 @@ export function RegistrationDesk() {
         patch: registrationDeskEntryPatch(rosterEntryEdit),
       });
       if (!result) throw new Error("The competition entry was not updated.");
-      setData(result.data);
+      setData(normalizeRegistrationDeskData(result.data));
       setRosterEntryEdit(null);
       setMessage(result.summary);
     } catch (error) {
@@ -685,7 +761,7 @@ export function RegistrationDesk() {
         ...registrationDeskScratchRequest(entry, event.id),
       });
       if (!result) throw new Error("The competition entry was not scratched.");
-      setData(result.data);
+      setData(normalizeRegistrationDeskData(result.data));
       setRosterEntryEdit((current) =>
         current?.recordId === entry.recordId &&
         current.recordType === entry.recordType
@@ -699,6 +775,63 @@ export function RegistrationDesk() {
       );
     } finally {
       setBusy(false);
+    }
+  };
+
+  const launchWaiver = (targetContestantId: string) => {
+    if (!event || !data) {
+      setMessage("Choose a live competition before opening a waiver.");
+      return;
+    }
+    if (!data.contestants.some(({ id }) => id === targetContestantId)) {
+      setMessage("Choose a valid contestant before opening a waiver.");
+      return;
+    }
+    setWaiverContestantId(targetContestantId);
+    setWaiverError("");
+    setMessage("");
+  };
+
+  const signWaiver = async ({
+    signerName,
+    signatureDataUrl,
+  }: {
+    signerName: string;
+    signatureDataUrl: string;
+  }) => {
+    if (!event || !data || !waiverContestant) {
+      throw new Error("Choose a contestant and live competition.");
+    }
+    setWaiverBusy(true);
+    setWaiverError("");
+    try {
+      const request = {
+        eventId: event.id,
+        contestantId: waiverContestant.id,
+        signerName,
+        signatureDataUrl,
+        accepted: true as const,
+      };
+      const result = embedded
+        ? await submitRegistrationDeskWaiver(request)
+        : submitLocalRegistrationDeskWaiver(data, request);
+      if (!result) throw new Error("The waiver signature was not saved.");
+      setData(normalizeRegistrationDeskData(result.data));
+      setWaiverContestantId("");
+      setMessage(
+        `Waiver signed for ${result.signature.contestantName} at ${formatWaiverSignedAt(
+          result.signature.signedAt,
+        )}.`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "The waiver signature could not be saved.";
+      setWaiverError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setWaiverBusy(false);
     }
   };
 
@@ -724,6 +857,8 @@ export function RegistrationDesk() {
               setPin("");
               setPinConfirmation("");
               setRosterEntryEdit(null);
+              setWaiverContestantId("");
+              setWaiverError("");
               setMessage("");
             }}>
               {(data?.events ?? []).map((item) => (
@@ -769,6 +904,14 @@ export function RegistrationDesk() {
             <p>No live competitions are currently available.</p>
           )}
           {entryUnavailableMessage && <p>{entryUnavailableMessage}</p>}
+          {data && !data.waiverDocument.available && (
+            <p className="registration-waiver-setup-message" role="status">
+              <strong>Waiver signing setup required.</strong>{" "}
+              Configure the authoritative waiver title, version, and legal text
+              in the Registration Desk backend. Signing remains disabled until
+              that document is available.
+            </p>
+          )}
         </section>
 
         {data && (
@@ -784,6 +927,40 @@ export function RegistrationDesk() {
                 </h2>
               </div>
             </div>
+            {event && waiverParticipants.length > 0 && (
+              <section
+                className="registration-waiver-roster"
+                aria-labelledby="registration-waiver-roster-heading"
+              >
+                <div>
+                  <h3 id="registration-waiver-roster-heading">
+                    Participant waivers
+                  </h3>
+                  <p>
+                    Each contestant is listed once for this competition,
+                    including riders entered on multiple picked teams.
+                  </p>
+                </div>
+                <ul>
+                  {waiverParticipants.map((participant) => (
+                    <li key={participant.contestantId}>
+                      <strong>{participant.name}</strong>
+                      <WaiverStatusControl
+                        contestantName={participant.name}
+                        signature={registrationDeskWaiverSignature(
+                          data,
+                          event.id,
+                          participant.contestantId,
+                        )}
+                        available={data.waiverDocument.available}
+                        disabled={busy || waiverBusy}
+                        onSign={() => launchWaiver(participant.contestantId)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             {!event ? (
               <p className="registration-desk-roster-empty">
                 Choose a live competition to view its roster.
@@ -1213,6 +1390,17 @@ export function RegistrationDesk() {
                         <CheckCircle2 />
                         <span>Registering <strong>{contestant.name}</strong></span>
                       </div>
+                      <WaiverStatusControl
+                        contestantName={contestant.name}
+                        signature={registrationDeskWaiverSignature(
+                          data,
+                          event.id,
+                          contestant.id,
+                        )}
+                        available={data.waiverDocument.available}
+                        disabled={busy || waiverBusy}
+                        onSign={() => launchWaiver(contestant.id)}
+                      />
                       <div className="registration-contestant-actions">
                         <button type="button" onClick={() => editProfile(contestant)}>
                           <Pencil size={15} /> Edit contestant
@@ -1482,6 +1670,22 @@ export function RegistrationDesk() {
 
         {message && <p className="registration-desk-message" role="status">{message}</p>}
       </main>
+      {data && event && waiverContestant && (
+        <RegistrationDeskWaiverDialog
+          key={`${event.id}:${waiverContestant.id}`}
+          contestantName={waiverContestant.name}
+          eventName={event.name}
+          waiverDocument={data.waiverDocument}
+          busy={waiverBusy}
+          error={waiverError}
+          onCancel={() => {
+            if (waiverBusy) return;
+            setWaiverContestantId("");
+            setWaiverError("");
+          }}
+          onSubmit={signWaiver}
+        />
+      )}
     </div>
   );
 }
