@@ -55,4 +55,43 @@ describe("Registration Desk tablet browser compatibility", () => {
     );
     expect(dialogSource).toContain("signatureCanvasResizePlan(");
   });
+
+  it("keeps Clear, Cancel, and Sign directly below the signature pad", () => {
+    const canvasIndex = dialogSource.indexOf("<canvas");
+    const canvasEnd = dialogSource.indexOf("/>", canvasIndex) + 2;
+    const actionsIndex = dialogSource.indexOf(
+      'className="registration-waiver-canvas-actions"',
+    );
+    const actionsElementStart = dialogSource.lastIndexOf("<div", actionsIndex);
+    const signingSectionEnd = dialogSource.indexOf("</section>", actionsIndex);
+    const actionBlock = dialogSource.slice(actionsIndex, signingSectionEnd);
+    const clearIndex = actionBlock.indexOf("onClick={clearSignature}");
+    const cancelIndex = actionBlock.indexOf("onClick={onCancel}");
+    const signIndex = actionBlock.indexOf('type="submit"');
+
+    expect(canvasIndex).toBeGreaterThan(-1);
+    expect(canvasEnd).toBeGreaterThan(canvasIndex);
+    expect(actionsIndex).toBeGreaterThan(canvasIndex);
+    expect(actionsElementStart).toBeGreaterThan(canvasEnd);
+    expect(dialogSource.slice(canvasEnd, actionsElementStart).trim()).toBe("");
+    expect(signingSectionEnd).toBeGreaterThan(actionsIndex);
+    expect(clearIndex).toBeGreaterThan(-1);
+    expect(cancelIndex).toBeGreaterThan(clearIndex);
+    expect(signIndex).toBeGreaterThan(cancelIndex);
+    expect(actionBlock).toContain("disabled={!signatureReady}");
+    expect(actionBlock).toContain('{busy ? "Signing…" : "Sign waiver"}');
+    expect(dialogSource).not.toContain(
+      '<footer className="registration-waiver-actions">',
+    );
+    expect(dialogSource).toContain(
+      'className="registration-waiver-unavailable-cancel"',
+    );
+
+    const actions = cssRule(".registration-waiver-canvas-actions");
+    const buttons = cssRule(
+      ".registration-waiver-canvas-buttons button,.registration-waiver-unavailable-cancel",
+    );
+    expect(actions).toContain("display: grid");
+    expect(buttons).toContain("min-height: 50px");
+  });
 });

@@ -439,14 +439,24 @@ export function RegistrationDeskWaiverDialog({
         </header>
 
         {!waiverDocument.available ? (
-          <main className="registration-waiver-unavailable" role="status">
-            <strong>Staff setup required</strong>
-            <p>
-              Configure the authoritative waiver title, version, and legal text
-              in the Registration Desk backend before handing the tablet to a
-              participant. Signing is disabled and no placeholder waiver is
-              shown.
-            </p>
+          <main className="registration-waiver-unavailable">
+            <div role="status">
+              <strong>Staff setup required</strong>
+              <p>
+                Configure the authoritative waiver title, version, and legal
+                text in the Registration Desk backend before handing the tablet
+                to a participant. Signing is disabled and no placeholder waiver
+                is shown.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="registration-waiver-unavailable-cancel"
+              disabled={busy}
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
           </main>
         ) : (
           <main className="registration-waiver-content">
@@ -522,47 +532,48 @@ export function RegistrationDeskWaiverDialog({
                     }
                   }}
                 />
-                <p className="registration-waiver-mark-status" role="status">
-                  {markIsValid
-                    ? "Signature captured."
-                    : hasMark
-                      ? "Keep drawing a complete signature."
-                      : "Signature required."}
-                </p>
+                <div className="registration-waiver-canvas-actions">
+                  <p className="registration-waiver-mark-status" role="status">
+                    {markIsValid
+                      ? "Signature captured."
+                      : hasMark
+                        ? "Keep drawing a complete signature."
+                        : "Signature required."}
+                  </p>
+                  <div
+                    className="registration-waiver-canvas-buttons"
+                    role="group"
+                    aria-label="Signature actions"
+                  >
+                    <button
+                      type="button"
+                      disabled={busy || !hasMark}
+                      onClick={clearSignature}
+                    >
+                      <Eraser aria-hidden="true" /> Clear
+                    </button>
+                    <button type="button" disabled={busy} onClick={onCancel}>
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="primary"
+                      disabled={!signatureReady}
+                    >
+                      <CheckCircle2 aria-hidden="true" />
+                      {busy ? "Signing…" : "Sign waiver"}
+                    </button>
+                  </div>
+                  {(validationMessage || error) && (
+                    <p className="registration-waiver-error" role="alert">
+                      {validationMessage || error}
+                    </p>
+                  )}
+                </div>
               </div>
-              {(validationMessage || error) && (
-                <p className="registration-waiver-error" role="alert">
-                  {validationMessage || error}
-                </p>
-              )}
             </section>
           </main>
         )}
-
-        <footer className="registration-waiver-actions">
-          {waiverDocument.available && (
-            <button
-              type="button"
-              disabled={busy || !hasMark}
-              onClick={clearSignature}
-            >
-              <Eraser aria-hidden="true" /> Clear
-            </button>
-          )}
-          <button type="button" disabled={busy} onClick={onCancel}>
-            Cancel
-          </button>
-          {waiverDocument.available && (
-            <button
-              type="submit"
-              className="primary"
-              disabled={!signatureReady}
-            >
-              <CheckCircle2 aria-hidden="true" />
-              {busy ? "Signing…" : "Sign waiver"}
-            </button>
-          )}
-        </footer>
       </form>
     </div>
   );
