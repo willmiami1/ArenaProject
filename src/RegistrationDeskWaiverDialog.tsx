@@ -439,7 +439,7 @@ export function RegistrationDeskWaiverDialog({
         </header>
 
         {!waiverDocument.available ? (
-          <main className="registration-waiver-unavailable">
+          <div className="registration-waiver-unavailable">
             <div role="status">
               <strong>Staff setup required</strong>
               <p>
@@ -457,9 +457,9 @@ export function RegistrationDeskWaiverDialog({
             >
               Cancel
             </button>
-          </main>
+          </div>
         ) : (
-          <main className="registration-waiver-content">
+          <div className="registration-waiver-content">
             <section
               className="registration-waiver-document"
               aria-label="Waiver document"
@@ -475,6 +475,21 @@ export function RegistrationDeskWaiverDialog({
               <h2 id="registration-waiver-signing-title">
                 Acceptance and signature
               </h2>
+              <label className="registration-waiver-name">
+                Signer legal name
+                <input
+                  required
+                  maxLength={120}
+                  autoComplete="name"
+                  autoCapitalize="words"
+                  disabled={busy}
+                  value={signerName}
+                  onChange={(event) => {
+                    setSignerName(event.target.value);
+                    setValidationMessage("");
+                  }}
+                />
+              </label>
               <label className="registration-waiver-acceptance">
                 <input
                   type="checkbox"
@@ -491,21 +506,6 @@ export function RegistrationDeskWaiverDialog({
                     Acceptance is required before the signature can be submitted.
                   </small>
                 </span>
-              </label>
-              <label className="registration-waiver-name">
-                Signer legal name
-                <input
-                  required
-                  maxLength={120}
-                  autoComplete="name"
-                  autoCapitalize="words"
-                  disabled={busy}
-                  value={signerName}
-                  onChange={(event) => {
-                    setSignerName(event.target.value);
-                    setValidationMessage("");
-                  }}
-                />
               </label>
               <div className="registration-waiver-canvas-field">
                 <div>
@@ -572,7 +572,7 @@ export function RegistrationDeskWaiverDialog({
                 </div>
               </div>
             </section>
-          </main>
+          </div>
         )}
       </form>
     </div>

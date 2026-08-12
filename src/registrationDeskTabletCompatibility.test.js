@@ -24,7 +24,70 @@ describe("Registration Desk tablet browser compatibility", () => {
     expect(canvas).toContain("-webkit-touch-callout: none");
     expect(content).toContain("touch-action: pan-y");
     expect(content).toContain("-webkit-overflow-scrolling: touch");
+    expect(content).toContain("overflow-x: hidden");
+    expect(content).toContain("overflow-y: auto");
     expect(dialogSource).not.toContain("document.body.style.overflow");
+  });
+
+  it("uses one DOM and grid column without inheriting workspace main positioning", () => {
+    const dialog = cssRule(".registration-waiver-dialog");
+    const content = cssRule(".registration-waiver-content");
+    const documentIndex = dialogSource.indexOf(
+      'className="registration-waiver-document"',
+    );
+    const signerNameIndex = dialogSource.indexOf(
+      'className="registration-waiver-name"',
+    );
+    const acceptanceIndex = dialogSource.indexOf(
+      'className="registration-waiver-acceptance"',
+    );
+    const canvasIndex = dialogSource.indexOf("<canvas");
+
+    expect(dialog).toContain("grid-template-columns: minmax(0,1fr)");
+    expect(content).toContain("grid-template-columns: minmax(0,1fr)");
+    expect(content).toContain("grid-column: 1");
+    expect(styles).not.toContain("minmax(360px,.85fr)");
+    expect(styles).not.toContain("minmax(0,1.15fr)");
+    expect(dialogSource).not.toContain(
+      '<main className="registration-waiver',
+    );
+    expect(documentIndex).toBeGreaterThan(-1);
+    expect(signerNameIndex).toBeGreaterThan(documentIndex);
+    expect(acceptanceIndex).toBeGreaterThan(signerNameIndex);
+    expect(canvasIndex).toBeGreaterThan(acceptanceIndex);
+  });
+
+  it("contains the dialog, text, controls, and canvas within safe viewport bounds", () => {
+    const overlay = cssRule(".registration-waiver-overlay");
+    const dialog = cssRule(".registration-waiver-dialog");
+    const content = cssRule(".registration-waiver-content");
+    const sections = cssRule(
+      ".registration-waiver-document,.registration-waiver-signing",
+    );
+    const nameInput = cssRule(".registration-waiver-name input");
+    const canvas = cssRule(".registration-waiver-canvas");
+    const canvasField = cssRule(".registration-waiver-canvas-field");
+    const actions = cssRule(".registration-waiver-canvas-actions");
+    const buttons = cssRule(".registration-waiver-canvas-buttons button");
+    const legalText = cssRule(".registration-waiver-document>div");
+
+    expect(overlay).toContain("width: 100vw");
+    expect(overlay).toContain("width: 100dvw");
+    expect(overlay).toContain("height: 100dvh");
+    expect(overlay).toContain("max-width: 100%");
+    expect(overlay).toContain("box-sizing: border-box");
+    expect(overlay).toContain("env(safe-area-inset-left,0)");
+    expect(overlay).toContain("overflow-x: hidden");
+    [dialog, content, sections, nameInput, canvas, canvasField, actions, buttons].forEach(
+      (rule) => {
+        expect(rule).toContain("max-width: 100%");
+        expect(rule).toContain("min-width: 0");
+      },
+    );
+    expect(canvas).toContain("width: 100%");
+    expect(canvas).toContain("box-sizing: border-box");
+    expect(legalText).toContain("overflow-wrap: anywhere");
+    expect(legalText).toContain("white-space: pre-wrap");
   });
 
   it("registers non-passive native touch fallback and guarded pointer continuation", () => {
@@ -91,7 +154,13 @@ describe("Registration Desk tablet browser compatibility", () => {
     const buttons = cssRule(
       ".registration-waiver-canvas-buttons button,.registration-waiver-unavailable-cancel",
     );
+    const canvasButtons = cssRule(
+      ".registration-waiver-canvas-buttons button",
+    );
     expect(actions).toContain("display: grid");
     expect(buttons).toContain("min-height: 50px");
+    expect(canvasButtons).toContain("width: 100%");
+    expect(canvasButtons).toContain("max-width: 100%");
+    expect(canvasButtons).toContain("min-width: 0");
   });
 });
