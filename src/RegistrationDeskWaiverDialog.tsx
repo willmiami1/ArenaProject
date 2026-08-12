@@ -10,11 +10,18 @@ import { CheckCircle2, Eraser, X } from "lucide-react";
 import type { RegistrationDeskWaiverDocument } from "./registrationDeskData";
 import {
   drawSignatureStrokes,
-  signatureCanvasBitmapSize,
   signatureCanvasPngDataUrl,
+  signatureCanvasResizePlan,
   signatureMarkIsValid,
-  type SignaturePoint,
-  type SignatureStroke,
+  signaturePointFromClient,
+  signaturePointerCanStart,
+  signaturePointerIsPressed,
+  signaturePointerSamples,
+  signatureSubmissionReady,
+  SignatureStrokeTracker,
+  tryReleaseSignaturePointerCapture,
+  trySetSignaturePointerCapture,
+  type SignatureClientPoint,
 } from "./signatureCanvas";
 
 interface RegistrationDeskWaiverDialogProps {
@@ -37,7 +44,16 @@ const focusableSelector = [
   "[href]",
 ].join(",");
 
-const clamp = (value: number) => Math.min(1, Math.max(0, value));
+const touchWithIdentifier = (touches: TouchList, identifier: number) => {
+  for (let index = 0; index < touches.length; index += 1) {
+    if (touches[index].identifier === identifier) return touches[index];
+  }
+  return null;
+};
+
+const preventCanvasGesture = (event: Event) => {
+  if (event.cancelable) event.preventDefault();
+};
 
 export function RegistrationDeskWaiverDialog({
   contestantName,
@@ -51,16 +67,23 @@ export function RegistrationDeskWaiverDialog({
   const dialogRef = useRef<HTMLFormElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const strokesRef = useRef<SignatureStroke[]>([]);
-  const activePointerRef = useRef<number | null>(null);
+  const trackerRef = useRef(new SignatureStrokeTracker());
   const pixelRatioRef = useRef(1);
   const busyRef = useRef(busy);
   const onCancelRef = useRef(onCancel);
   const [signerName, setSignerName] = useState("");
   const [accepted, setAccepted] = useState(false);
-  const [markRevision, setMarkRevision] = useState(0);
+  const [, setMarkRevision] = useState(0);
   const [validationMessage, setValidationMessage] = useState("");
-  const markIsValid = signatureMarkIsValid(strokesRef.current);
+  const strokes = trackerRef.current.getStrokes();
+  const hasMark = strokes.some((stroke) => stroke.length > 0);
+  const markIsValid = signatureMarkIsValid(strokes);
+  const signatureReady = signatureSubmissionReady({
+    accepted,
+    signerName,
+    strokes,
+    busy,
+  });
 
   useEffect(() => {
     busyRef.current = busy;
@@ -73,7 +96,7 @@ export function RegistrationDeskWaiverDialog({
     if (!canvas || !context) return;
     drawSignatureStrokes(
       context,
-      strokesRef.current,
+      trackerRef.current.getStrokes(),
       canvas.width,
       canvas.height,
       pixelRatioRef.current,
@@ -81,23 +104,33 @@ export function RegistrationDeskWaiverDialog({
   }, []);
 
   const clearSignature = useCallback(() => {
-    strokesRef.current = [];
-    activePointerRef.current = null;
+    const canvas = canvasRef.current;
+    const pointerId = trackerRef.current.getActivePointerId();
+    if (canvas && pointerId !== null) {
+      tryReleaseSignaturePointerCapture(canvas, pointerId);
+    }
+    trackerRef.current.clear();
     setMarkRevision((revision) => revision + 1);
     setValidationMessage("");
     redraw();
   }, [redraw]);
 
+  const notifyStrokeChanged = useCallback(() => {
+    setValidationMessage("");
+    setMarkRevision((revision) => revision + 1);
+    redraw();
+  }, [redraw]);
+
+  const pointFromClient = useCallback((point: SignatureClientPoint) => {
+    const bounds = canvasRef.current?.getBoundingClientRect();
+    return bounds ? signaturePointFromClient(point, bounds) : null;
+  }, []);
+
   useEffect(() => {
-    const bodyOverflow = document.body.style.overflow;
-    const desk = document.querySelector<HTMLElement>(".registration-desk");
-    const deskOverflow = desk?.style.overflow;
     const previouslyFocused =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    document.body.style.overflow = "hidden";
-    if (desk) desk.style.overflow = "hidden";
     cancelButtonRef.current?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -127,8 +160,6 @@ export function RegistrationDeskWaiverDialog({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.body.style.overflow = bodyOverflow;
-      if (desk) desk.style.overflow = deskOverflow ?? "";
       window.removeEventListener("keydown", handleKeyDown);
       if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
@@ -139,18 +170,18 @@ export function RegistrationDeskWaiverDialog({
     if (!canvas || !waiverDocument.available) return;
     const resize = () => {
       const bounds = canvas.getBoundingClientRect();
-      const dimensions = signatureCanvasBitmapSize(
+      const plan = signatureCanvasResizePlan(
         bounds.width,
         bounds.height,
         window.devicePixelRatio,
+        canvas.width,
+        canvas.height,
       );
-      pixelRatioRef.current = dimensions.pixelRatio;
-      if (
-        canvas.width !== dimensions.width ||
-        canvas.height !== dimensions.height
-      ) {
-        canvas.width = dimensions.width;
-        canvas.height = dimensions.height;
+      if (!plan) return;
+      pixelRatioRef.current = plan.pixelRatio;
+      if (plan.changed) {
+        canvas.width = plan.width;
+        canvas.height = plan.height;
       }
       redraw();
     };
@@ -161,68 +192,167 @@ export function RegistrationDeskWaiverDialog({
         : new ResizeObserver(resize);
     observer?.observe(canvas);
     window.addEventListener("resize", resize);
+    window.addEventListener("orientationchange", resize);
+    window.visualViewport?.addEventListener("resize", resize);
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", resize);
+      window.removeEventListener("orientationchange", resize);
+      window.visualViewport?.removeEventListener("resize", resize);
     };
   }, [redraw, waiverDocument.available]);
 
-  const pointFromEvent = (
-    event: Pick<PointerEvent, "clientX" | "clientY">,
-  ): SignaturePoint => {
-    const bounds = canvasRef.current?.getBoundingClientRect();
-    if (!bounds?.width || !bounds.height) return { x: 0, y: 0 };
-    return {
-      x: clamp((event.clientX - bounds.left) / bounds.width),
-      y: clamp((event.clientY - bounds.top) / bounds.height),
-    };
-  };
-
   const startStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (busy || !waiverDocument.available) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    activePointerRef.current = event.pointerId;
-    strokesRef.current = [
-      ...strokesRef.current,
-      [pointFromEvent(event.nativeEvent)],
-    ];
-    setValidationMessage("");
-    setMarkRevision((revision) => revision + 1);
-    redraw();
-  };
-
-  const continueStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (activePointerRef.current !== event.pointerId) return;
-    event.preventDefault();
-    const stroke = strokesRef.current[strokesRef.current.length - 1];
-    if (!stroke) return;
-    const pointerEvents =
-      event.nativeEvent.getCoalescedEvents?.() ?? [event.nativeEvent];
-    pointerEvents.forEach((pointerEvent) => {
-      const point = pointFromEvent(pointerEvent);
-      const previous = stroke[stroke.length - 1];
-      if (
-        !previous ||
-        Math.hypot(point.x - previous.x, point.y - previous.y) >= 0.001
-      ) {
-        stroke.push(point);
-      }
-    });
-    setMarkRevision((revision) => revision + 1);
-    redraw();
-  };
-
-  const finishStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (activePointerRef.current !== event.pointerId) return;
-    event.preventDefault();
-    activePointerRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    if (
+      busy ||
+      !waiverDocument.available ||
+      !signaturePointerCanStart(event.nativeEvent)
+    ) {
+      return;
     }
-    setMarkRevision((revision) => revision + 1);
-    redraw();
+    const point = pointFromClient(event.nativeEvent);
+    if (!point) return;
+    event.preventDefault();
+    const tracker = trackerRef.current;
+    const changed = tracker.startPointer(event.pointerId, point);
+    if (tracker.getActivePointerId() === event.pointerId) {
+      trySetSignaturePointerCapture(event.currentTarget, event.pointerId);
+    }
+    if (changed) notifyStrokeChanged();
   };
+
+  useEffect(() => {
+    if (!waiverDocument.available) return;
+
+    const movePointer = (event: PointerEvent) => {
+      const tracker = trackerRef.current;
+      if (tracker.getActivePointerId() !== event.pointerId) return;
+      preventCanvasGesture(event);
+      if (!signaturePointerIsPressed(event)) {
+        tracker.endPointer(event.pointerId);
+        if (canvasRef.current) {
+          tryReleaseSignaturePointerCapture(
+            canvasRef.current,
+            event.pointerId,
+          );
+        }
+        notifyStrokeChanged();
+        return;
+      }
+      const points = signaturePointerSamples(event)
+        .map(pointFromClient)
+        .filter((point) => point !== null);
+      if (tracker.movePointer(event.pointerId, points)) {
+        notifyStrokeChanged();
+      }
+    };
+
+    const finishPointer = (event: PointerEvent) => {
+      const tracker = trackerRef.current;
+      if (tracker.getActivePointerId() !== event.pointerId) return;
+      preventCanvasGesture(event);
+      const handled =
+        event.type === "pointercancel"
+          ? tracker.cancelPointer(event.pointerId)
+          : tracker.endPointer(event.pointerId);
+      if (canvasRef.current) {
+        tryReleaseSignaturePointerCapture(canvasRef.current, event.pointerId);
+      }
+      if (handled) notifyStrokeChanged();
+    };
+
+    const pointerOptions: AddEventListenerOptions = { passive: false };
+    window.addEventListener("pointermove", movePointer, pointerOptions);
+    window.addEventListener("pointerup", finishPointer, pointerOptions);
+    window.addEventListener("pointercancel", finishPointer, pointerOptions);
+    return () => {
+      window.removeEventListener("pointermove", movePointer, pointerOptions);
+      window.removeEventListener("pointerup", finishPointer, pointerOptions);
+      window.removeEventListener(
+        "pointercancel",
+        finishPointer,
+        pointerOptions,
+      );
+    };
+  }, [
+    notifyStrokeChanged,
+    pointFromClient,
+    waiverDocument.available,
+  ]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !waiverDocument.available) return;
+
+    const startTouch = (event: TouchEvent) => {
+      if (busyRef.current) return;
+      const tracker = trackerRef.current;
+      if (tracker.getActiveTouchId() !== null) {
+        preventCanvasGesture(event);
+        return;
+      }
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const point = pointFromClient(touch);
+      if (!point) return;
+      const changed = tracker.startTouch(touch.identifier, point);
+      if (tracker.getActiveTouchId() === touch.identifier) {
+        preventCanvasGesture(event);
+      }
+      if (changed) notifyStrokeChanged();
+    };
+
+    const moveTouch = (event: TouchEvent) => {
+      const tracker = trackerRef.current;
+      const touchId = tracker.getActiveTouchId();
+      if (touchId === null) return;
+      const touch =
+        touchWithIdentifier(event.touches, touchId) ||
+        touchWithIdentifier(event.changedTouches, touchId);
+      if (!touch) return;
+      preventCanvasGesture(event);
+      const point = pointFromClient(touch);
+      if (point && tracker.moveTouch(touchId, [point])) {
+        notifyStrokeChanged();
+      }
+    };
+
+    const finishTouch = (event: TouchEvent) => {
+      const tracker = trackerRef.current;
+      const touchId = tracker.getActiveTouchId();
+      if (touchId === null) return;
+      const ended =
+        Boolean(touchWithIdentifier(event.changedTouches, touchId)) ||
+        !touchWithIdentifier(event.touches, touchId);
+      if (!ended) return;
+      preventCanvasGesture(event);
+      const pointerId = tracker.getActivePointerId();
+      const handled =
+        event.type === "touchcancel"
+          ? tracker.cancelTouch(touchId)
+          : tracker.endTouch(touchId);
+      if (pointerId !== null) {
+        tryReleaseSignaturePointerCapture(canvas, pointerId);
+      }
+      if (handled) notifyStrokeChanged();
+    };
+
+    const touchOptions: AddEventListenerOptions = { passive: false };
+    canvas.addEventListener("touchstart", startTouch, touchOptions);
+    canvas.addEventListener("touchmove", moveTouch, touchOptions);
+    canvas.addEventListener("touchend", finishTouch, touchOptions);
+    canvas.addEventListener("touchcancel", finishTouch, touchOptions);
+    return () => {
+      canvas.removeEventListener("touchstart", startTouch, touchOptions);
+      canvas.removeEventListener("touchmove", moveTouch, touchOptions);
+      canvas.removeEventListener("touchend", finishTouch, touchOptions);
+      canvas.removeEventListener("touchcancel", finishTouch, touchOptions);
+    };
+  }, [
+    notifyStrokeChanged,
+    pointFromClient,
+    waiverDocument.available,
+  ]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -309,14 +439,24 @@ export function RegistrationDeskWaiverDialog({
         </header>
 
         {!waiverDocument.available ? (
-          <main className="registration-waiver-unavailable" role="status">
-            <strong>Staff setup required</strong>
-            <p>
-              Configure the authoritative waiver title, version, and legal text
-              in the Registration Desk backend before handing the tablet to a
-              participant. Signing is disabled and no placeholder waiver is
-              shown.
-            </p>
+          <main className="registration-waiver-unavailable">
+            <div role="status">
+              <strong>Staff setup required</strong>
+              <p>
+                Configure the authoritative waiver title, version, and legal
+                text in the Registration Desk backend before handing the tablet
+                to a participant. Signing is disabled and no placeholder waiver
+                is shown.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="registration-waiver-unavailable-cancel"
+              disabled={busy}
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
           </main>
         ) : (
           <main className="registration-waiver-content">
@@ -381,12 +521,10 @@ export function RegistrationDeskWaiverDialog({
                   role="img"
                   aria-label="Signature drawing canvas"
                   aria-describedby="registration-waiver-canvas-help"
-                  aria-invalid={markRevision > 0 && !markIsValid}
+                  aria-invalid={hasMark && !markIsValid}
                   tabIndex={0}
                   onPointerDown={startStroke}
-                  onPointerMove={continueStroke}
-                  onPointerUp={finishStroke}
-                  onPointerCancel={finishStroke}
+                  onContextMenu={(event) => event.preventDefault()}
                   onKeyDown={(event) => {
                     if (event.key === "Delete" || event.key === "Backspace") {
                       event.preventDefault();
@@ -394,52 +532,48 @@ export function RegistrationDeskWaiverDialog({
                     }
                   }}
                 />
-                <p className="registration-waiver-mark-status" role="status">
-                  {markIsValid
-                    ? "Signature captured."
-                    : markRevision
-                      ? "Keep drawing a complete signature."
-                      : "Signature required."}
-                </p>
+                <div className="registration-waiver-canvas-actions">
+                  <p className="registration-waiver-mark-status" role="status">
+                    {markIsValid
+                      ? "Signature captured."
+                      : hasMark
+                        ? "Keep drawing a complete signature."
+                        : "Signature required."}
+                  </p>
+                  <div
+                    className="registration-waiver-canvas-buttons"
+                    role="group"
+                    aria-label="Signature actions"
+                  >
+                    <button
+                      type="button"
+                      disabled={busy || !hasMark}
+                      onClick={clearSignature}
+                    >
+                      <Eraser aria-hidden="true" /> Clear
+                    </button>
+                    <button type="button" disabled={busy} onClick={onCancel}>
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="primary"
+                      disabled={!signatureReady}
+                    >
+                      <CheckCircle2 aria-hidden="true" />
+                      {busy ? "Signing…" : "Sign waiver"}
+                    </button>
+                  </div>
+                  {(validationMessage || error) && (
+                    <p className="registration-waiver-error" role="alert">
+                      {validationMessage || error}
+                    </p>
+                  )}
+                </div>
               </div>
-              {(validationMessage || error) && (
-                <p className="registration-waiver-error" role="alert">
-                  {validationMessage || error}
-                </p>
-              )}
             </section>
           </main>
         )}
-
-        <footer className="registration-waiver-actions">
-          {waiverDocument.available && (
-            <button
-              type="button"
-              disabled={busy || !markRevision}
-              onClick={clearSignature}
-            >
-              <Eraser aria-hidden="true" /> Clear
-            </button>
-          )}
-          <button type="button" disabled={busy} onClick={onCancel}>
-            Cancel
-          </button>
-          {waiverDocument.available && (
-            <button
-              type="submit"
-              className="primary"
-              disabled={
-                busy ||
-                !accepted ||
-                signerName.trim().length < 2 ||
-                !markIsValid
-              }
-            >
-              <CheckCircle2 aria-hidden="true" />
-              {busy ? "Signing…" : "Sign waiver"}
-            </button>
-          )}
-        </footer>
       </form>
     </div>
   );
