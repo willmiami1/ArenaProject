@@ -99,6 +99,15 @@ export const unavailableRegistrationDeskWaiverDocument:
     available: false,
   };
 
+export const registrationDeskWaiverDocumentFixture:
+  RegistrationDeskWaiverDocument = {
+    title: "ACTIVITY WAIVER AGREEMENT",
+    version: "2026-08-12-v1",
+    text: `In consideration of being allowed to participate in team roping or any horse back riding at Destiny Ranch Arena located at Destiny Ranch LLC. 2549 E C 476 Bushnell FL 33513 also known as Destiny Ranch Events.
+ I, for myself hereby acknowledge the risks of injury or damage (to property, personal injury and/or death) involved in participating in the above mentioned activity. I understand that there is a risk in riding live animals and acknowledge that my participation in this activity is purely voluntary. I assume full responsibility for myself, for any bodily injury, accident, illness, paralysis, death, loss of personal property and expenses thereof as a result of any accident which may occur while I participate in this activity at Destiny Ranch Arena.. I further agree to abide by all safety instructions, and to wear any safety equipment provided on the horseback ride while participating in the activity. I, for myself and hereby release, acquit and forgive Destiny Ranch LLC, family, heirs, employees, visitors and volunteers for any and all liability of any nature for any and all injury or damage (including property damage, personal injury, illness, paralysis, and/or death) as the result of my participation in the horseback activities. I, for myself also hereby expressly waive any claim, lawsuit, complaint, charge, or cause of action against Destiny Ranch LLC, family, heirs, employees, visitors, and volunteers and for any and all injury or damage including property damage, personal injury, illness, paralysis, and/or death, This waiver is made voluntarily. I have read this Release and Waiver Agreement and understand that by signing this document, I am waiving valuable legal rights including any and all rights that I may have against the Releases named above.`,
+    available: true,
+  };
+
 type RegistrationDeskDataInput = Omit<
   RegistrationDeskData,
   "waiverDocument" | "waiverSignatures"
@@ -311,7 +320,7 @@ export function registrationDeskProjection(
     registrations: data.registrations
       .filter((registration) => eventIds.has(registration.eventId))
       .map((registration) => ({ ...registration, notes: "" })),
-    waiverDocument: unavailableRegistrationDeskWaiverDocument,
+    waiverDocument: registrationDeskWaiverDocumentFixture,
     waiverSignatures: [],
   };
 }

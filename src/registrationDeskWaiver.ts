@@ -39,7 +39,8 @@ export function registrationDeskWaiverSignature(
     .filter(
       (signature) =>
         signature.eventId === eventId &&
-        signature.contestantId === contestantId,
+        signature.contestantId === contestantId &&
+        signature.waiverVersion === data.waiverDocument.version,
     )
     .sort((left, right) => right.signedAt.localeCompare(left.signedAt))[0];
 }

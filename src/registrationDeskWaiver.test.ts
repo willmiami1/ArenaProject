@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { defaultCompetitionSettings } from "./competition";
 import {
+  normalizeRegistrationDeskData,
   registrationDeskProjection,
+  registrationDeskWaiverDocumentFixture,
   unavailableRegistrationDeskWaiverDocument,
   type RegistrationDeskData,
 } from "./registrationDeskData";
@@ -59,13 +61,10 @@ const workspace = (): ArenaData => ({
 
 const availableDeskData = (): RegistrationDeskData => ({
   ...registrationDeskProjection(workspace()),
-  waiverDocument: {
-    title: "Configured document",
-    version: "2026-08",
-    text: "Authoritative text supplied by the arena.",
-    available: true,
-  },
 });
+
+const authoritativeWaiverText = `In consideration of being allowed to participate in team roping or any horse back riding at Destiny Ranch Arena located at Destiny Ranch LLC. 2549 E C 476 Bushnell FL 33513 also known as Destiny Ranch Events.
+ I, for myself hereby acknowledge the risks of injury or damage (to property, personal injury and/or death) involved in participating in the above mentioned activity. I understand that there is a risk in riding live animals and acknowledge that my participation in this activity is purely voluntary. I assume full responsibility for myself, for any bodily injury, accident, illness, paralysis, death, loss of personal property and expenses thereof as a result of any accident which may occur while I participate in this activity at Destiny Ranch Arena.. I further agree to abide by all safety instructions, and to wear any safety equipment provided on the horseback ride while participating in the activity. I, for myself and hereby release, acquit and forgive Destiny Ranch LLC, family, heirs, employees, visitors and volunteers for any and all liability of any nature for any and all injury or damage (including property damage, personal injury, illness, paralysis, and/or death) as the result of my participation in the horseback activities. I, for myself also hereby expressly waive any claim, lawsuit, complaint, charge, or cause of action against Destiny Ranch LLC, family, heirs, employees, visitors, and volunteers and for any and all injury or damage including property damage, personal injury, illness, paralysis, and/or death, This waiver is made voluntarily. I have read this Release and Waiver Agreement and understand that by signing this document, I am waiving valuable legal rights including any and all rights that I may have against the Releases named above.`;
 
 const signatureRequest = {
   eventId: "event-one",
@@ -92,17 +91,31 @@ const rosterEntry = (
 });
 
 describe("Registration Desk tablet waiver", () => {
-  it("keeps signing unavailable without authoritative legal text", () => {
+  it("projects the exact authoritative document in the local mirror", () => {
     const data = registrationDeskProjection(workspace());
+    expect(data.waiverDocument).toEqual({
+      title: "ACTIVITY WAIVER AGREEMENT",
+      version: "2026-08-12-v1",
+      text: authoritativeWaiverText,
+      available: true,
+    });
     expect(data.waiverDocument).toEqual(
-      unavailableRegistrationDeskWaiverDocument,
+      registrationDeskWaiverDocumentFixture,
     );
+    expect(data.waiverDocument.text.split("\n")).toHaveLength(2);
+    expect(data.waiverDocument.text.split("\n")[1].startsWith(" I,")).toBe(
+      true,
+    );
+  });
+
+  it("keeps signing unavailable when an embedded backend has no legal text", () => {
+    const data = normalizeRegistrationDeskData({
+      ...registrationDeskProjection(workspace()),
+      waiverDocument: unavailableRegistrationDeskWaiverDocument,
+    });
     expect(() =>
       submitLocalRegistrationDeskWaiver(data, signatureRequest),
     ).toThrow(/authoritative legal document is configured/);
-    expect(JSON.stringify(data.waiverDocument)).not.toContain(
-      "Authoritative text supplied",
-    );
   });
 
   it("rejects blank and genuinely minimal signature marks", () => {
@@ -165,7 +178,7 @@ describe("Registration Desk tablet waiver", () => {
       contestantName: "RIDER-ONE",
       signerName: "Rider One",
       signedAt: "2026-08-12T13:45:00.000Z",
-      waiverVersion: "2026-08",
+      waiverVersion: "2026-08-12-v1",
     });
     expect(
       registrationDeskWaiverSignature(
@@ -196,6 +209,24 @@ describe("Registration Desk tablet waiver", () => {
         "event-two",
         "rider-one",
       ),
+    ).toBeUndefined();
+  });
+
+  it("requires a signature bound to the exact authoritative version", () => {
+    const data = availableDeskData();
+    data.waiverSignatures = [
+      {
+        id: "old-waiver",
+        eventId: "event-one",
+        contestantId: "rider-one",
+        contestantName: "RIDER-ONE",
+        signerName: "Rider One",
+        signedAt: "2026-08-11T13:45:00.000Z",
+        waiverVersion: "2026-08-11-v1",
+      },
+    ];
+    expect(
+      registrationDeskWaiverSignature(data, "event-one", "rider-one"),
     ).toBeUndefined();
   });
 
