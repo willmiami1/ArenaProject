@@ -19,6 +19,212 @@ export interface SignaturePixelBounds {
   height: number;
 }
 
+export interface SignatureClientPoint {
+  clientX: number;
+  clientY: number;
+}
+
+export interface SignatureCanvasBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface SignaturePointerCaptureTarget {
+  setPointerCapture?: (pointerId: number) => void;
+  hasPointerCapture?: (pointerId: number) => boolean;
+  releasePointerCapture?: (pointerId: number) => void;
+}
+
+export interface SignaturePointerSample extends SignatureClientPoint {
+  getCoalescedEvents?: () => SignatureClientPoint[];
+}
+
+const minimumPointDistance = 0.001;
+
+const clamp = (value: number) => Math.min(1, Math.max(0, value));
+
+export function signaturePointFromClient(
+  point: SignatureClientPoint,
+  bounds: SignatureCanvasBounds,
+): SignaturePoint | null {
+  if (
+    !Number.isFinite(bounds.width) ||
+    !Number.isFinite(bounds.height) ||
+    bounds.width <= 0 ||
+    bounds.height <= 0
+  ) {
+    return null;
+  }
+  return {
+    x: clamp((point.clientX - bounds.left) / bounds.width),
+    y: clamp((point.clientY - bounds.top) / bounds.height),
+  };
+}
+
+export function signaturePointerCanStart(event: {
+  pointerType?: string;
+  button?: number;
+  isPrimary?: boolean;
+}) {
+  if (event.isPrimary === false) return false;
+  return event.button === undefined || event.button === 0;
+}
+
+export function signaturePointerIsPressed(event: {
+  pointerType?: string;
+  buttons?: number;
+}) {
+  if (event.pointerType !== "mouse" || event.buttons === undefined) return true;
+  return (event.buttons & 1) === 1;
+}
+
+export function signaturePointerSamples<T extends SignaturePointerSample>(
+  event: T,
+): SignatureClientPoint[] {
+  try {
+    const samples = event.getCoalescedEvents?.();
+    return samples?.length ? samples : [event];
+  } catch {
+    return [event];
+  }
+}
+
+export function trySetSignaturePointerCapture(
+  target: SignaturePointerCaptureTarget,
+  pointerId: number,
+) {
+  if (!target.setPointerCapture) return false;
+  try {
+    target.setPointerCapture(pointerId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function tryReleaseSignaturePointerCapture(
+  target: SignaturePointerCaptureTarget,
+  pointerId: number,
+) {
+  if (!target.releasePointerCapture) return false;
+  try {
+    if (!target.hasPointerCapture || target.hasPointerCapture(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export class SignatureStrokeTracker {
+  private readonly strokes: SignatureStroke[] = [];
+  private activeStroke: SignatureStroke | null = null;
+  private pointerId: number | null = null;
+  private touchId: number | null = null;
+
+  getStrokes() {
+    return this.strokes;
+  }
+
+  getActivePointerId() {
+    return this.pointerId;
+  }
+
+  getActiveTouchId() {
+    return this.touchId;
+  }
+
+  hasActiveInput() {
+    return this.activeStroke !== null;
+  }
+
+  startPointer(pointerId: number, point: SignaturePoint) {
+    if (this.pointerId !== null && this.pointerId !== pointerId) return false;
+    this.pointerId = pointerId;
+    return this.startOrAppend(point);
+  }
+
+  movePointer(pointerId: number, points: SignaturePoint[]) {
+    if (this.pointerId !== pointerId || !this.activeStroke) return false;
+    return this.append(points);
+  }
+
+  endPointer(pointerId: number) {
+    if (this.pointerId !== pointerId) return false;
+    this.pointerId = null;
+    this.touchId = null;
+    this.activeStroke = null;
+    return true;
+  }
+
+  cancelPointer(pointerId: number) {
+    if (this.pointerId !== pointerId) return false;
+    this.pointerId = null;
+    if (this.touchId === null) this.activeStroke = null;
+    return true;
+  }
+
+  startTouch(touchId: number, point: SignaturePoint) {
+    if (this.touchId !== null && this.touchId !== touchId) return false;
+    this.touchId = touchId;
+    return this.startOrAppend(point);
+  }
+
+  moveTouch(touchId: number, points: SignaturePoint[]) {
+    if (this.touchId !== touchId || !this.activeStroke) return false;
+    return this.append(points);
+  }
+
+  endTouch(touchId: number) {
+    if (this.touchId !== touchId) return false;
+    this.touchId = null;
+    this.pointerId = null;
+    this.activeStroke = null;
+    return true;
+  }
+
+  cancelTouch(touchId: number) {
+    return this.endTouch(touchId);
+  }
+
+  clear() {
+    this.strokes.length = 0;
+    this.activeStroke = null;
+    this.pointerId = null;
+    this.touchId = null;
+  }
+
+  private startOrAppend(point: SignaturePoint) {
+    if (!this.activeStroke) {
+      this.activeStroke = [point];
+      this.strokes.push(this.activeStroke);
+      return true;
+    }
+    return this.append([point]);
+  }
+
+  private append(points: SignaturePoint[]) {
+    const stroke = this.activeStroke;
+    if (!stroke) return false;
+    let changed = false;
+    points.forEach((point) => {
+      const previous = stroke[stroke.length - 1];
+      if (
+        !previous ||
+        Math.hypot(point.x - previous.x, point.y - previous.y) >=
+          minimumPointDistance
+      ) {
+        stroke.push(point);
+        changed = true;
+      }
+    });
+    return changed;
+  }
+}
+
 export function signatureMarkMetrics(
   strokes: SignatureStroke[],
 ): SignatureMarkMetrics {
@@ -74,6 +280,53 @@ export function signatureCanvasBitmapSize(
     height: Math.max(1, Math.round(cssHeight * pixelRatio)),
     pixelRatio,
   };
+}
+
+export function signatureCanvasResizePlan(
+  cssWidth: number,
+  cssHeight: number,
+  devicePixelRatio: number,
+  currentWidth: number,
+  currentHeight: number,
+) {
+  if (
+    !Number.isFinite(cssWidth) ||
+    !Number.isFinite(cssHeight) ||
+    cssWidth <= 0 ||
+    cssHeight <= 0
+  ) {
+    return null;
+  }
+  const dimensions = signatureCanvasBitmapSize(
+    cssWidth,
+    cssHeight,
+    devicePixelRatio,
+  );
+  return {
+    ...dimensions,
+    changed:
+      dimensions.width !== currentWidth ||
+      dimensions.height !== currentHeight,
+  };
+}
+
+export function signatureSubmissionReady({
+  accepted,
+  signerName,
+  strokes,
+  busy = false,
+}: {
+  accepted: boolean;
+  signerName: string;
+  strokes: SignatureStroke[];
+  busy?: boolean;
+}) {
+  return (
+    !busy &&
+    accepted &&
+    signerName.trim().length >= 2 &&
+    signatureMarkIsValid(strokes)
+  );
 }
 
 export function drawSignatureStrokes(
