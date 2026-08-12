@@ -27,9 +27,16 @@ import {
   supportedRegistrationDeskEntryTypes,
 } from "./registration-desk-signup-contract";
 import {
+  REGISTRATION_DESK_WAIVER_ERROR_CODES,
+  RegistrationDeskWaiverError,
+  ensureRegistrationDeskWaiverStatusIndexRecord,
+  loadContestantWaiverStatusesFromIndex,
+  migrateRegistrationDeskWaiverStatusIndex,
   normalizeRegistrationDeskWaiverDocument,
   prepareRegistrationDeskWaiver,
+  registrationDeskWaiverRecordId,
   registrationDeskWaiverSignatureProjection,
+  resolveRegistrationDeskWaiverRetry,
 } from "./registration-desk-waiver-contract";
 
 const COLLECTIONS = {
@@ -58,12 +65,17 @@ const SETTINGS_COLLECTION = "ArenaSettings";
 const CREDENTIALS_COLLECTION = "ArenaContestantCredentials";
 const CREDENTIAL_LOCKS_COLLECTION = "ArenaContestantCredentialLocks";
 const WAIVER_SIGNATURES_COLLECTION = "ArenaWaiverSignatures";
+const WAIVER_STATUS_INDEX_COLLECTION = "ArenaWaiverStatusIndex";
+const WAIVER_STATUS_INDEX_MIGRATION_ID =
+  "arena-waiver-status-index-2026-08-12-v1";
+const WAIVER_STATUS_MIGRATION_PAGE_SIZE = 100;
 const SETTINGS_ID = "arena-command-settings";
 const STAFF_REVISION_ID = "arena-command-staff-revision";
 const ONLINE_REVISION_ID = "arena-command-online-revision";
 const PUBLIC_SCHEDULE_ID = "arena-command-public-schedule";
 const WAIVER_DOCUMENT_SETTINGS_ID = "arena-registration-desk-waiver-document";
 const OPTIONS = { suppressAuth: true };
+const CONSISTENT_READ_OPTIONS = { ...OPTIONS, consistentRead: true };
 const PIN_PEPPER_SECRET = "ArenaContestantPinPepper";
 const ADMIN_ROLE_SECRET = "ArenaAdminRoleId";
 const REGISTRATION_ROLE_SECRET = "ArenaRegistrationRoleId";
@@ -301,9 +313,9 @@ const arenaRecordStorageId = (collectionId, recordId) =>
     .digest("hex")
     .slice(0, 32);
 
-async function readOptionalItem(collectionId, itemId) {
+async function readOptionalItem(collectionId, itemId, options = OPTIONS) {
   try {
-    return await wixData.get(collectionId, itemId, OPTIONS);
+    return await wixData.get(collectionId, itemId, options);
   } catch (error) {
     if (error?.code === "WDE0025" || error?.code === "WDE0026") return null;
     throw error;
@@ -854,12 +866,250 @@ async function ensureWorkspaceCollections() {
   }
 }
 
-async function ensureRegistrationDeskWaiverCollection() {
+async function ensureRegistrationDeskWaiverEvidenceCollection() {
   await ensureCollection(
     WAIVER_SIGNATURES_COLLECTION,
-    "Arena Waiver Signatures",
+    "Arena Registration Desk Waiver Signatures",
     PAYLOAD_FIELDS,
   );
+}
+
+async function ensureRegistrationDeskWaiverStatusIndexCollection() {
+  await Promise.all([
+    ensureSettingsCollection(),
+    ensureCollection(
+      WAIVER_STATUS_INDEX_COLLECTION,
+      "Arena Registration Desk Waiver Status Index",
+      [
+        { key: "source", displayName: "Source", type: "TEXT" },
+        {
+          key: "contestantId",
+          displayName: "Contestant ID",
+          type: "TEXT",
+        },
+        { key: "eventId", displayName: "Event ID", type: "TEXT" },
+        { key: "signedAt", displayName: "Signed At", type: "DATETIME" },
+        {
+          key: "waiverVersion",
+          displayName: "Waiver Version",
+          type: "TEXT",
+        },
+        {
+          key: "evidenceAppId",
+          displayName: "Evidence App ID",
+          type: "TEXT",
+        },
+      ],
+    ),
+  ]);
+}
+
+async function ensureRegistrationDeskWaiverCollections() {
+  await Promise.all([
+    ensureRegistrationDeskWaiverEvidenceCollection(),
+    ensureRegistrationDeskWaiverStatusIndexCollection(),
+  ]);
+}
+
+const waiverRecordConflict = () =>
+  new RegistrationDeskWaiverError(
+    REGISTRATION_DESK_WAIVER_ERROR_CODES.recordConflict,
+  );
+
+const parseRegistrationDeskWaiverStorageItem = (item) => {
+  try {
+    return typeof item?.payload === "string"
+      ? JSON.parse(item.payload)
+      : item?.payload;
+  } catch {
+    throw waiverRecordConflict();
+  }
+};
+
+async function findRegistrationDeskWaiverStatusStorageItem(evidenceAppId) {
+  const storageId = arenaRecordStorageId(
+    WAIVER_STATUS_INDEX_COLLECTION,
+    evidenceAppId,
+  );
+  const [storedById, storedByEvidenceId] = await Promise.all([
+    readOptionalItem(
+      WAIVER_STATUS_INDEX_COLLECTION,
+      storageId,
+      CONSISTENT_READ_OPTIONS,
+    ),
+    wixData
+      .query(WAIVER_STATUS_INDEX_COLLECTION)
+      .eq("evidenceAppId", evidenceAppId)
+      .limit(2)
+      .find(CONSISTENT_READ_OPTIONS),
+  ]);
+  const candidates = new Map(
+    [storedById, ...storedByEvidenceId.items]
+      .filter(Boolean)
+      .map((item) => [item._id, item]),
+  );
+  if (candidates.size > 1) throw waiverRecordConflict();
+  const stored = [...candidates.values()][0] || null;
+  if (
+    stored &&
+    (stored._id !== storageId || stored.evidenceAppId !== evidenceAppId)
+  ) {
+    throw waiverRecordConflict();
+  }
+  return stored;
+}
+
+async function ensureRegistrationDeskWaiverStatusForEvidence(
+  evidence,
+  waiverDocument,
+) {
+  return ensureRegistrationDeskWaiverStatusIndexRecord({
+    evidence,
+    waiverDocument,
+    readStatusRecord: ({ evidenceAppId }) =>
+      findRegistrationDeskWaiverStatusStorageItem(evidenceAppId),
+    insertStatusRecord: (status) =>
+      wixData.insert(
+        WAIVER_STATUS_INDEX_COLLECTION,
+        {
+          _id: arenaRecordStorageId(
+            WAIVER_STATUS_INDEX_COLLECTION,
+            status.evidenceAppId,
+          ),
+          ...status,
+          signedAt: new Date(status.signedAt),
+        },
+        OPTIONS,
+      ),
+  });
+}
+
+async function registrationDeskWaiverStatusMigrationIsComplete() {
+  const marker = await readOptionalItem(
+    SETTINGS_COLLECTION,
+    WAIVER_STATUS_INDEX_MIGRATION_ID,
+    CONSISTENT_READ_OPTIONS,
+  );
+  return marker?.value === 1;
+}
+
+async function migrateLegacyRegistrationDeskWaiverStatuses(waiverDocument) {
+  return withRegistrationDeskLocks(
+    [WAIVER_STATUS_INDEX_MIGRATION_ID],
+    async () => {
+      if (await registrationDeskWaiverStatusMigrationIsComplete()) return;
+
+      // Compatibility-only scan; the marker keeps evidence off normal loads.
+      await ensureRegistrationDeskWaiverEvidenceCollection();
+      let result = await wixData
+        .query(WAIVER_SIGNATURES_COLLECTION)
+        .limit(WAIVER_STATUS_MIGRATION_PAGE_SIZE)
+        .find(CONSISTENT_READ_OPTIONS);
+      while (true) {
+        const evidenceRecords = result.items.flatMap((item) => {
+          try {
+            return [parseRegistrationDeskWaiverStorageItem(item)];
+          } catch (error) {
+            if (error instanceof RegistrationDeskWaiverError) return [];
+            throw error;
+          }
+        });
+        await migrateRegistrationDeskWaiverStatusIndex({
+          evidenceRecords,
+          waiverDocument,
+          ensureStatusRecord: (evidence) =>
+            ensureRegistrationDeskWaiverStatusForEvidence(
+              evidence,
+              waiverDocument,
+            ),
+        });
+        if (!result.hasNext()) break;
+        result = await result.next();
+      }
+      await wixData.save(
+        SETTINGS_COLLECTION,
+        {
+          _id: WAIVER_STATUS_INDEX_MIGRATION_ID,
+          value: 1,
+          updatedAt: new Date(),
+        },
+        OPTIONS,
+      );
+    },
+  );
+}
+
+async function readRegistrationDeskWaiverStatusRecords(waiverVersion) {
+  let result = await wixData
+    .query(WAIVER_STATUS_INDEX_COLLECTION)
+    .eq("source", "registration-desk")
+    .eq("waiverVersion", waiverVersion)
+    .limit(1000)
+    .find(CONSISTENT_READ_OPTIONS);
+  const records = [...result.items];
+  while (result.hasNext()) {
+    result = await result.next();
+    records.push(...result.items);
+  }
+  return records;
+}
+
+async function findRegistrationDeskWaiverStorageItem(recordId) {
+  const storageId = arenaRecordStorageId(
+    WAIVER_SIGNATURES_COLLECTION,
+    recordId,
+  );
+  const [storedById, storedByAppId] = await Promise.all([
+    readOptionalItem(
+      WAIVER_SIGNATURES_COLLECTION,
+      storageId,
+      CONSISTENT_READ_OPTIONS,
+    ),
+    wixData
+      .query(WAIVER_SIGNATURES_COLLECTION)
+      .eq("appId", recordId)
+      .limit(2)
+      .find(CONSISTENT_READ_OPTIONS),
+  ]);
+  const candidates = new Map(
+    [storedById, ...storedByAppId.items]
+      .filter(Boolean)
+      .map((item) => [item._id, item]),
+  );
+  if (candidates.size > 1) throw waiverRecordConflict();
+  const stored = [...candidates.values()][0] || null;
+  if (
+    stored &&
+    (stored._id !== storageId || stored.appId !== recordId)
+  ) {
+    throw waiverRecordConflict();
+  }
+  return stored;
+}
+
+async function insertImmutableRegistrationDeskWaiver(record, prepared) {
+  const storageId = arenaRecordStorageId(
+    WAIVER_SIGNATURES_COLLECTION,
+    record.id,
+  );
+  try {
+    await wixData.insert(
+      WAIVER_SIGNATURES_COLLECTION,
+      {
+        _id: storageId,
+        appId: record.id,
+        payload: JSON.stringify(record),
+      },
+      OPTIONS,
+    );
+    return record;
+  } catch (error) {
+    const collision = await findRegistrationDeskWaiverStorageItem(record.id);
+    if (!collision) throw error;
+    const persisted = parseRegistrationDeskWaiverStorageItem(collision);
+    resolveRegistrationDeskWaiverRetry(persisted, prepared);
+    return persisted;
+  }
 }
 
 async function ensureRiderAccountCollections() {
@@ -973,6 +1223,23 @@ export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
     throw error;
   }
 });
+
+export const loadContestantWaiverStatuses = webMethod(
+  Permissions.SiteMember,
+  async () => {
+    await requireArenaAdmin();
+    const waiverDocument = await readRegistrationDeskWaiverDocument();
+    await ensureRegistrationDeskWaiverStatusIndexCollection();
+    return loadContestantWaiverStatusesFromIndex({
+      isMigrationComplete:
+        registrationDeskWaiverStatusMigrationIsComplete,
+      migrateLegacyEvidence: () =>
+        migrateLegacyRegistrationDeskWaiverStatuses(waiverDocument),
+      readStatusRecords: readRegistrationDeskWaiverStatusRecords,
+      waiverDocument,
+    });
+  },
+);
 
 export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
   await requireArenaAdmin();
@@ -2202,6 +2469,17 @@ async function withRegistrationDeskEventLock(eventId, callback) {
   throw new Error("Registration is busy processing another entry. Try again.");
 }
 
+async function withRegistrationDeskLocks(lockIds, callback) {
+  const orderedLockIds = [...new Set(lockIds)].sort();
+  const run = (index) =>
+    index === orderedLockIds.length
+      ? callback()
+      : withRegistrationDeskEventLock(orderedLockIds[index], () =>
+          run(index + 1),
+        );
+  return run(0);
+}
+
 async function createRegistrationDeskSignupRecords(request) {
   const eventId = request?.eventId;
   if (!validAppId(eventId)) {
@@ -2316,59 +2594,73 @@ export const submitRegistrationDeskWaiver = webMethod(
   Permissions.SiteMember,
   async (request) => {
     await requireRegistrationDesk();
-    const workspace = await readWorkspace({ consistentRead: true });
-    const waiverDocument = await readRegistrationDeskWaiverDocument();
-    const signatureId = `waiver-${createHash("sha256")
-      .update(
-        JSON.stringify([
-          request?.eventId,
-          request?.contestantId,
-          waiverDocument.version,
-        ]),
-      )
-      .digest("hex")
-      .slice(0, 32)}`;
-    const prepared = prepareRegistrationDeskWaiver(
-      workspace,
-      waiverDocument,
-      request,
-      { id: signatureId },
-    );
-    await ensureRegistrationDeskWaiverCollection();
-    const inserted = await insertUniqueArenaRecord(
-      WAIVER_SIGNATURES_COLLECTION,
-      prepared.evidence,
-    );
-    let signature = prepared.signature;
-    if (!inserted) {
-      const existing = await readOptionalItem(
-        WAIVER_SIGNATURES_COLLECTION,
-        arenaRecordStorageId(WAIVER_SIGNATURES_COLLECTION, signatureId),
-      );
-      let evidence;
-      try {
-        evidence =
-          typeof existing?.payload === "string"
-            ? JSON.parse(existing.payload)
-            : existing?.payload;
-      } catch {
-        evidence = null;
-      }
-      signature = registrationDeskWaiverSignatureProjection(evidence);
-      if (!signature) {
-        throw new Error("The existing waiver signature could not be verified.");
-      }
+    if (!validAppId(request?.eventId) || !validAppId(request?.contestantId)) {
+      throw new Error("Choose a valid competition and contestant, then accept the waiver.");
     }
-    const projected = await registrationDeskProjection(workspace);
-    return {
-      signature,
-      data: projected.waiverSignatures.some(({ id }) => id === signature.id)
-        ? projected
-        : {
-            ...projected,
-            waiverSignatures: [...projected.waiverSignatures, signature],
-          },
-    };
+    const waiverDocument = await readRegistrationDeskWaiverDocument();
+    const signatureId = registrationDeskWaiverRecordId(
+      request.eventId,
+      request.contestantId,
+      waiverDocument.version,
+    );
+    await ensureRegistrationDeskWaiverCollections();
+    return withRegistrationDeskLocks(
+      [
+        WAIVER_STATUS_INDEX_MIGRATION_ID,
+        request.eventId,
+        `registration-desk-waiver-${signatureId}`,
+      ],
+      async () => {
+        const workspace = await readWorkspace({ consistentRead: true });
+        const prepared = prepareRegistrationDeskWaiver(
+          workspace,
+          waiverDocument,
+          request,
+          { id: signatureId },
+        );
+        const existingItem =
+          await findRegistrationDeskWaiverStorageItem(signatureId);
+        let persistedEvidence;
+        let signature;
+        if (existingItem) {
+          persistedEvidence =
+            parseRegistrationDeskWaiverStorageItem(existingItem);
+          signature = resolveRegistrationDeskWaiverRetry(
+            persistedEvidence,
+            prepared,
+          );
+        } else {
+          persistedEvidence = await insertImmutableRegistrationDeskWaiver(
+            prepared.evidence,
+            prepared,
+          );
+          signature = resolveRegistrationDeskWaiverRetry(
+            persistedEvidence,
+            prepared,
+          );
+        }
+        await ensureRegistrationDeskWaiverStatusForEvidence(
+          persistedEvidence,
+          waiverDocument,
+        );
+
+        const projected = await registrationDeskProjection(workspace);
+        return {
+          signature,
+          data: projected.waiverSignatures.some(
+            ({ id }) => id === signature.id,
+          )
+            ? projected
+            : {
+                ...projected,
+                waiverSignatures: [
+                  ...projected.waiverSignatures,
+                  signature,
+                ],
+              },
+        };
+      },
+    );
   },
 );
 

@@ -41,6 +41,7 @@ designed to run as an embedded web app inside a Wix site.
 - Role-based report access for administrators, producers, secretaries, announcers, and read-only users
 - Searchable report history with one-click regeneration and saved per-role column preferences
 - Registration Desk-only tablet waiver signatures with event-specific participant status
+- Read-only current-waiver status in the admin Rider Roster, including a mobile card view
 - Browser-based persistence with no server required
 
 ## Development
@@ -75,11 +76,15 @@ remain visibly unpaid for settlement but are authorized to enter the draw.
 1. Enable Velo developer mode in Wix.
 2. Create these Wix Data collections: `ArenaMeets`, `ArenaCompetitions`,
    `ArenaContestants`, `ArenaTeams`, `ArenaRegistrations`, `ArenaSpectators`,
-   `ArenaSpectatorPredictions`, `ArenaWaiverSignatures`, `ArenaSettings`, and
-   `ArenaContestantCredentials`.
+   `ArenaSpectatorPredictions`, `ArenaWaiverSignatures`,
+   `ArenaWaiverStatusIndex`, `ArenaSettings`, and `ArenaContestantCredentials`.
 3. Add `appId` and `payload` text fields to the first eight collections. Online
    team and registration payloads may also contain optional `source`,
    `submissionId`, and `submittedAt` properties. Add
+   `source`, `contestantId`, `eventId`, `waiverVersion`, and `evidenceAppId`
+   text fields plus a `signedAt` date/time field to `ArenaWaiverStatusIndex`;
+   do not add signature images, legal text, names, or staff identity fields.
+   Add
    `activeEventId` (text), `participantDatabaseVersion` (number), and `updatedAt`
    (date/time) to `ArenaSettings`, plus `value` (number, default `0`) for the
    separate staff and online revision records created by the backend.
@@ -88,14 +93,18 @@ remain visibly unpaid for settlement but are authorized to enter the draw.
    the authoritative non-empty `title`, `version`, and `text`. Until all three
    values are configured, the backend returns `available: false` and the
    Registration Desk disables signing without displaying placeholder text.
+   The backend performs one lock-protected, 100-record-page compatibility
+   migration and records
+   `arena-waiver-status-index-2026-08-12-v1` only after every evidence page is
+   indexed. Later Rider Roster loads query only `ArenaWaiverStatusIndex`.
 4. Set every collection's permissions to **Admin only**. Public access is
    provided only by the backend's purpose-built `Permissions.Anyone` methods;
    visitors never query collections directly.
 5. Copy `wix/backend/arena-data.web.js` into the Wix backend and copy
    `wix/page-code.js` into the page containing the app. The backend exposes
    `loadPublicArenaData`, `createContestantAccount`, `loadSignupOptions`,
-   `submitOnlineSignup`, and `submitSpectatorPrediction`; keep their checked-in
-   permissions unchanged.
+   `submitOnlineSignup`, `submitSpectatorPrediction`, and the admin-only
+   `loadContestantWaiverStatuses`; keep their checked-in permissions unchanged.
 6. Give the Wix HTML embed element the ID `arenaCommandEmbed` and set its URL
    to the hosted Arena Command app.
 7. Add `contestantId`, `emailNormalized`, `pinSalt`, `pinHash`,
@@ -142,7 +151,9 @@ Waiver PNG evidence is stored only in the admin-only
 `ArenaWaiverSignatures` collection. Generic Arena workspace saves, browser
 `localStorage`, contestant account creation, and public projections never
 receive that evidence; the Registration Desk receives only signature status
-metadata after submission.
+metadata after submission. The admin Rider Roster loads current-version status
+separately as transient UI state containing only contestant ID, event ID, and
+signed timestamp; it is never added to `ArenaData` or browser storage.
 
 ### Owner payment notification
 
