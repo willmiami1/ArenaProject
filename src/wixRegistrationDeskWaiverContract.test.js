@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  contestantWaiverStatusesProjection,
   normalizeRegistrationDeskWaiverDocument,
   prepareRegistrationDeskWaiver,
   registrationDeskWaiverSignatureProjection,
@@ -88,5 +89,69 @@ describe("Wix Registration Desk waiver contract", () => {
         { id: "waiver-1" },
       ),
     ).toThrow(/authoritative legal document is configured/);
+  });
+
+  it("projects only the latest current-version status without private evidence", () => {
+    const evidence = (overrides) => ({
+      id: "waiver-current",
+      eventId: "event-current",
+      contestantId: "contestant-1",
+      contestantName: "RIDER ONE",
+      signerName: "Rider One",
+      signedAt: "2026-08-12T15:00:00.000Z",
+      waiverVersion: document.version,
+      accepted: true,
+      signatureDataUrl: request.signatureDataUrl,
+      waiverTitle: document.title,
+      waiverText: document.text,
+      ...overrides,
+    });
+    const records = [
+      evidence({
+        id: "waiver-old-version",
+        eventId: "event-old",
+        signedAt: "2026-08-13T15:00:00.000Z",
+        waiverVersion: "2026-08-11-v1",
+      }),
+      evidence({
+        id: "waiver-current-earlier",
+        eventId: "event-1",
+        signedAt: "2026-08-12T15:00:00.000Z",
+      }),
+      evidence({
+        id: "waiver-current-latest",
+        eventId: "event-z",
+        signedAt: "2026-08-13T15:00:00.000Z",
+      }),
+      evidence({
+        id: "waiver-current-tie",
+        eventId: "event-a",
+        signedAt: "2026-08-13T15:00:00.000Z",
+      }),
+      evidence({
+        id: "waiver-incomplete",
+        eventId: "event-incomplete",
+        signatureDataUrl: undefined,
+      }),
+    ];
+    const statuses = contestantWaiverStatusesProjection(records, document);
+    expect(statuses).toEqual({
+      waiverVersion: document.version,
+      statuses: [
+        {
+          contestantId: "contestant-1",
+          signedAt: "2026-08-13T15:00:00.000Z",
+          eventId: "event-a",
+        },
+      ],
+    });
+    expect(JSON.stringify(statuses)).not.toContain("signatureDataUrl");
+    expect(JSON.stringify(statuses)).not.toContain("signerName");
+    expect(
+      contestantWaiverStatusesProjection(
+        [],
+        { ...document, available: false },
+      ),
+    ).toEqual({ waiverVersion: "", statuses: [] });
   });
 });
