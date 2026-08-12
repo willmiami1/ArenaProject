@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -79,6 +80,7 @@ import {
 import {
   authenticateContestant,
   isWixEmbed,
+  loadContestantWaiverStatuses,
   loadPublicArenaData,
   logoutAdmin,
   setContestantPin,
@@ -112,6 +114,12 @@ import {
 import { spectatorLeaderboard } from "./spectatorPredictions";
 import { normalizeHorseNames } from "./contestantHorses";
 import { contestantRopingHistory } from "./contestantHistory";
+import {
+  contestantWaiverStatusPresentation,
+  readyContestantWaiverStatuses,
+  type ContestantWaiverStatusesResponse,
+  type ContestantWaiverStatusesState,
+} from "./contestantWaiverStatus";
 import { sortWorkspaceMeets } from "./workspaceEventOrder";
 import {
   assertRoundRobinRoleCapacity,
@@ -2022,6 +2030,47 @@ function EventForm({
   );
 }
 
+function ContestantWaiverStatus({
+  contestantId,
+  state,
+}: {
+  contestantId: string;
+  state: ContestantWaiverStatusesState;
+}) {
+  const status = contestantWaiverStatusPresentation(state, contestantId);
+  if (status.kind === "signed") {
+    return (
+      <span className="contestant-waiver-state signed">
+        <span className="contestant-waiver-badge signed">
+          <Check size={12} aria-hidden="true" /> Signed
+        </span>
+        <time
+          dateTime={status.signedAt}
+          title={status.fullDateLabel}
+          aria-label={`Waiver signed ${status.fullDateLabel}`}
+        >
+          {status.dateLabel}
+        </time>
+      </span>
+    );
+  }
+  if (status.kind === "unavailable") {
+    return (
+      <span
+        className="contestant-waiver-badge unavailable"
+        title={status.message}
+      >
+        {status.label}
+      </span>
+    );
+  }
+  return (
+    <span className={`contestant-waiver-badge ${status.kind}`}>
+      {status.label}
+    </span>
+  );
+}
+
 function Contestants({
   contestants,
   meets,
@@ -2048,6 +2097,60 @@ function Contestants({
   const [profile, setProfile] = useState<Contestant | null>(null);
   const [search, setSearch] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
+  const embedded = isWixEmbed();
+  const contestantIdsRef = useRef<string[]>([]);
+  contestantIdsRef.current = contestants.map(({ id }) => id);
+  const contestantIdKey = JSON.stringify(contestantIdsRef.current);
+  const waiverRequestRef = useRef(0);
+  const waiverResponseRef =
+    useRef<ContestantWaiverStatusesResponse | null>(null);
+  const [waiverStatuses, setWaiverStatuses] =
+    useState<ContestantWaiverStatusesState>({ phase: "loading" });
+  const refreshWaiverStatuses = useCallback(async () => {
+    const request = waiverRequestRef.current + 1;
+    waiverRequestRef.current = request;
+    setWaiverStatuses({ phase: "loading" });
+    if (!embedded) {
+      setWaiverStatuses({
+        phase: "error",
+        message:
+          "Waiver status is available only in the authenticated Wix workspace.",
+      });
+      return;
+    }
+    try {
+      const response = await loadContestantWaiverStatuses();
+      if (waiverRequestRef.current !== request) return;
+      waiverResponseRef.current = response;
+      setWaiverStatuses(
+        readyContestantWaiverStatuses(response, contestantIdsRef.current),
+      );
+    } catch (error) {
+      if (waiverRequestRef.current !== request) return;
+      setWaiverStatuses({
+        phase: "error",
+        message:
+          error instanceof Error && error.message
+            ? error.message
+            : "Waiver status could not be loaded.",
+      });
+    }
+  }, [embedded]);
+  useEffect(() => {
+    void refreshWaiverStatuses();
+    return () => {
+      waiverRequestRef.current += 1;
+    };
+  }, [refreshWaiverStatuses]);
+  useEffect(() => {
+    const response = waiverResponseRef.current;
+    if (!response) return;
+    setWaiverStatuses((current) =>
+      current.phase === "ready"
+        ? readyContestantWaiverStatuses(response, contestantIdsRef.current)
+        : current,
+    );
+  }, [contestantIdKey]);
   const filtered = contestants.filter((contestant) =>
     `${contestant.name} ${contestant.hometown} ${(contestant.horses ?? []).join(" ")} ${contestant.headerHandicap} ${contestant.heelerHandicap}`.toLowerCase().includes(search.toLowerCase()),
   );
@@ -2108,6 +2211,41 @@ function Contestants({
       );
     }
   };
+  const editContestant = (contestant: Contestant) => {
+    setEditing(contestant);
+    setShowForm(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const deleteContestant = (contestant: Contestant) => {
+    if (
+      !window.confirm(
+        `Delete ${contestant.name}? This will also delete all of their team entries.`,
+      )
+    ) {
+      return;
+    }
+    onDelete(contestant.id);
+    if (editing?.id === contestant.id) setEditing(null);
+  };
+  const contestantActions = (contestant: Contestant) => (
+    <span className="row-actions">
+      <button
+        title="Edit contestant"
+        aria-label={`Edit ${contestant.name}`}
+        onClick={() => editContestant(contestant)}
+      >
+        <Pencil size={15} />
+      </button>
+      <button
+        className="delete-action"
+        title="Delete contestant"
+        aria-label={`Delete ${contestant.name}`}
+        onClick={() => deleteContestant(contestant)}
+      >
+        <Trash2 size={15} />
+      </button>
+    </span>
+  );
 
   return (
     <>
@@ -2223,17 +2361,40 @@ function Contestants({
           <button onClick={() => setBackupMessage("")}><X size={16} /></button>
         </div>
       )}
-      <div className="panel table-panel">
+      <div className="panel table-panel contestant-roster-panel">
         <div className="table-toolbar">
-          <div><h3>Rider roster</h3><p>{contestants.length} contestants on file</p></div>
+          <div>
+            <h3>Rider roster</h3>
+            <p>{contestants.length} contestants on file</p>
+            {waiverStatuses.phase === "error" && (
+              <p className="waiver-load-message" role="status">
+                {embedded
+                  ? "Waiver status unavailable. Use Retry waivers to try again."
+                  : "Waiver status is available only in the authenticated Wix workspace."}
+              </p>
+            )}
+          </div>
           <div className="roster-actions">
             <label className="search"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search riders" /></label>
+            <button
+              className="secondary waiver-refresh-button"
+              disabled={!embedded || waiverStatuses.phase === "loading"}
+              onClick={() => { void refreshWaiverStatuses(); }}
+              title={
+                embedded
+                  ? "Reload current waiver status from Wix"
+                  : "Waiver status is available only in Wix"
+              }
+            >
+              <RefreshCw size={16} />
+              {waiverStatuses.phase === "error" ? "Retry waivers" : "Refresh waivers"}
+            </button>
             <button className="secondary" disabled={!contestants.length} onClick={downloadBackup}><Download size={16} /> Download database</button>
             <label className="secondary import-database-button"><Upload size={16} /> Import database<input type="file" accept="application/json,text/plain,.json,.txt" onChange={(event) => { void restoreBackup(event.target.files?.[0]); event.target.value = ""; }} /></label>
           </div>
         </div>
         <div className="data-table contestant-table">
-          <div className="table-row table-header"><span>Contestant</span><span>Header handicap</span><span>Heeler handicap</span><span>Hometown</span><span>Phone</span><span>Actions</span></div>
+          <div className="table-row table-header"><span>Contestant</span><span>Header handicap</span><span>Heeler handicap</span><span>Hometown</span><span>Phone</span><span>Waiver</span><span>Actions</span></div>
           {filtered.map((contestant) => (
             <div className="table-row" key={contestant.id}>
               <span className="person">
@@ -2246,31 +2407,42 @@ function Contestants({
               <span>{contestant.heelerHandicap}</span>
               <span>{contestant.hometown || "—"}</span>
               <span>{contestant.phone || "—"}</span>
-              <span className="row-actions">
-                <button
-                  title="Edit contestant"
-                  onClick={() => {
-                    setEditing(contestant);
-                    setShowForm(false);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                >
-                  <Pencil size={15} />
-                </button>
-                <button
-                  className="delete-action"
-                  title="Delete contestant"
-                  onClick={() => {
-                    if (window.confirm(`Delete ${contestant.name}? This will also delete all of their team entries.`)) {
-                      onDelete(contestant.id);
-                      if (editing?.id === contestant.id) setEditing(null);
-                    }
-                  }}
-                >
-                  <Trash2 size={15} />
-                </button>
-              </span>
+              <ContestantWaiverStatus
+                contestantId={contestant.id}
+                state={waiverStatuses}
+              />
+              {contestantActions(contestant)}
             </div>
+          ))}
+        </div>
+        <div className="contestant-roster-cards" aria-label="Rider roster">
+          {filtered.map((contestant) => (
+            <article className="contestant-roster-card" key={contestant.id}>
+              <header>
+                <span className="person">
+                  {contestant.photo
+                    ? <img className="profile-photo" src={contestant.photo} alt="" />
+                    : <i>{initials(contestant.name)}</i>}
+                  <button className="contestant-name-button" onClick={() => setProfile(contestant)}>{contestant.name}</button>
+                </span>
+                {contestantActions(contestant)}
+              </header>
+              <dl>
+                <div><dt>Header handicap</dt><dd>{contestant.headerHandicap}</dd></div>
+                <div><dt>Heeler handicap</dt><dd>{contestant.heelerHandicap}</dd></div>
+                <div><dt>Hometown</dt><dd>{contestant.hometown || "—"}</dd></div>
+                <div><dt>Phone</dt><dd>{contestant.phone || "—"}</dd></div>
+                <div className="contestant-card-waiver">
+                  <dt>Waiver</dt>
+                  <dd>
+                    <ContestantWaiverStatus
+                      contestantId={contestant.id}
+                      state={waiverStatuses}
+                    />
+                  </dd>
+                </div>
+              </dl>
+            </article>
           ))}
         </div>
       </div>

@@ -74,6 +74,10 @@ describe("trusted Wix relay origin", () => {
     it("requires the trusted Wix relay for Registration Desk waiver evidence", () => {
       expect(sensitiveWixAction("submitRegistrationDeskWaiver")).toBe(true);
     });
+
+    it("requires the trusted Wix relay for contestant waiver status", () => {
+      expect(sensitiveWixAction("loadContestantWaiverStatuses")).toBe(true);
+    });
   });
 
   describe("public event section links", () => {

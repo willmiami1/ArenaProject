@@ -230,7 +230,8 @@ main { grid-column: 2; min-width: 0; }
 .search input { width: 100%; background: none; border: 0; outline: 0; font-size: 12px; }
 .data-table { width: 100%; }
 .table-row { min-height: 64px; display: grid; grid-template-columns: 1.5fr .7fr 1fr .8fr; align-items: center; gap: 18px; padding: 10px 20px; border-bottom: 1px solid #efefeb; font-size: 12px; }
-.contestant-table .table-row { min-width: 780px; grid-template-columns: 1.5fr .75fr .75fr 1fr .9fr .55fr; }
+.contestant-table { overflow-x: auto; }
+.contestant-table .table-row { min-width: 980px; grid-template-columns: 1.5fr .7fr .7fr 1fr .85fr 1.05fr .5fr; }
 .table-row:last-child { border-bottom: 0; }
 .table-header { min-height: 38px; color: #939b97; background: #fafaf8; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .person { display: flex; align-items: center; gap: 10px; }
@@ -239,6 +240,24 @@ main { grid-column: 2; min-width: 0; }
 .person strong { font-size: 12px; }
 .contestant-name-button { padding: 3px 0; color: var(--green); background: none; border: 0; font-size: 12px; font-weight: 800; text-align: left; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
 .contestant-name-button:hover { text-decoration-color: currentColor; }
+.waiver-load-message { margin-top: 5px !important; color: #9a4740 !important; font-weight: 700; }
+.contestant-waiver-state { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 5px 7px; }
+.contestant-waiver-state time { color: var(--muted); font-size: 9px; white-space: nowrap; }
+.contestant-waiver-badge { width: fit-content; display: inline-flex; align-items: center; gap: 4px; padding: 5px 7px; border: 1px solid transparent; border-radius: 999px; font-size: 9px; font-weight: 800; line-height: 1.2; white-space: nowrap; }
+.contestant-waiver-badge.signed { color: #2d694c; background: #e7f2eb; border-color: #bdd8c6; }
+.contestant-waiver-badge.not-signed { color: #765e3e; background: #f5eee3; border-color: #e5d4bb; }
+.contestant-waiver-badge.loading { color: #68736d; background: #eef0ee; border-color: #dce1dd; }
+.contestant-waiver-badge.unavailable { color: #9a4740; background: #f7e8e6; border-color: #e5c6c2; }
+.contestant-roster-cards { display: none; }
+.contestant-roster-card { min-width: 0; overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 9px; }
+.contestant-roster-card > header { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 14px; border-bottom: 1px solid var(--line); }
+.contestant-roster-card .person { min-width: 0; }
+.contestant-roster-card .contestant-name-button { min-width: 0; overflow-wrap: anywhere; }
+.contestant-roster-card dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1px; margin: 0; background: var(--line); }
+.contestant-roster-card dl > div { min-width: 0; padding: 11px 13px; background: #fff; }
+.contestant-roster-card dt { margin-bottom: 5px; color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.contestant-roster-card dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 11px; font-weight: 700; }
+.contestant-roster-card .contestant-card-waiver { grid-column: 1 / -1; }
 .contestant-profile-overlay { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(17,31,24,.72); }
 .contestant-profile-dialog { width: min(920px,100%); max-height: calc(100dvh - 48px); overflow: auto; background: #fff; border-radius: 12px; box-shadow: 0 24px 70px rgba(0,0,0,.35); }
 .contestant-profile-header { position: sticky; z-index: 2; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 24px; color: #fff; background: #244c39; }
@@ -728,6 +747,15 @@ main { grid-column: 2; min-width: 0; }
 .app-shell .table-header { color: #b39d87; background: #211812; }
 .app-shell .table-row,
 .app-shell .report-catalog-list > button { border-color: #382a20; }
+.app-shell .contestant-roster-card { background: #18120e; border-color: #443225; }
+.app-shell .contestant-roster-card > header { border-color: #382a20; }
+.app-shell .contestant-roster-card dl { background: #382a20; }
+.app-shell .contestant-roster-card dl > div { background: #18120e; }
+.app-shell .contestant-waiver-badge.signed { color: #bcd8bc; background: #1d3324; border-color: #3f6749; }
+.app-shell .contestant-waiver-badge.not-signed { color: #d6b98c; background: #332516; border-color: #62492d; }
+.app-shell .contestant-waiver-badge.loading { color: #cabaa8; background: #2b231d; border-color: #4a3c32; }
+.app-shell .contestant-waiver-badge.unavailable { color: #efaaa2; background: #3a1d1a; border-color: #6f3c36; }
+.app-shell .waiver-load-message { color: #efaaa2 !important; }
 .app-shell .report-catalog-list > button:hover,
 .app-shell .competition-row.selected,
 .app-shell .queue-row:hover,
@@ -1006,6 +1034,10 @@ main { grid-column: 2; min-width: 0; }
   .sidebar.open { transform: translateX(0); box-shadow: 15px 0 40px rgba(0,0,0,.25); }
   .mobile-close, .menu-button { display: grid; }
   .scrim { position: fixed; z-index: 20; inset: 0; display: block; width: 100%; background: rgba(8,14,11,.5); border: 0; }
+  .contestant-roster-panel .table-toolbar { align-items: flex-start; flex-direction: column; }
+  .contestant-roster-panel .roster-actions { width: 100%; justify-content: flex-start; }
+  .contestant-roster-panel .roster-actions .secondary { flex: 1 1 150px; }
+  .contestant-roster-panel .search { width: 100%; }
 }
 
 @media (max-width: 760px) {
@@ -1049,6 +1081,8 @@ main { grid-column: 2; min-width: 0; }
   .table-panel { overflow: hidden; }
   .data-table { overflow-x: auto; }
   .table-row { min-width: 680px; }
+  .contestant-table { display: none; }
+  .contestant-roster-cards { min-width: 0; display: grid; gap: 12px; padding: 14px; }
   .draw-list { padding: 4px 14px; }
   .draw-row { min-width: 720px; grid-template-columns: 43px 1fr 20px 1fr auto 120px; gap: 10px; padding: 10px 0; }
   .draw-sheet { overflow-x: auto; }

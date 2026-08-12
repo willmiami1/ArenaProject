@@ -53,6 +53,88 @@ export function registrationDeskWaiverSignatureProjection(record) {
   };
 }
 
+const compareCanonicalText = (left, right) =>
+  left < right ? -1 : left > right ? 1 : 0;
+
+const canonicalWaiverName = (value) =>
+  typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+
+const contestantWaiverStatusCandidate = (record, waiverDocument) => {
+  const signature = registrationDeskWaiverSignatureProjection(record);
+  const contestantName = canonicalWaiverName(record?.contestantName);
+  const signerName = canonicalWaiverName(record?.signerName);
+  const signedAtMs = Date.parse(signature?.signedAt || "");
+  if (
+    !signature ||
+    !validId.test(signature.id) ||
+    !validId.test(signature.eventId) ||
+    !validId.test(signature.contestantId) ||
+    signature.waiverVersion !== waiverDocument.version ||
+    !contestantName ||
+    contestantName !== record.contestantName ||
+    !signerName ||
+    signerName !== record.signerName ||
+    signerName.length > 120 ||
+    /[\u0000-\u001f\u007f]/.test(signerName) ||
+    record.accepted !== true ||
+    record.waiverTitle !== waiverDocument.title ||
+    record.waiverText !== waiverDocument.text ||
+    typeof record.signatureDataUrl !== "string" ||
+    record.signatureDataUrl.length > 4_000_000 ||
+    !pngDataUrlPattern.test(record.signatureDataUrl) ||
+    !Number.isFinite(signedAtMs) ||
+    new Date(signedAtMs).toISOString() !== signature.signedAt
+  ) {
+    return null;
+  }
+  return {
+    contestantId: signature.contestantId,
+    signedAt: signature.signedAt,
+    signedAtMs,
+    eventId: signature.eventId,
+    recordId: signature.id,
+  };
+};
+
+const contestantWaiverStatusIsPreferred = (candidate, current) =>
+  candidate.signedAtMs > current.signedAtMs ||
+  (candidate.signedAtMs === current.signedAtMs &&
+    (compareCanonicalText(candidate.eventId, current.eventId) < 0 ||
+      (candidate.eventId === current.eventId &&
+        compareCanonicalText(candidate.recordId, current.recordId) < 0)));
+
+export function contestantWaiverStatusesProjection(records, waiverDocument) {
+  const waiverVersion =
+    waiverDocument?.available === true &&
+    typeof waiverDocument.version === "string"
+      ? waiverDocument.version.trim()
+      : "";
+  if (!waiverVersion || !Array.isArray(records)) {
+    return { waiverVersion, statuses: [] };
+  }
+  const latestByContestantId = new Map();
+  for (const record of records) {
+    const candidate = contestantWaiverStatusCandidate(record, waiverDocument);
+    if (!candidate) continue;
+    const prior = latestByContestantId.get(candidate.contestantId);
+    if (!prior || contestantWaiverStatusIsPreferred(candidate, prior)) {
+      latestByContestantId.set(candidate.contestantId, candidate);
+    }
+  }
+  return {
+    waiverVersion,
+    statuses: [...latestByContestantId.values()]
+      .sort((left, right) =>
+        compareCanonicalText(left.contestantId, right.contestantId),
+      )
+      .map(({ contestantId, signedAt, eventId }) => ({
+        contestantId,
+        signedAt,
+        eventId,
+      })),
+  };
+}
+
 export function prepareRegistrationDeskWaiver(
   workspace,
   waiverDocument,

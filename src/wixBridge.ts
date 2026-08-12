@@ -23,6 +23,15 @@ import type {
   RegistrationDeskSignupRequest,
   RegistrationDeskSignupResponse,
 } from "./registrationDeskSignup";
+import {
+  normalizeContestantWaiverStatusesResponse,
+  type ContestantWaiverStatusesResponse,
+} from "./contestantWaiverStatus";
+
+export type {
+  ContestantWaiverStatus,
+  ContestantWaiverStatusesResponse,
+} from "./contestantWaiverStatus";
 
 type WixAction =
   | "load"
@@ -46,6 +55,7 @@ type WixAction =
   | "getAdminAccess"
   | "promptAdminLogin"
   | "logoutAdmin"
+  | "loadContestantWaiverStatuses"
   | "getRegistrationDeskAccess"
   | "promptRegistrationDeskLogin"
   | "loadRegistrationDeskData"
@@ -312,6 +322,7 @@ export function sensitiveWixAction(action: WixAction) {
     action === "getAdminAccess" ||
     action === "promptAdminLogin" ||
     action === "logoutAdmin" ||
+    action === "loadContestantWaiverStatuses" ||
     action === "getRegistrationDeskAccess" ||
     action === "promptRegistrationDeskLogin" ||
     action === "loadRegistrationDeskData" ||
@@ -553,6 +564,16 @@ export function promptAdminLogin() {
 
 export function logoutAdmin() {
   return requestWix<{ loggedOut: boolean }>("logoutAdmin");
+}
+
+export async function loadContestantWaiverStatuses(): Promise<
+  ContestantWaiverStatusesResponse
+> {
+  const response = await requestWix<unknown>("loadContestantWaiverStatuses");
+  if (!response) {
+    throw new Error("Wix returned an empty waiver status response.");
+  }
+  return normalizeContestantWaiverStatusesResponse(response);
 }
 
 export function getRegistrationDeskAccess() {

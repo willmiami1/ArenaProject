@@ -41,6 +41,7 @@ designed to run as an embedded web app inside a Wix site.
 - Role-based report access for administrators, producers, secretaries, announcers, and read-only users
 - Searchable report history with one-click regeneration and saved per-role column preferences
 - Registration Desk-only tablet waiver signatures with event-specific participant status
+- Read-only current-waiver status in the admin Rider Roster, including a mobile card view
 - Browser-based persistence with no server required
 
 ## Development
@@ -94,8 +95,8 @@ remain visibly unpaid for settlement but are authorized to enter the draw.
 5. Copy `wix/backend/arena-data.web.js` into the Wix backend and copy
    `wix/page-code.js` into the page containing the app. The backend exposes
    `loadPublicArenaData`, `createContestantAccount`, `loadSignupOptions`,
-   `submitOnlineSignup`, and `submitSpectatorPrediction`; keep their checked-in
-   permissions unchanged.
+   `submitOnlineSignup`, `submitSpectatorPrediction`, and the admin-only
+   `loadContestantWaiverStatuses`; keep their checked-in permissions unchanged.
 6. Give the Wix HTML embed element the ID `arenaCommandEmbed` and set its URL
    to the hosted Arena Command app.
 7. Add `contestantId`, `emailNormalized`, `pinSalt`, `pinHash`,
@@ -142,7 +143,9 @@ Waiver PNG evidence is stored only in the admin-only
 `ArenaWaiverSignatures` collection. Generic Arena workspace saves, browser
 `localStorage`, contestant account creation, and public projections never
 receive that evidence; the Registration Desk receives only signature status
-metadata after submission.
+metadata after submission. The admin Rider Roster loads current-version status
+separately as transient UI state containing only contestant ID, event ID, and
+signed timestamp; it is never added to `ArenaData` or browser storage.
 
 ### Owner payment notification
 

@@ -7,6 +7,7 @@ import {
   createPublicSignupPayment,
   getPublicSignupPaymentStatus,
   loadArenaData,
+  loadContestantWaiverStatuses,
   saveArenaData,
   setContestantPin,
   submitSpectatorPrediction,
@@ -102,7 +103,9 @@ $w.onReady(() => {
     try {
       let data;
       if (message.action === "load") data = await loadArenaData();
-      else if (message.action === "save") {
+      else if (message.action === "loadContestantWaiverStatuses") {
+        data = await loadContestantWaiverStatuses();
+      } else if (message.action === "save") {
         data = await saveArenaData(message.data);
       } else if (message.action === "authenticateContestant") {
         data = await authenticateContestant(message.data);

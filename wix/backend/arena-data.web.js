@@ -27,6 +27,7 @@ import {
   supportedRegistrationDeskEntryTypes,
 } from "./registration-desk-signup-contract";
 import {
+  contestantWaiverStatusesProjection,
   normalizeRegistrationDeskWaiverDocument,
   prepareRegistrationDeskWaiver,
   registrationDeskWaiverSignatureProjection,
@@ -324,6 +325,40 @@ async function readRegistrationDeskWaiverSignatures(eventIds) {
     const signature = registrationDeskWaiverSignatureProjection(record);
     return signature && eventIds.has(signature.eventId) ? [signature] : [];
   });
+}
+
+async function readOptionalRegistrationDeskWaiverRecords() {
+  try {
+    let result = await wixData
+      .query(WAIVER_SIGNATURES_COLLECTION)
+      .limit(1000)
+      .find({ ...OPTIONS, consistentRead: true });
+    const items = [...result.items];
+    while (result.hasNext()) {
+      result = await result.next();
+      items.push(...result.items);
+    }
+    return items.flatMap((item) => {
+      try {
+        const record =
+          typeof item?.payload === "string"
+            ? JSON.parse(item.payload)
+            : item?.payload;
+        return record && typeof record === "object" ? [record] : [];
+      } catch {
+        return [];
+      }
+    });
+  } catch (error) {
+    if (
+      error?.code === "WDE0025" ||
+      error?.code === "WDE0026" ||
+      error?.code === "WD_SCHEMA_DOES_NOT_EXIST"
+    ) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 const publicContestantAccountResult = (workspace, event, contestant) => {
@@ -973,6 +1008,18 @@ export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
     throw error;
   }
 });
+
+export const loadContestantWaiverStatuses = webMethod(
+  Permissions.SiteMember,
+  async () => {
+    await requireArenaAdmin();
+    const [waiverDocument, records] = await Promise.all([
+      readRegistrationDeskWaiverDocument(),
+      readOptionalRegistrationDeskWaiverRecords(),
+    ]);
+    return contestantWaiverStatusesProjection(records, waiverDocument);
+  },
+);
 
 export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
   await requireArenaAdmin();
