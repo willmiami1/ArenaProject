@@ -76,11 +76,15 @@ remain visibly unpaid for settlement but are authorized to enter the draw.
 1. Enable Velo developer mode in Wix.
 2. Create these Wix Data collections: `ArenaMeets`, `ArenaCompetitions`,
    `ArenaContestants`, `ArenaTeams`, `ArenaRegistrations`, `ArenaSpectators`,
-   `ArenaSpectatorPredictions`, `ArenaWaiverSignatures`, `ArenaSettings`, and
-   `ArenaContestantCredentials`.
+   `ArenaSpectatorPredictions`, `ArenaWaiverSignatures`,
+   `ArenaWaiverStatusIndex`, `ArenaSettings`, and `ArenaContestantCredentials`.
 3. Add `appId` and `payload` text fields to the first eight collections. Online
    team and registration payloads may also contain optional `source`,
    `submissionId`, and `submittedAt` properties. Add
+   `source`, `contestantId`, `eventId`, `waiverVersion`, and `evidenceAppId`
+   text fields plus a `signedAt` date/time field to `ArenaWaiverStatusIndex`;
+   do not add signature images, legal text, names, or staff identity fields.
+   Add
    `activeEventId` (text), `participantDatabaseVersion` (number), and `updatedAt`
    (date/time) to `ArenaSettings`, plus `value` (number, default `0`) for the
    separate staff and online revision records created by the backend.
@@ -89,6 +93,10 @@ remain visibly unpaid for settlement but are authorized to enter the draw.
    the authoritative non-empty `title`, `version`, and `text`. Until all three
    values are configured, the backend returns `available: false` and the
    Registration Desk disables signing without displaying placeholder text.
+   The backend performs one lock-protected, 100-record-page compatibility
+   migration and records
+   `arena-waiver-status-index-2026-08-12-v1` only after every evidence page is
+   indexed. Later Rider Roster loads query only `ArenaWaiverStatusIndex`.
 4. Set every collection's permissions to **Admin only**. Public access is
    provided only by the backend's purpose-built `Permissions.Anyone` methods;
    visitors never query collections directly.
