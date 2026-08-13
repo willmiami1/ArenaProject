@@ -9,7 +9,7 @@ import {
 } from "./registrationDeskData";
 import {
   registrationDeskWaiverParticipants,
-  registrationDeskWaiverSignature,
+  registrationDeskWaiverStatus,
   submitLocalRegistrationDeskWaiver,
 } from "./registrationDeskWaiver";
 import type { RegistrationDeskRosterEntry } from "./registrationDeskRoster";
@@ -181,39 +181,84 @@ describe("Registration Desk tablet waiver", () => {
       waiverVersion: "2026-08-12-v1",
     });
     expect(
-      registrationDeskWaiverSignature(
+      registrationDeskWaiverStatus(
         result.data,
         "event-one",
         "rider-one",
       ),
-    ).toEqual(result.signature);
+    ).toMatchObject({
+      eventId: result.signature.eventId,
+      contestantId: result.signature.contestantId,
+      signedAt: result.signature.signedAt,
+    });
     expect(JSON.stringify(result)).not.toContain("signatureDataUrl");
     expect(JSON.stringify(result)).not.toContain("iVBORw0KGgo");
   });
 
-  it("keeps waiver status event-specific", () => {
+  it("recognizes the current waiver globally across live events", () => {
     const result = submitLocalRegistrationDeskWaiver(
       availableDeskData(),
       signatureRequest,
     );
     expect(
-      registrationDeskWaiverSignature(
+      registrationDeskWaiverStatus(
         result.data,
         "event-one",
         "rider-one",
       ),
     ).toBeDefined();
     expect(
-      registrationDeskWaiverSignature(
+      registrationDeskWaiverStatus(
         result.data,
         "event-two",
         "rider-one",
       ),
-    ).toBeUndefined();
+    ).toMatchObject({
+      contestantId: "rider-one",
+      eventId: "event-one",
+    });
+  });
+
+  it("normalizes global status to minimal fields only", () => {
+    const statusWithPrivateFields = {
+      contestantId: "rider-one",
+      eventId: "event-one",
+      signedAt: "2026-08-12T13:45:00.000Z",
+      signerName: "Must not reach the UI",
+      signatureDataUrl: signatureRequest.signatureDataUrl,
+    };
+    const normalized = normalizeRegistrationDeskData({
+      ...availableDeskData(),
+      waiverStatus: {
+        waiverVersion: registrationDeskWaiverDocumentFixture.version,
+        statuses: [statusWithPrivateFields],
+      },
+    });
+    expect(normalized.waiverStatus.statuses).toEqual([
+      {
+        contestantId: "rider-one",
+        eventId: "event-one",
+        signedAt: "2026-08-12T13:45:00.000Z",
+      },
+    ]);
+    expect(JSON.stringify(normalized.waiverStatus)).not.toContain("signerName");
+    expect(JSON.stringify(normalized.waiverStatus)).not.toContain(
+      "signatureDataUrl",
+    );
   });
 
   it("requires a signature bound to the exact authoritative version", () => {
     const data = availableDeskData();
+    data.waiverStatus = {
+      waiverVersion: "2026-08-11-v1",
+      statuses: [
+        {
+          contestantId: "rider-one",
+          eventId: "event-two",
+          signedAt: "2026-08-11T13:45:00.000Z",
+        },
+      ],
+    };
     data.waiverSignatures = [
       {
         id: "old-waiver",
@@ -226,7 +271,7 @@ describe("Registration Desk tablet waiver", () => {
       },
     ];
     expect(
-      registrationDeskWaiverSignature(data, "event-one", "rider-one"),
+      registrationDeskWaiverStatus(data, "event-one", "rider-one"),
     ).toBeUndefined();
   });
 

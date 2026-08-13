@@ -3,6 +3,7 @@ import type {
   RegistrationDeskWaiverRequest,
   RegistrationDeskWaiverResponse,
   RegistrationDeskWaiverSignature,
+  RegistrationDeskWaiverStatus,
 } from "./registrationDeskData";
 import type { RegistrationDeskRosterEntry } from "./registrationDeskRoster";
 
@@ -29,12 +30,28 @@ export function registrationDeskWaiverParticipants(
   );
 }
 
-export function registrationDeskWaiverSignature(
+export function registrationDeskWaiverStatus(
   data: RegistrationDeskData | null,
   eventId: string,
   contestantId: string,
-): RegistrationDeskWaiverSignature | undefined {
+): RegistrationDeskWaiverStatus | undefined {
   if (!data || !eventId || !contestantId) return undefined;
+  if (
+    data.waiverDocument.version &&
+    data.waiverStatus.waiverVersion === data.waiverDocument.version
+  ) {
+    const currentStatus = data.waiverStatus.statuses
+      .filter((status) => status.contestantId === contestantId)
+      .sort(
+        (left, right) =>
+          right.signedAt.localeCompare(left.signedAt) ||
+          left.eventId.localeCompare(right.eventId),
+      )[0];
+    if (currentStatus) return currentStatus;
+  }
+
+  // Compatibility for a Registration Desk backend that predates the global
+  // minimal status snapshot.
   return data.waiverSignatures
     .filter(
       (signature) =>
@@ -95,6 +112,19 @@ export function submitLocalRegistrationDeskWaiver(
     signature,
     data: {
       ...data,
+      waiverStatus: {
+        waiverVersion: document.version,
+        statuses: [
+          ...data.waiverStatus.statuses.filter(
+            (item) => item.contestantId !== contestant.id,
+          ),
+          {
+            contestantId: contestant.id,
+            eventId: event.id,
+            signedAt,
+          },
+        ],
+      },
       waiverSignatures: [
         ...data.waiverSignatures.filter(
           (item) =>

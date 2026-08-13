@@ -35,7 +35,6 @@ import {
   normalizeRegistrationDeskWaiverDocument,
   prepareRegistrationDeskWaiver,
   registrationDeskWaiverRecordId,
-  registrationDeskWaiverSignatureProjection,
   resolveRegistrationDeskWaiverRetry,
 } from "./registration-desk-waiver-contract";
 
@@ -328,14 +327,6 @@ async function readRegistrationDeskWaiverDocument() {
     WAIVER_DOCUMENT_SETTINGS_ID,
   );
   return normalizeRegistrationDeskWaiverDocument(record);
-}
-
-async function readRegistrationDeskWaiverSignatures(eventIds) {
-  const evidence = await readOptionalAll(WAIVER_SIGNATURES_COLLECTION);
-  return evidence.flatMap((record) => {
-    const signature = registrationDeskWaiverSignatureProjection(record);
-    return signature && eventIds.has(signature.eventId) ? [signature] : [];
-  });
 }
 
 const publicContestantAccountResult = (workspace, event, contestant) => {
@@ -1054,6 +1045,26 @@ async function readRegistrationDeskWaiverStatusRecords(waiverVersion) {
   return records;
 }
 
+async function loadRegistrationDeskWaiverStatusSnapshot(waiverDocument) {
+  if (
+    waiverDocument?.available !== true ||
+    !waiverDocument.title ||
+    !waiverDocument.version ||
+    !waiverDocument.text
+  ) {
+    return { waiverVersion: "", statuses: [] };
+  }
+  await ensureRegistrationDeskWaiverStatusIndexCollection();
+  return loadContestantWaiverStatusesFromIndex({
+    isMigrationComplete:
+      registrationDeskWaiverStatusMigrationIsComplete,
+    migrateLegacyEvidence: () =>
+      migrateLegacyRegistrationDeskWaiverStatuses(waiverDocument),
+    readStatusRecords: readRegistrationDeskWaiverStatusRecords,
+    waiverDocument,
+  });
+}
+
 async function findRegistrationDeskWaiverStorageItem(recordId) {
   const storageId = arenaRecordStorageId(
     WAIVER_SIGNATURES_COLLECTION,
@@ -1229,15 +1240,7 @@ export const loadContestantWaiverStatuses = webMethod(
   async () => {
     await requireArenaAdmin();
     const waiverDocument = await readRegistrationDeskWaiverDocument();
-    await ensureRegistrationDeskWaiverStatusIndexCollection();
-    return loadContestantWaiverStatusesFromIndex({
-      isMigrationComplete:
-        registrationDeskWaiverStatusMigrationIsComplete,
-      migrateLegacyEvidence: () =>
-        migrateLegacyRegistrationDeskWaiverStatuses(waiverDocument),
-      readStatusRecords: readRegistrationDeskWaiverStatusRecords,
-      waiverDocument,
-    });
+    return loadRegistrationDeskWaiverStatusSnapshot(waiverDocument);
   },
 );
 
@@ -1380,10 +1383,9 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
 async function registrationDeskProjection(workspace) {
   const events = workspace.events.filter(registrationDeskIsVisible);
   const eventIds = new Set(events.map((event) => event.id));
-  const [waiverDocument, waiverSignatures] = await Promise.all([
-    readRegistrationDeskWaiverDocument(),
-    readRegistrationDeskWaiverSignatures(eventIds),
-  ]);
+  const waiverDocument = await readRegistrationDeskWaiverDocument();
+  const waiverStatus =
+    await loadRegistrationDeskWaiverStatusSnapshot(waiverDocument);
   return {
     events: events.map(
       ({
@@ -1469,7 +1471,8 @@ async function registrationDeskProjection(workspace) {
       .filter((registration) => eventIds.has(registration.eventId))
       .map((registration) => ({ ...registration, notes: "" })),
     waiverDocument,
-    waiverSignatures,
+    waiverStatus,
+    waiverSignatures: [],
   };
 }
 
@@ -2604,6 +2607,7 @@ export const submitRegistrationDeskWaiver = webMethod(
       waiverDocument.version,
     );
     await ensureRegistrationDeskWaiverCollections();
+    await loadRegistrationDeskWaiverStatusSnapshot(waiverDocument);
     return withRegistrationDeskLocks(
       [
         WAIVER_STATUS_INDEX_MIGRATION_ID,

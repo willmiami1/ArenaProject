@@ -12,6 +12,7 @@ const arenaTypes = source("./types.ts");
 const publicSite = source("./PublicSite.tsx");
 const contestantAccount = source("./contestantAccount.ts");
 const registrationDesk = source("./RegistrationDesk.tsx");
+const registrationDeskWaiver = source("./registrationDeskWaiver.ts");
 const contestantPortal = app.slice(
   app.indexOf("function ContestantPortal()"),
   app.indexOf("function LedLeaderboard("),
@@ -46,10 +47,7 @@ describe("workspace waiver roster integration", () => {
       backendMirror.indexOf("export const saveArenaData"),
     );
     expect(endpoint).toContain("await requireArenaAdmin()");
-    expect(endpoint).toContain(
-      "await ensureRegistrationDeskWaiverStatusIndexCollection()",
-    );
-    expect(endpoint).toContain("loadContestantWaiverStatusesFromIndex");
+    expect(endpoint).toContain("loadRegistrationDeskWaiverStatusSnapshot");
     expect(endpoint).not.toContain("WAIVER_SIGNATURES_COLLECTION");
     expect(endpoint).not.toContain("parseRegistrationDeskWaiverStorageItem");
     expect(endpoint).not.toContain("signatureDataUrl");
@@ -180,6 +178,31 @@ describe("workspace waiver roster integration", () => {
     );
     expect(backendContract).toContain(
       "export async function loadContestantWaiverStatusesFromIndex",
+    );
+  });
+
+  it("uses the global minimal status in Registration Desk across events", () => {
+    const projection = backendMirror.slice(
+      backendMirror.indexOf("async function registrationDeskProjection("),
+      backendMirror.indexOf("export const loadRegistrationDeskData"),
+    );
+    expect(projection).toContain(
+      "loadRegistrationDeskWaiverStatusSnapshot(waiverDocument)",
+    );
+    expect(projection).toContain("waiverStatus");
+    expect(projection).not.toContain("WAIVER_SIGNATURES_COLLECTION");
+    expect(projection).not.toContain("signatureDataUrl");
+    expect(registrationDeskWaiver).toContain(
+      "data.waiverStatus.waiverVersion === data.waiverDocument.version",
+    );
+    expect(registrationDeskWaiver).toContain(
+      "status.contestantId === contestantId",
+    );
+    expect(registrationDeskWaiver).not.toContain(
+      "status.eventId === eventId",
+    );
+    expect(registrationDesk).toContain(
+      "status={registrationDeskWaiverStatus(",
     );
   });
 

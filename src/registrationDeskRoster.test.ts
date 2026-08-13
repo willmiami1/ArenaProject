@@ -72,6 +72,7 @@ const data = (
     text: "",
     available: false,
   },
+  waiverStatus: { waiverVersion: "", statuses: [] },
   waiverSignatures: [],
 });
 

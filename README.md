@@ -151,9 +151,11 @@ Waiver PNG evidence is stored only in the admin-only
 `ArenaWaiverSignatures` collection. Generic Arena workspace saves, browser
 `localStorage`, contestant account creation, and public projections never
 receive that evidence; the Registration Desk receives only signature status
-metadata after submission. The admin Rider Roster loads current-version status
-separately as transient UI state containing only contestant ID, event ID, and
-signed timestamp; it is never added to `ArenaData` or browser storage.
+metadata after submission. The admin Rider Roster and Registration Desk read
+the same minimal current-version status index by stable contestant ID, so a
+waiver signed at any event counts globally. Status contains only contestant ID,
+event ID, and signed timestamp as transient UI state; it is never added to
+`ArenaData` or browser storage.
 
 ### Owner payment notification
 
