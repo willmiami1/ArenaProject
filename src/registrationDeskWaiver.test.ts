@@ -8,6 +8,7 @@ import {
   type RegistrationDeskData,
 } from "./registrationDeskData";
 import {
+  registrationDeskOutstandingWaiverParticipants,
   registrationDeskWaiverParticipants,
   registrationDeskWaiverStatus,
   submitLocalRegistrationDeskWaiver,
@@ -273,6 +274,65 @@ describe("Registration Desk tablet waiver", () => {
     expect(
       registrationDeskWaiverStatus(data, "event-one", "rider-one"),
     ).toBeUndefined();
+  });
+
+  it("drops confirmed contestants from the desk roster waiver list", () => {
+    const roster = [
+      rosterEntry("team-1-header", "rider-one", "RIDER ONE"),
+      rosterEntry("team-1-heeler", "rider-two", "RIDER TWO"),
+    ];
+    const pending = availableDeskData();
+    expect(
+      registrationDeskOutstandingWaiverParticipants(
+        pending,
+        "event-one",
+        roster,
+      ),
+    ).toEqual([
+      { contestantId: "rider-one", name: "RIDER ONE" },
+      { contestantId: "rider-two", name: "RIDER TWO" },
+    ]);
+
+    const signed = submitLocalRegistrationDeskWaiver(
+      pending,
+      signatureRequest,
+    ).data;
+    expect(
+      registrationDeskOutstandingWaiverParticipants(signed, "event-one", roster),
+    ).toEqual([{ contestantId: "rider-two", name: "RIDER TWO" }]);
+    expect(
+      registrationDeskOutstandingWaiverParticipants(signed, "event-two", roster),
+    ).toEqual([{ contestantId: "rider-two", name: "RIDER TWO" }]);
+  });
+
+  it("lists no waivers once every roster contestant is confirmed", () => {
+    const roster = [rosterEntry("team-1-header", "rider-one", "RIDER ONE")];
+    const signed = submitLocalRegistrationDeskWaiver(
+      availableDeskData(),
+      signatureRequest,
+    ).data;
+    expect(
+      registrationDeskOutstandingWaiverParticipants(signed, "event-one", roster),
+    ).toEqual([]);
+  });
+
+  it("still lists a contestant whose only waiver is an old version", () => {
+    const data = availableDeskData();
+    data.waiverStatus = {
+      waiverVersion: "2026-08-11-v1",
+      statuses: [
+        {
+          contestantId: "rider-one",
+          eventId: "event-one",
+          signedAt: "2026-08-11T13:45:00.000Z",
+        },
+      ],
+    };
+    expect(
+      registrationDeskOutstandingWaiverParticipants(data, "event-one", [
+        rosterEntry("team-1-header", "rider-one", "RIDER ONE"),
+      ]),
+    ).toEqual([{ contestantId: "rider-one", name: "RIDER ONE" }]);
   });
 
   it("deduplicates repeated roster rows while tracking each picked-team rider", () => {

@@ -206,6 +206,24 @@ describe("workspace waiver roster integration", () => {
     );
   });
 
+  it("stops repeating waiver status on the desk roster once confirmed", () => {
+    const rosterSection = registrationDesk.slice(
+      registrationDesk.indexOf('className="registration-waiver-roster"'),
+      registrationDesk.indexOf("{!event ? ("),
+    );
+    expect(rosterSection).toContain("outstandingWaivers.map");
+    expect(rosterSection).toContain("Waivers still needed");
+    expect(rosterSection).not.toContain("registrationDeskWaiverStatus(");
+    expect(rosterSection).not.toContain("status=");
+    expect(registrationDesk).toContain(
+      "registrationDeskOutstandingWaiverParticipants(data, eventId, eventRoster)",
+    );
+    expect(registrationDesk).toContain("outstandingWaivers.length > 0");
+    expect(registrationDeskWaiver).toContain(
+      "!registrationDeskWaiverStatus(data, eventId, contestantId)",
+    );
+  });
+
   it("keeps waiver status out of ArenaData and browser persistence", () => {
     expect(statusModel).not.toContain("localStorage");
     expect(statusModel).not.toContain("ArenaData");

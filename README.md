@@ -40,7 +40,7 @@ designed to run as an embedded web app inside a Wix site.
 - Financial, payout, draw, results, stock, contestant, team, judge, and arena-statistics reports
 - Role-based report access for administrators, producers, secretaries, announcers, and read-only users
 - Searchable report history with one-click regeneration and saved per-role column preferences
-- Registration Desk-only tablet waiver signatures with event-specific participant status
+- Registration Desk-only tablet waiver signing, with the desk roster listing only outstanding waivers
 - Read-only current-waiver status in the admin Rider Roster, including a mobile card view
 - Browser-based persistence with no server required
 
@@ -153,8 +153,10 @@ Waiver PNG evidence is stored only in the admin-only
 receive that evidence; the Registration Desk receives only signature status
 metadata after submission. The admin Rider Roster and Registration Desk read
 the same minimal current-version status index by stable contestant ID, so a
-waiver signed at any event counts globally. Status contains only contestant ID,
-event ID, and signed timestamp as transient UI state; it is never added to
+waiver signed at any event counts globally. The desk confirms waiver status
+while a contestant is being registered, so its competition roster lists only
+contestants whose waiver is still outstanding. Status contains only contestant
+ID, event ID, and signed timestamp as transient UI state; it is never added to
 `ArenaData` or browser storage.
 
 ### Owner payment notification
