@@ -30,6 +30,17 @@ export interface RegistrationDeskWaiverSignature {
   waiverVersion: string;
 }
 
+export interface RegistrationDeskWaiverStatus {
+  contestantId: string;
+  signedAt: string;
+  eventId: string;
+}
+
+export interface RegistrationDeskWaiverStatusSnapshot {
+  waiverVersion: string;
+  statuses: RegistrationDeskWaiverStatus[];
+}
+
 export interface RegistrationDeskWaiverRequest {
   eventId: string;
   contestantId: string;
@@ -44,6 +55,7 @@ export interface RegistrationDeskData {
   teams: Team[];
   registrations: EventRegistration[];
   waiverDocument: RegistrationDeskWaiverDocument;
+  waiverStatus: RegistrationDeskWaiverStatusSnapshot;
   waiverSignatures: RegistrationDeskWaiverSignature[];
 }
 
@@ -110,10 +122,13 @@ export const registrationDeskWaiverDocumentFixture:
 
 type RegistrationDeskDataInput = Omit<
   RegistrationDeskData,
-  "waiverDocument" | "waiverSignatures"
+  "waiverDocument" | "waiverStatus" | "waiverSignatures"
 > &
   Partial<
-    Pick<RegistrationDeskData, "waiverDocument" | "waiverSignatures">
+    Pick<
+      RegistrationDeskData,
+      "waiverDocument" | "waiverStatus" | "waiverSignatures"
+    >
   >;
 
 export function normalizeRegistrationDeskData(
@@ -151,9 +166,39 @@ export function normalizeRegistrationDeskData(
           ),
       )
     : [];
+  const waiverStatus = {
+    waiverVersion:
+      typeof data.waiverStatus?.waiverVersion === "string"
+        ? data.waiverStatus.waiverVersion.trim()
+        : "",
+    statuses: Array.isArray(data.waiverStatus?.statuses)
+      ? data.waiverStatus.statuses.flatMap((status) => {
+          if (
+            !status ||
+            typeof status.contestantId !== "string" ||
+            typeof status.eventId !== "string" ||
+            typeof status.signedAt !== "string" ||
+            !validRegistrationDeskId.test(status.contestantId) ||
+            !validRegistrationDeskId.test(status.eventId) ||
+            !Number.isFinite(Date.parse(status.signedAt)) ||
+            new Date(status.signedAt).toISOString() !== status.signedAt
+          ) {
+            return [];
+          }
+          return [
+            {
+              contestantId: status.contestantId,
+              eventId: status.eventId,
+              signedAt: status.signedAt,
+            },
+          ];
+        })
+      : [],
+  };
   return {
     ...data,
     waiverDocument,
+    waiverStatus,
     waiverSignatures,
   };
 }
@@ -321,6 +366,10 @@ export function registrationDeskProjection(
       .filter((registration) => eventIds.has(registration.eventId))
       .map((registration) => ({ ...registration, notes: "" })),
     waiverDocument: registrationDeskWaiverDocumentFixture,
+    waiverStatus: {
+      waiverVersion: registrationDeskWaiverDocumentFixture.version,
+      statuses: [],
+    },
     waiverSignatures: [],
   };
 }

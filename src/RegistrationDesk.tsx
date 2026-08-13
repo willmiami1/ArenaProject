@@ -26,7 +26,7 @@ import {
   upsertRegistrationDeskContestant,
   type RegistrationDeskContestantInput,
   type RegistrationDeskData,
-  type RegistrationDeskWaiverSignature,
+  type RegistrationDeskWaiverStatus,
 } from "./registrationDeskData";
 import {
   buildRegistrationDeskDrawRequest,
@@ -60,7 +60,7 @@ import {
 } from "./registrationDeskRoster";
 import {
   registrationDeskWaiverParticipants,
-  registrationDeskWaiverSignature,
+  registrationDeskWaiverStatus,
   submitLocalRegistrationDeskWaiver,
 } from "./registrationDeskWaiver";
 import { RegistrationDeskWaiverDialog } from "./RegistrationDeskWaiverDialog";
@@ -104,13 +104,13 @@ const formatWaiverSignedAt = (value: string) => {
 
 function WaiverStatusControl({
   contestantName,
-  signature,
+  status,
   available,
   disabled,
   onSign,
 }: {
   contestantName: string;
-  signature?: RegistrationDeskWaiverSignature;
+  status?: RegistrationDeskWaiverStatus;
   available: boolean;
   disabled: boolean;
   onSign: () => void;
@@ -119,15 +119,15 @@ function WaiverStatusControl({
     <div className="registration-waiver-status-control">
       <span
         className={`registration-waiver-badge ${
-          signature ? "signed" : "needed"
+          status ? "signed" : "needed"
         }`}
         role="status"
       >
-        {signature
-          ? `Signed ${formatWaiverSignedAt(signature.signedAt)}`
+        {status
+          ? `Signed ${formatWaiverSignedAt(status.signedAt)}`
           : "Waiver needed"}
       </span>
-      {!signature && (
+      {!status && (
         <button
           type="button"
           disabled={disabled || !available}
@@ -175,6 +175,18 @@ function asWorkspace(data: RegistrationDeskData): ArenaData {
     activeEventId: data.events[0]?.id ?? "",
   };
 }
+
+const retainLocalWaiverStatus = (
+  next: RegistrationDeskData,
+  current: RegistrationDeskData | null,
+): RegistrationDeskData =>
+  current
+    ? {
+        ...next,
+        waiverStatus: current.waiverStatus,
+        waiverSignatures: current.waiverSignatures,
+      }
+    : next;
 
 export function RegistrationDesk() {
   const embedded = isWixEmbed();
@@ -455,7 +467,12 @@ export function RegistrationDesk() {
         const workspaceData = loadLocalRegistrationWorkspace();
         const result = upsertRegistrationDeskContestant(workspaceData, normalizedProfile);
         saveLocalRegistrationWorkspace(result.data);
-        setData(registrationDeskProjection(result.data));
+        setData((current) =>
+          retainLocalWaiverStatus(
+            registrationDeskProjection(result.data),
+            current,
+          ),
+        );
         setContestantId(result.contestant.id);
       }
       setPinOpen(false);
@@ -599,7 +616,12 @@ export function RegistrationDesk() {
         const workspaceData = loadLocalRegistrationWorkspace();
         const result = submitLocalRegistrationDeskSignup(workspaceData, request);
         saveLocalRegistrationWorkspace(result.data);
-        setData(registrationDeskProjection(result.data));
+        setData((current) =>
+          retainLocalWaiverStatus(
+            registrationDeskProjection(result.data),
+            current,
+          ),
+        );
         setMessage(result.result.summary);
       }
       setEntries(minimumDraws);
@@ -947,7 +969,7 @@ export function RegistrationDesk() {
                       <strong>{participant.name}</strong>
                       <WaiverStatusControl
                         contestantName={participant.name}
-                        signature={registrationDeskWaiverSignature(
+                        status={registrationDeskWaiverStatus(
                           data,
                           event.id,
                           participant.contestantId,
@@ -1392,7 +1414,7 @@ export function RegistrationDesk() {
                       </div>
                       <WaiverStatusControl
                         contestantName={contestant.name}
-                        signature={registrationDeskWaiverSignature(
+                        status={registrationDeskWaiverStatus(
                           data,
                           event.id,
                           contestant.id,
