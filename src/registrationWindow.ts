@@ -45,17 +45,23 @@ export function assertOnlineRegistrationOpen(
 }
 
 export function registrationDeskIsVisible(
-  event: Pick<ArenaEvent, "status">,
+  event: Pick<ArenaEvent, "registrationOpen" | "drawLocked" | "status">,
 ) {
-  return event.status === "Live";
+  return (
+    (event.status === "Live" || event.status === "Upcoming") &&
+    event.registrationOpen === true &&
+    event.drawLocked === false
+  );
 }
 
 export function assertRegistrationDeskOpen(
   event: Pick<ArenaEvent, "registrationOpen" | "drawLocked" | "status">,
 ) {
-  if (event.status !== "Live") {
-    throw new Error("Registration Desk entries are limited to live competitions.");
+  if (event.status !== "Live" && event.status !== "Upcoming") {
+    throw new Error(
+      "Registration Desk entries are limited to Live or Upcoming competitions.",
+    );
   }
-  if (!event.registrationOpen) throw new Error("Registration is closed.");
-  if (event.drawLocked) throw new Error("The draw is locked.");
+  if (event.registrationOpen !== true) throw new Error("Registration is closed.");
+  if (event.drawLocked !== false) throw new Error("The draw is locked.");
 }

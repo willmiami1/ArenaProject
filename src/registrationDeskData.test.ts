@@ -131,21 +131,58 @@ const drawRegistration = (
 });
 
 describe("Registration Desk local mirror", () => {
-  it("projects live events with backend-supported entry formats", () => {
+  it("projects only open, unlocked Live and Upcoming events", () => {
     const selectedEvent = event("pick-and-draw");
+    const upcoming = event("pick-only", {
+      id: "upcoming",
+      status: "Upcoming",
+    });
     const projected = registrationDeskProjection(
       workspace(selectedEvent, {
         events: [
           selectedEvent,
-          event("pick-only", { id: "closed", status: "Complete" }),
+          upcoming,
+          event("pick-only", { id: "complete", status: "Complete" }),
+          event("pick-only", { id: "closed", registrationOpen: false }),
+          event("pick-only", { id: "locked", drawLocked: true }),
         ],
+        registrations: [drawRegistration(upcoming, "header-1")],
       }),
     );
-    expect(projected.events).toHaveLength(1);
+    expect(projected.events.map(({ id }) => id)).toEqual([
+      selectedEvent.id,
+      upcoming.id,
+    ]);
     expect(projected.events[0].supportedEntryTypes).toEqual([
       "draws",
       "picked-teams",
     ]);
+    expect(projected.registrations).toHaveLength(1);
+    expect(projected.registrations[0].eventId).toBe(upcoming.id);
+  });
+
+  it("accepts an open Upcoming entry and rejects unavailable statuses and windows", () => {
+    const upcoming = event("draw-pot", { status: "Upcoming" });
+    expect(
+      submitLocalRegistrationDeskSignup(
+        workspace(upcoming),
+        draw(upcoming),
+      ).data.registrations,
+    ).toHaveLength(1);
+
+    for (const [overrides, message] of [
+      [{ status: "Upcoming", registrationOpen: false }, /Registration is closed/],
+      [{ status: "Upcoming", drawLocked: true }, /draw is locked/],
+      [{ status: "Complete" }, /Live or Upcoming/],
+    ] as const) {
+      const unavailable = event("draw-pot", overrides);
+      expect(() =>
+        submitLocalRegistrationDeskSignup(
+          workspace(unavailable),
+          draw(unavailable),
+        ),
+      ).toThrow(message);
+    }
   });
 
   it("keeps contestant profile validation and canonical horse names", () => {

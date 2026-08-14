@@ -111,14 +111,19 @@ const assertOnlineRegistrationOpen = (event, now = Date.now()) => {
     throw new Error("Online registration closes one hour before the competition starts.");
   }
 };
-const registrationDeskIsVisible = (event) => event.status === "Live";
+const registrationDeskIsVisible = (event) =>
+  (event.status === "Live" || event.status === "Upcoming") &&
+  event.registrationOpen === true &&
+  event.drawLocked === false;
 
 const assertRegistrationDeskOpen = (event) => {
-  if (event.status !== "Live") {
-    throw new Error("Registration Desk entries are limited to live competitions.");
+  if (event.status !== "Live" && event.status !== "Upcoming") {
+    throw new Error(
+      "Registration Desk entries are limited to Live or Upcoming competitions.",
+    );
   }
-  if (!event.registrationOpen) throw new Error("Registration is closed.");
-  if (event.drawLocked) throw new Error("The draw is locked.");
+  if (event.registrationOpen !== true) throw new Error("Registration is closed.");
+  if (event.drawLocked !== false) throw new Error("The draw is locked.");
 };
 
 async function resolveAdminAccess() {

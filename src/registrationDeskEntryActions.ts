@@ -1,4 +1,5 @@
 import type { RegistrationDeskEvent } from "./registrationDeskData";
+import { registrationDeskIsVisible } from "./registrationWindow";
 
 export interface RegistrationDeskEntryDraft {
   key: string;
@@ -17,15 +18,13 @@ export function registrationDeskEntryPermissions(
   embedded: boolean,
   generatedTeam: boolean,
 ) {
-  const live = event.status === "Live";
+  const available = registrationDeskIsVisible(event);
   return {
     canEdit:
       embedded &&
-      live &&
-      event.registrationOpen === true &&
-      event.drawLocked !== true &&
+      available &&
       !generatedTeam,
-    canScratch: embedded && live,
+    canScratch: embedded && available,
   };
 }
 
