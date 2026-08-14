@@ -33,7 +33,7 @@ export type {
   ContestantWaiverStatusesResponse,
 } from "./contestantWaiverStatus";
 
-type WixAction =
+export type WixAction =
   | "load"
   | "save"
   | "saveContestant"
@@ -47,6 +47,7 @@ type WixAction =
   | "publishPublicSchedule"
   | "loadSignupOptions"
   | "startPublicSignupPayment"
+  | "submitPublicSignupCash"
   | "getPublicSignupPaymentStatus"
   | "submitOnlineSignup"
   | "submitSpectatorPrediction"
@@ -176,6 +177,16 @@ export interface PublicSignupPayment {
   competitionIds: string[];
   message: string;
   checkoutStatus?: string;
+}
+
+export interface PublicSignupCashConfirmation {
+  submissionId: string;
+  status: "cash-due";
+  paymentMethod: "cash";
+  amount: number;
+  currency: "USD";
+  competitionIds: string[];
+  message: string;
 }
 
 export interface PublicSignupOptions {
@@ -328,6 +339,7 @@ export function sensitiveWixAction(action: WixAction) {
     action === "setContestantPin" ||
     action === "loadSignupOptions" ||
     action === "startPublicSignupPayment" ||
+    action === "submitPublicSignupCash" ||
     action === "getPublicSignupPaymentStatus" ||
     action === "submitOnlineSignup" ||
     action === "submitSpectatorPrediction" ||
@@ -442,6 +454,7 @@ function requestWixFromOrigin<T>(
       action === "startPublicSignupPayment"
         ? 5 * 60 * 1000
         : action === "save" ||
+            action === "submitPublicSignupCash" ||
             action === "submitRegistrationDeskWaiver"
           ? 30 * 1000
         : 8000;
@@ -737,6 +750,18 @@ export function startPublicSignupPayment(
   selections: PublicSignupSelection[],
 ) {
   return requestWix<PublicSignupPayment>("startPublicSignupPayment", {
+    signupToken,
+    submissionId,
+    selections,
+  });
+}
+
+export function submitPublicSignupCash(
+  signupToken: string,
+  submissionId: string,
+  selections: PublicSignupSelection[],
+) {
+  return requestWix<PublicSignupCashConfirmation>("submitPublicSignupCash", {
     signupToken,
     submissionId,
     selections,

@@ -1,6 +1,10 @@
+import { createHash } from "crypto";
+
 export const PUBLIC_SIGNUP_PRICE_USD = 200;
 export const PUBLIC_SIGNUP_SESSION_MINUTES = 30;
 export const PUBLIC_SIGNUP_ENTRY_RESERVATION_MINUTES = 45;
+export const PUBLIC_SIGNUP_CARD_METHOD = "wix-payments";
+export const PUBLIC_SIGNUP_CASH_METHOD = "cash";
 
 const PUBLIC_COMPETITION_TYPES = new Set([
   "slide",
@@ -18,6 +22,105 @@ export class PublicSignupError extends Error {
 
 const fail = (code, message) => {
   throw new PublicSignupError(code, message);
+};
+
+export function assertPublicSignupTokenFormat(signupToken) {
+  if (!/^[a-f0-9]{64}$/.test(String(signupToken || ""))) {
+    fail("SESSION_EXPIRED", "Sign in again to continue registration.");
+  }
+}
+
+export function assertPublicSignupSessionActive(session, now = Date.now()) {
+  if (!session || new Date(session.expiresAt).getTime() <= now) {
+    fail("SESSION_EXPIRED", "Sign in again to continue registration.");
+  }
+}
+
+export const roundRobinRoleLimit = (event, role) => {
+  if (event?.competitionType !== "round-robin") return 0;
+  const limit = Number(role === "Header" ? event.maxHeaders : event.maxHeelers);
+  return Number.isInteger(limit) && limit > 0 ? limit : 0;
+};
+
+export const roundRobinReservationOccupiesRole = (reservation, role) =>
+  !["Header", "Heeler"].includes(reservation?.role) ||
+  reservation.role === role;
+
+export const roundRobinReservationEntries = (reservation) => {
+  const entries = Number(reservation?.entries);
+  return Number.isInteger(entries) && entries > 0 ? entries : 1;
+};
+
+export const activeRoundRobinRoleRegistrationCount = (
+  registrations,
+  eventId,
+  role,
+  excludeSubmissionId = "",
+  excludeContestantId = "",
+) =>
+  registrations
+    .filter(
+      (registration) =>
+        registration.eventId === eventId &&
+        registration.role === role &&
+        registration.status === "entered" &&
+        !(
+          excludeSubmissionId &&
+          excludeContestantId &&
+          registration.submissionId === excludeSubmissionId &&
+          registration.contestantId === excludeContestantId
+        ) &&
+        Number.isInteger(Number(registration.entries)) &&
+        Number(registration.entries) > 0,
+    )
+    .reduce(
+      (total, registration) => total + Number(registration.entries),
+      0,
+    );
+
+export function assertRoundRobinRoleCapacity(
+  event,
+  registrations,
+  role,
+  pendingCount = 1,
+  excludeSubmissionId = "",
+  excludeContestantId = "",
+) {
+  const limit = roundRobinRoleLimit(event, role);
+  if (
+    limit > 0 &&
+    activeRoundRobinRoleRegistrationCount(
+      registrations,
+      event.id,
+      role,
+      excludeSubmissionId,
+      excludeContestantId,
+    ) +
+      pendingCount >
+      limit
+  ) {
+    fail("ROLE_CAPACITY_REACHED", `${role} registration is full.`);
+  }
+}
+
+export const roundRobinRoleCapacities = (event, registrations) => {
+  if (event?.competitionType !== "round-robin") return undefined;
+  const capacities = ["Header", "Heeler"].flatMap((role) => {
+    const maximum = roundRobinRoleLimit(event, role);
+    if (!maximum) return [];
+    const registered = activeRoundRobinRoleRegistrationCount(
+      registrations,
+      event.id,
+      role,
+    );
+    return [{ role, registered, maximum, full: registered >= maximum }];
+  });
+  return capacities.length ? capacities : undefined;
+};
+
+export const roundRobinRoleCapacityProjection = (event, registrations) => {
+  const roleCapacities = roundRobinRoleCapacities(event, registrations);
+  return roleCapacities ? { roleCapacities } : {};
 };
 
 const registrationClosesAt = (event) =>
@@ -102,6 +205,7 @@ export function buildPublicSignupOptions(
         date: event.date,
         startTime: event.startTime,
         competitionType: event.competitionType,
+        ...roundRobinRoleCapacityProjection(event, workspace.registrations),
         registrationClosesAt: new Date(
           registrationClosesAt(event),
         ).toISOString(),
@@ -195,6 +299,14 @@ export function normalizePublicSignupSelections(
         `${contestant.name} already has an active entry in ${event.name}.`,
       );
     }
+    assertRoundRobinRoleCapacity(
+      event,
+      workspace.registrations,
+      role,
+      1,
+      submissionId,
+      contestant.id,
+    );
 
     if (event.competitionType !== "pick-and-draw") {
       return { competitionId, role };
@@ -246,6 +358,7 @@ export const publicSignupFingerprintPayload = (
   contestantId,
   submissionId,
   selections,
+  paymentMethod = PUBLIC_SIGNUP_CARD_METHOD,
 ) =>
   JSON.stringify({
     contestantId,
@@ -254,7 +367,41 @@ export const publicSignupFingerprintPayload = (
     selections,
     amount: selections.length * PUBLIC_SIGNUP_PRICE_USD,
     currency: "USD",
+    ...(paymentMethod === PUBLIC_SIGNUP_CARD_METHOD ? {} : { paymentMethod }),
   });
+
+export const publicSignupIntentPaymentMethod = (intent) =>
+  intent?.paymentMethod || PUBLIC_SIGNUP_CARD_METHOD;
+
+export function assertPublicSignupIntentPaymentMethod(intent, paymentMethod) {
+  if (publicSignupIntentPaymentMethod(intent) !== paymentMethod) {
+    fail(
+      "SUBMISSION_CONFLICT",
+      "That submission ID is already bound to a different checkout.",
+    );
+  }
+}
+
+export function assertCashSubmissionHasNoActiveCardPayment(intents) {
+  const activeStatuses = new Set([
+    "creating",
+    "payment-created",
+    "pending",
+    "settling",
+  ]);
+  if (
+    (intents || []).some(
+      (intent) =>
+        publicSignupIntentPaymentMethod(intent) === PUBLIC_SIGNUP_CARD_METHOD &&
+        activeStatuses.has(intent.status),
+    )
+  ) {
+    fail(
+      "PAYMENT_IN_PROGRESS",
+      "A card payment is already in progress. Finish or cancel it before choosing cash at the event.",
+    );
+  }
+}
 
 export function storedPublicSignupSelectionsForRetry(
   selections,
@@ -295,6 +442,117 @@ export function storedPublicSignupSelectionsForRetry(
   }
   return storedSelections;
 }
+
+const publicSignupRecordId = (kind, intent, competitionId, suffix = "") =>
+  `${kind}-${createHash("sha256")
+    .update(`${intent.fingerprint}:${competitionId}:${suffix}`)
+    .digest("hex")
+    .slice(0, 32)}`;
+
+export function buildPublicSignupRecords(
+  workspace,
+  contestant,
+  intent,
+  selections,
+  {
+    paid,
+    paymentMethod,
+    paymentReference,
+    submittedAt = new Date().toISOString(),
+  },
+) {
+  const metadata = {
+    payerContestantId: contestant.id,
+    paid,
+    paymentMethod,
+    paymentReference,
+    paymentAmount: PUBLIC_SIGNUP_PRICE_USD,
+    paymentCurrency: "USD",
+    source: "online",
+    submissionId: intent.submissionId,
+    submissionFingerprint: intent.fingerprint,
+    submittedAt,
+  };
+  const teams = [];
+  const registrations = [];
+  selections.forEach((selection) => {
+    const event = workspace.events.find(
+      (item) => item.id === selection.competitionId,
+    );
+    if (event.competitionType !== "pick-and-draw") {
+      registrations.push({
+        id: publicSignupRecordId("online-registration", intent, event.id),
+        eventId: event.id,
+        contestantId: contestant.id,
+        role: selection.role,
+        entries: 1,
+        checkedIn: false,
+        status: "entered",
+        notes: "",
+        ...metadata,
+      });
+      return;
+    }
+
+    const partner = workspace.contestants.find(
+      (item) => item.id === selection.partnerId,
+    );
+    const header = selection.role === "Header" ? contestant : partner;
+    const heeler = selection.role === "Heeler" ? contestant : partner;
+    const teamId = publicSignupRecordId("online-team", intent, event.id);
+    teams.push({
+      id: teamId,
+      eventId: event.id,
+      headerId: header.id,
+      heelerId: heeler.id,
+      drawPosition: 0,
+      status: "ready",
+      rawTime: null,
+      penalties: 0,
+      notes: "",
+      round: 1,
+      checkedIn: false,
+      scratched: false,
+      generated: false,
+      points: 0,
+      ...metadata,
+    });
+    const roles =
+      event.pickDrawRole === "both"
+        ? ["Header", "Heeler"]
+        : [event.pickDrawRole === "header" ? "Header" : "Heeler"];
+    roles.forEach((role, index) => {
+      registrations.push({
+        id: publicSignupRecordId(
+          "online-registration",
+          intent,
+          event.id,
+          `${role}-${index}`,
+        ),
+        eventId: event.id,
+        contestantId: role === "Header" ? header.id : heeler.id,
+        sourceTeamId: teamId,
+        role,
+        entries: 1,
+        checkedIn: false,
+        status: "entered",
+        notes: "",
+        ...metadata,
+      });
+    });
+  });
+  return { teams, registrations };
+}
+
+export const publicSignupCashConfirmation = (intent) => ({
+  submissionId: intent.submissionId,
+  status: "cash-due",
+  paymentMethod: PUBLIC_SIGNUP_CASH_METHOD,
+  amount: Number(intent.amount),
+  currency: "USD",
+  competitionIds: JSON.parse(intent.competitionIds),
+  message: `Registration submitted. Pay $${Number(intent.amount)} in cash at the event.`,
+});
 
 export const publicSignupPaymentCreatedIntentIsStale = (
   intent,

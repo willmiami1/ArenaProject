@@ -41,7 +41,9 @@ import {
   publicEventSectionTargetId,
   startPublicSignupPayment,
   subscribeToWixSectionNavigation,
+  submitPublicSignupCash,
   submitSpectatorPrediction,
+  type PublicSignupCashConfirmation,
   type PublicSignupOptions,
   type PublicSignupPayment,
   type PublicSignupSelection,
@@ -1109,9 +1111,14 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   const [selections, setSelections] = useState<Record<string, PublicSignupSelection>>({});
   const [submissionId, setSubmissionId] = useState("");
   const [payment, setPayment] = useState<PublicSignupPayment | null>(null);
+  const [cashConfirmation, setCashConfirmation] =
+    useState<PublicSignupCashConfirmation | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "cash">("card");
+  const [cashSubmissionAttempted, setCashSubmissionAttempted] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const accountSubmissionInFlight = useRef(false);
+  const checkoutSubmissionInFlight = useRef(false);
 
   const paymentPending =
     payment?.status === "creating" ||
@@ -1145,6 +1152,8 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
         ) {
           setOptions(null);
           setPayment(null);
+          setCashConfirmation(null);
+          setCashSubmissionAttempted(false);
           setSubmissionId("");
           setMessage("Your secure session expired. Sign in again to continue checking payment.");
         }
@@ -1168,6 +1177,9 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     setOptions(result);
     setSubmissionId(nextSubmissionId);
     setPayment(active ?? null);
+    setCashConfirmation(null);
+    setPaymentMethod("card");
+    setCashSubmissionAttempted(false);
     setSelections(
       !active && initial && initialRole
         ? {
@@ -1278,7 +1290,13 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
 
   const checkout = async (event: FormEvent) => {
     event.preventDefault();
-    if (!options || !selectedEntries.length) return;
+    if (
+      checkoutSubmissionInFlight.current ||
+      !options ||
+      !selectedEntries.length
+    ) {
+      return;
+    }
     const missingPartner = options.competitions.some(
       (item) =>
         item.requiresPartner &&
@@ -1289,29 +1307,55 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       setMessage("Choose an eligible partner for every selected Pick & Draw.");
       return;
     }
+    checkoutSubmissionInFlight.current = true;
     setBusy(true);
-    setMessage("Opening secure Wix checkout…");
+    setMessage(
+      paymentMethod === "cash"
+        ? "Confirming registration with cash due at check-in…"
+        : "Opening secure Wix checkout…",
+    );
     try {
-      const result = await startPublicSignupPayment(
-        options.signupToken,
-        submissionId,
-        selectedEntries,
-      );
-      if (!result) throw new Error("Wix checkout could not be opened.");
-      setPayment(result);
-      setSubmissionId(result.submissionId);
-      setMessage(result.message);
+      if (paymentMethod === "cash") {
+        setCashSubmissionAttempted(true);
+        const result = await submitPublicSignupCash(
+          options.signupToken,
+          submissionId,
+          selectedEntries,
+        );
+        if (!result) throw new Error("Cash registration could not be confirmed.");
+        setCashConfirmation(result);
+        setSubmissionId(result.submissionId);
+        setMessage(result.message);
+      } else {
+        const result = await startPublicSignupPayment(
+          options.signupToken,
+          submissionId,
+          selectedEntries,
+        );
+        if (!result) throw new Error("Wix checkout could not be opened.");
+        setPayment(result);
+        setSubmissionId(result.submissionId);
+        setMessage(result.message);
+      }
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "The payment could not be started.",
+        error instanceof Error
+          ? error.message
+          : paymentMethod === "cash"
+            ? "Cash registration could not be confirmed."
+            : "The payment could not be started.",
       );
     } finally {
+      checkoutSubmissionInFlight.current = false;
       setBusy(false);
     }
   };
 
   const startNewCart = () => {
     setPayment(null);
+    setCashConfirmation(null);
+    setPaymentMethod("card");
+    setCashSubmissionAttempted(false);
     setSelections({});
     setSubmissionId(
       window.crypto.randomUUID?.() ??
@@ -1324,7 +1368,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     <section className="public-signup public-signup-cart">
       <ReturnToEventsLink />
       <h1>Enter the arena</h1>
-      <p>Sign in once, choose every open roping you want to enter, and pay securely by credit card through Wix.</p>
+      <p>Sign in once, choose every open roping you want to enter, then pay securely by credit card through Wix or confirm now and pay cash at event check-in.</p>
       {!options ? (
         <>
           <div className="public-account-choice" role="tablist" aria-label="Contestant account access">
@@ -1356,7 +1400,14 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       ) : (
         <>
           <div className="public-authenticated"><CheckCircle2 /><span>Entering as <strong>{options.contestant.name}</strong></span></div>
-          {payment && (paymentPending || payment.status === "successful" || payment.status === "fulfillment-failed") ? (
+          {cashConfirmation ? (
+            <div className="public-payment-status cash-due">
+              <strong>Registration confirmed — cash due</strong>
+              <p>{cashConfirmation.message}</p>
+              <p><b>Balance due: {formatMoney(cashConfirmation.amount)}</b></p>
+              <small>Submission: {cashConfirmation.submissionId}</small>
+            </div>
+          ) : payment && (paymentPending || payment.status === "successful" || payment.status === "fulfillment-failed") ? (
             <div className={`public-payment-status ${payment.status}`}>
               <strong>{payment.status === "successful" ? "Payment confirmed" : payment.status === "fulfillment-failed" ? "Arena assistance needed" : "Checking payment"}</strong>
               <p>{payment.message}</p>
@@ -1374,7 +1425,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                   return (
                     <article className={`public-roping-choice ${selection ? "selected" : ""}${full ? " full" : ""}`} key={roping.id}>
                       <label className="public-roping-toggle">
-                        <input type="checkbox" checked={Boolean(selection)} disabled={full} onChange={() => toggleCompetition(roping.id)} />
+                        <input type="checkbox" checked={Boolean(selection)} disabled={full || cashSubmissionAttempted} onChange={() => toggleCompetition(roping.id)} />
                         <span><strong>{formatSignupRopingLabel(roping.name, roping.date, roping.startTime)}</strong>{full && <small>Registration full</small>}</span>
                         <b>{formatMoney(options.price.amount)}</b>
                       </label>
@@ -1393,14 +1444,14 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                               const roleFull = roping.roleCapacities?.find((capacity) => capacity.role === role)?.full;
                               return (
                               <label className="public-radio" key={role}>
-                                <input type="radio" name={`role-${roping.id}`} disabled={roleFull} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role, partnerId: undefined })} />
+                                <input type="radio" name={`role-${roping.id}`} disabled={roleFull || cashSubmissionAttempted} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role, partnerId: undefined })} />
                                 {role}{roleFull ? " - FULL" : ""}
                               </label>
                               );
                             })}
                           </fieldset>
                           {roping.requiresPartner && (
-                            <label>Picked partner<select required value={selection.partnerId ?? ""} onChange={(event) => updateSelection(roping.id, { partnerId: event.target.value || undefined })}><option value="">Choose an eligible partner</option>{roping.partners.filter((partner) => partner.eligibleRoles.includes(selection.role)).map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select></label>
+                            <label>Picked partner<select required disabled={cashSubmissionAttempted} value={selection.partnerId ?? ""} onChange={(event) => updateSelection(roping.id, { partnerId: event.target.value || undefined })}><option value="">Choose an eligible partner</option>{roping.partners.filter((partner) => partner.eligibleRoles.includes(selection.role)).map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select></label>
                           )}
                         </div>
                       )}
@@ -1412,8 +1463,38 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                 <span>{selectedEntries.length} {selectedEntries.length === 1 ? "roping" : "ropings"} selected</span>
                 <strong>Total {formatMoney(total)}</strong>
               </div>
-              <p className="public-payment-note">Each checked roping is one basic entry. Wix securely processes the combined credit-card payment.</p>
-              <button className="public-button primary" disabled={busy || !selectedEntries.length}>{busy ? "Opening Wix checkout…" : `Pay ${formatMoney(total)} and preregister`}</button>
+              {!payment && (
+                <fieldset className="public-payment-method">
+                  <legend>Payment method</legend>
+                  <label className="public-payment-method-option">
+                    <input type="radio" name="payment-method" value="card" disabled={cashSubmissionAttempted} checked={paymentMethod === "card"} onChange={() => setPaymentMethod("card")} />
+                    <span><strong>Pay by credit card</strong><small>Continue to secure Wix checkout.</small></span>
+                  </label>
+                  <label className="public-payment-method-option">
+                    <input type="radio" name="payment-method" value="cash" disabled={cashSubmissionAttempted} checked={paymentMethod === "cash"} onChange={() => setPaymentMethod("cash")} />
+                    <span><strong>Pay cash at event</strong><small>Registration is confirmed now; the full balance is due at event check-in.</small></span>
+                  </label>
+                </fieldset>
+              )}
+              <p className="public-payment-note">
+                {cashSubmissionAttempted
+                  ? "This cash submission is locked to the selected ropings. Retry unchanged, or start over to make changes."
+                  : paymentMethod === "cash" && !payment
+                  ? "Each checked roping is one basic entry. No card checkout will open; payment remains due at the event."
+                  : "Each checked roping is one basic entry. Wix securely processes the combined credit-card payment."}
+              </p>
+              <button className="public-button primary" disabled={busy || !selectedEntries.length}>
+                {busy
+                  ? paymentMethod === "cash"
+                    ? "Confirming cash registration…"
+                    : "Opening Wix checkout…"
+                  : paymentMethod === "cash" && !payment
+                    ? `Confirm registration — ${formatMoney(total)} cash due`
+                    : `Pay ${formatMoney(total)} and preregister`}
+              </button>
+              {cashSubmissionAttempted && !cashConfirmation && (
+                <button className="public-button" type="button" disabled={busy} onClick={startNewCart}>Start over with a new submission</button>
+              )}
             </form>
           )}
           {payment && !paymentPending && payment.status !== "successful" && payment.status !== "fulfillment-failed" && (

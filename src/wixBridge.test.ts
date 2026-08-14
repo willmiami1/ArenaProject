@@ -82,6 +82,10 @@ describe("trusted Wix relay origin", () => {
     it("requires the trusted Wix relay for signed waiver evidence", () => {
       expect(sensitiveWixAction("loadContestantSignedWaiver")).toBe(true);
     });
+
+    it("requires the trusted Wix relay for cash signup submission", () => {
+      expect(sensitiveWixAction("submitPublicSignupCash")).toBe(true);
+    });
   });
 
   describe("public event section links", () => {

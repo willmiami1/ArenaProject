@@ -28,7 +28,8 @@ export const publicRegisteredRiders = (
     .filter(
       (registration) =>
         registration.eventId === eventId &&
-        registration.status !== "scratched",
+        registration.status !== "scratched" &&
+        registration.paid !== false,
     )
     .forEach((registration) => {
       addEntry(
@@ -43,7 +44,8 @@ export const publicRegisteredRiders = (
         team.eventId === eventId &&
         Number(team.round) === 1 &&
         !team.generated &&
-        !team.scratched,
+        !team.scratched &&
+        team.paid !== false,
     )
     .forEach((team) => {
       addEntry(headerEntries, team.headerId, team.headerHorseName);
@@ -105,11 +107,15 @@ export const publicRoundRobinRoleCapacities = (event, registrations) => {
 export const spectatorPicksAreOpen = (team, now = Date.now()) =>
   !team.scratched &&
   !team.rolled &&
+  team.paid !== false &&
   team.status === "ready" &&
   (!team.predictionClosesAt || Date.parse(team.predictionClosesAt) > now);
 
 const publicPredictionRunIsEligible = (team) =>
-  !team.scratched && !team.rolled && team.status === "ready";
+  !team.scratched &&
+  !team.rolled &&
+  team.paid !== false &&
+  team.status === "ready";
 
 export const effectivePublicPredictionState = (event, teams) => {
   const activeRound = Number(event.activeRound);
