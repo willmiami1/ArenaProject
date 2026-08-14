@@ -67,6 +67,11 @@ import {
   publicRoleCapacityLabel,
   type PublicRopingRole,
 } from "./publicRoleCapacity";
+import {
+  futureEventFlyers,
+  pastEventWinnerFlyers,
+  type PublicFlyer,
+} from "./publicFlyers";
 import type { ContestantAccountRequest } from "./contestantAccount";
 import type { ArenaData } from "./types";
 import { isBrowserStoragePreview } from "./adminAccess";
@@ -727,6 +732,37 @@ function EventExplorer({
   );
 }
 
+function FlyerGallery({
+  headingId,
+  eyebrow,
+  title,
+  description,
+  flyers,
+}: {
+  headingId: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  flyers: PublicFlyer[];
+}) {
+  return (
+    <section className="public-flyers" aria-labelledby={headingId}>
+      <div className="public-flyers-heading">
+        <span>{eyebrow}</span>
+        <h2 id={headingId}>{title}</h2>
+        <p>{description}</p>
+      </div>
+      <div className="public-flyer-grid">
+        {flyers.map((flyer) => (
+          <a href={flyer.src} target="_blank" rel="noreferrer" key={flyer.src}>
+            <img src={flyer.src} alt={flyer.alt} loading="lazy" />
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function HomePage({
   data,
   scheduleError,
@@ -734,15 +770,6 @@ function HomePage({
   data: PublicArenaData | null;
   scheduleError: string;
 }) {
-  const flyers = [
-    {
-      src: "./september-11-round-robin-flyer.png",
-      alt: "Destiny Ranch Arena September 11 Round Robin event flyer",
-    },
-    { src: "./august-21-flyer.png", alt: "Destiny Ranch Arena August 21 event flyer" },
-    { src: "./august-28-flyer.png", alt: "Destiny Ranch Arena August 28 event flyer" },
-    { src: "./august-7-flyer.jpg", alt: "Destiny Ranch Arena August 7 event flyer" },
-  ];
   return (
     <>
       <section className="public-hero">
@@ -775,20 +802,20 @@ function HomePage({
           </p>
         </section>
       )}
-      <section className="public-flyers" aria-labelledby="future-flyers-title">
-        <div className="public-flyers-heading">
-          <span>Save the date</span>
-          <h2 id="future-flyers-title">Upcoming event flyers</h2>
-          <p>Open a flyer to view it full size.</p>
-        </div>
-        <div className="public-flyer-grid">
-          {flyers.map((flyer) => (
-            <a href={flyer.src} target="_blank" rel="noreferrer" key={flyer.src}>
-              <img src={flyer.src} alt={flyer.alt} loading="lazy" />
-            </a>
-          ))}
-        </div>
-      </section>
+      <FlyerGallery
+        headingId="future-events-title"
+        eyebrow="Save the date"
+        title="Future events"
+        description="Open a flyer to view it full size."
+        flyers={futureEventFlyers}
+      />
+      <FlyerGallery
+        headingId="past-event-winners-title"
+        eyebrow="Winners circle"
+        title="Past event winners"
+        description="Open the winners flyer to view it full size."
+        flyers={pastEventWinnerFlyers}
+      />
       <section className="public-contact" aria-labelledby="arena-contact-title">
         <div className="public-contact-heading">
           <span>Visit the ranch</span>
