@@ -5,6 +5,7 @@ import {
   publishPublicSchedule,
   loadSignupOptions,
   createPublicSignupPayment,
+  submitPublicSignupCash,
   getPublicSignupPaymentStatus,
   loadArenaData,
   loadContestantWaiverStatuses,
@@ -36,6 +37,7 @@ const ADMIN_SESSION_RETRY_DELAYS_MS = [250, 500, 1000, 1500, 2500];
 const PUBLIC_SIGNUP_ACTIONS = new Set([
   "loadSignupOptions",
   "startPublicSignupPayment",
+  "submitPublicSignupCash",
   "getPublicSignupPaymentStatus",
 ]);
 
@@ -149,6 +151,10 @@ $w.onReady(() => {
             checkoutStatus: checkout.status,
           };
         }
+      } else if (message.action === "submitPublicSignupCash") {
+        data = unwrapPublicSignupEnvelope(
+          await submitPublicSignupCash(message.data),
+        );
       } else if (message.action === "getPublicSignupPaymentStatus") {
         data = unwrapPublicSignupEnvelope(
           await getPublicSignupPaymentStatus(message.data),

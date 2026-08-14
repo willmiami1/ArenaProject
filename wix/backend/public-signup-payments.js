@@ -7,13 +7,25 @@ import { secrets } from "wix-secrets-backend.v2";
 import { createHash, randomBytes } from "crypto";
 import {
   PUBLIC_SIGNUP_ENTRY_RESERVATION_MINUTES,
+  PUBLIC_SIGNUP_CARD_METHOD,
+  PUBLIC_SIGNUP_CASH_METHOD,
   PUBLIC_SIGNUP_PRICE_USD,
   PUBLIC_SIGNUP_SESSION_MINUTES,
   PublicSignupError,
+  assertCashSubmissionHasNoActiveCardPayment,
+  assertPublicSignupIntentPaymentMethod,
+  assertPublicSignupSessionActive,
+  assertPublicSignupTokenFormat,
+  assertRoundRobinRoleCapacity,
+  buildPublicSignupRecords,
   buildPublicSignupOptions,
   normalizePublicSignupSelections,
+  publicSignupCashConfirmation,
   publicSignupFingerprintPayload,
+  publicSignupIntentPaymentMethod,
   publicSignupPaymentCreatedIntentIsStale,
+  roundRobinReservationEntries,
+  roundRobinReservationOccupiesRole,
   storedPublicSignupSelectionsForRetry,
 } from "./public-signup-contract";
 import {
@@ -107,6 +119,7 @@ async function ensurePublicSignupCollections() {
         { key: "paymentId", displayName: "Wix Payment ID", type: "TEXT" },
         { key: "transactionId", displayName: "Transaction ID", type: "TEXT" },
         { key: "status", displayName: "Status", type: "TEXT" },
+        { key: "paymentMethod", displayName: "Payment Method", type: "TEXT" },
         { key: "amount", displayName: "Amount", type: "NUMBER" },
         { key: "currency", displayName: "Currency", type: "TEXT" },
         {
@@ -249,10 +262,19 @@ async function withResourceLocks(resources, callback) {
   }
 }
 
+export async function withPublicSignupCompetitionLocks(
+  competitionIds,
+  callback,
+) {
+  await ensurePublicSignupCollections();
+  return withResourceLocks(
+    competitionIds.map((competitionId) => `competition:${competitionId}`),
+    callback,
+  );
+}
+
 async function getSignupSession(signupToken) {
-  if (!/^[a-f0-9]{64}$/.test(String(signupToken || ""))) {
-    throw publicError("SESSION_EXPIRED", "Sign in again to continue registration.");
-  }
+  assertPublicSignupTokenFormat(signupToken);
   await ensurePublicSignupCollections();
   const session = await wixData
     .get(
@@ -261,9 +283,7 @@ async function getSignupSession(signupToken) {
       OPTIONS,
     )
     .catch(() => null);
-  if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {
-    throw publicError("SESSION_EXPIRED", "Sign in again to continue registration.");
-  }
+  assertPublicSignupSessionActive(session);
   return session;
 }
 
@@ -334,6 +354,103 @@ const entryReservationId = (intentIdValue, competitionId) =>
     `${intentIdValue}:${competitionId}`,
   );
 
+async function activeEntryReservations(competitionId) {
+  let existingResult;
+  try {
+    existingResult = await wixData
+      .query(ENTRY_RESERVATIONS_COLLECTION)
+      .eq("competitionId", competitionId)
+      .limit(1000)
+      .find(OPTIONS);
+  } catch (error) {
+    if (
+      error?.code === "WDE0025" ||
+      error?.code === "WD_SCHEMA_DOES_NOT_EXIST"
+    ) {
+      return [];
+    }
+    throw error;
+  }
+  const expiredIds = existingResult.items
+    .filter(
+      (reservation) =>
+        new Date(reservation.expiresAt).getTime() <= Date.now(),
+    )
+    .map(({ _id }) => _id);
+  if (expiredIds.length) {
+    await wixData.bulkRemove(
+      ENTRY_RESERVATIONS_COLLECTION,
+      expiredIds,
+      OPTIONS,
+    );
+  }
+  const activeReservations = existingResult.items.filter(
+    (reservation) => !expiredIds.includes(reservation._id),
+  );
+  const legacyIntentIds = [
+    ...new Set(
+      activeReservations
+        .filter(
+          (reservation) =>
+            !["Header", "Heeler"].includes(reservation.role),
+        )
+        .map((reservation) => reservation.intentId),
+    ),
+  ];
+  const legacyIntents = await Promise.all(
+    legacyIntentIds.map((id) =>
+      wixData.get(PAYMENT_INTENTS_COLLECTION, id, OPTIONS).catch(() => null),
+    ),
+  );
+  const intentsById = new Map(
+    legacyIntents.filter(Boolean).map((intent) => [intent._id, intent]),
+  );
+  return activeReservations.map((reservation) => {
+    if (["Header", "Heeler"].includes(reservation.role)) return reservation;
+    const intent = intentsById.get(reservation.intentId);
+    let selections = [];
+    if (intent) {
+      try {
+        const parsed = JSON.parse(intent.selections);
+        if (Array.isArray(parsed)) selections = parsed;
+      } catch (error) {
+        console.error("Public signup reservation role could not be inferred.", {
+          intentId: reservation.intentId,
+          competitionId: reservation.competitionId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    const selection = selections.find(
+      (item) => item.competitionId === reservation.competitionId,
+    );
+    return {
+      ...reservation,
+      role: selection?.role || "",
+      entries: selection?.entries ?? reservation.entries ?? 1,
+    };
+  });
+}
+
+export async function countActivePublicSignupRoleReservations(
+  competitionId,
+  role,
+  excludeIntentId = "",
+) {
+  const reservations = await activeEntryReservations(competitionId);
+  return reservations
+    .filter(
+      (reservation) =>
+        roundRobinReservationOccupiesRole(reservation, role) &&
+        reservation.intentId !== excludeIntentId,
+    )
+    .reduce(
+      (total, reservation) =>
+        total + roundRobinReservationEntries(reservation),
+      0,
+    );
+}
+
 async function reserveEntries(intent, workspace, contestant, selections) {
   const acquiredIds = [];
   try {
@@ -354,30 +471,12 @@ async function reserveEntries(intent, workspace, contestant, selections) {
         ? [contestant.id, partner.id].sort()
         : [contestant.id];
       const partnershipKey = partner ? `${header.id}:${heeler.id}` : "";
-      const existingResult = await wixData
-        .query(ENTRY_RESERVATIONS_COLLECTION)
-        .eq("competitionId", competitionId)
-        .limit(1000)
-        .find(OPTIONS);
-      const expiredIds = existingResult.items
-        .filter(
-          (reservation) =>
-            new Date(reservation.expiresAt).getTime() <= Date.now(),
-        )
-        .map(({ _id }) => _id);
-      if (expiredIds.length) {
-        await wixData.bulkRemove(
-          ENTRY_RESERVATIONS_COLLECTION,
-          expiredIds,
-          OPTIONS,
-        );
-      }
-      const activeReservations = existingResult.items.filter(
-        (reservation) => !expiredIds.includes(reservation._id),
-      );
+      const activeReservations = await activeEntryReservations(competitionId);
       if (
-        activeReservations.some((reservation) =>
-          JSON.parse(reservation.participantIds).includes(contestant.id),
+        activeReservations.some(
+          (reservation) =>
+            reservation.intentId !== intent._id &&
+            JSON.parse(reservation.participantIds).includes(contestant.id),
         )
       ) {
         throw publicError(
@@ -390,6 +489,7 @@ async function reserveEntries(intent, workspace, contestant, selections) {
           !event.allowRepeatPartners &&
           activeReservations.some(
             (reservation) =>
+              reservation.intentId !== intent._id &&
               reservation.partnershipKey === partnershipKey,
           )
         ) {
@@ -402,14 +502,17 @@ async function reserveEntries(intent, workspace, contestant, selections) {
           const activeTeamCount = workspace.teams.filter(
             (team) =>
               team.eventId === event.id &&
+              team.submissionId !== intent.submissionId &&
               team.round === 1 &&
               !team.generated &&
               !team.scratched &&
               (team.headerId === participantId ||
                 team.heelerId === participantId),
           ).length;
-          const reservedTeamCount = activeReservations.filter((reservation) =>
-            JSON.parse(reservation.participantIds).includes(participantId),
+          const reservedTeamCount = activeReservations.filter(
+            (reservation) =>
+              reservation.intentId !== intent._id &&
+              JSON.parse(reservation.participantIds).includes(participantId),
           ).length;
           if (
             activeTeamCount + reservedTeamCount >=
@@ -422,6 +525,28 @@ async function reserveEntries(intent, workspace, contestant, selections) {
           }
         }
       }
+      assertRoundRobinRoleCapacity(
+        event,
+        workspace.registrations,
+        selection.role,
+        1 +
+          activeReservations
+            .filter(
+              (reservation) =>
+                roundRobinReservationOccupiesRole(
+                  reservation,
+                  selection.role,
+                ) &&
+                reservation.intentId !== intent._id,
+            )
+            .reduce(
+              (total, reservation) =>
+                total + roundRobinReservationEntries(reservation),
+              0,
+            ),
+        intent.submissionId,
+        contestant.id,
+      );
 
       const id = entryReservationId(intent._id, competitionId);
       const reservation = {
@@ -548,11 +673,14 @@ const publicIntent = (intent) => ({
   submissionId: intent.submissionId,
   paymentId: intent.paymentId || "",
   status: intent.status,
+  paymentMethod: publicSignupIntentPaymentMethod(intent),
   amount: Number(intent.amount),
   currency: intent.currency,
   competitionIds: JSON.parse(intent.competitionIds),
   message:
-    intent.status === "successful"
+    intent.status === "cash-due"
+      ? `Registration submitted. Pay $${Number(intent.amount)} in cash at the event.`
+      : intent.status === "successful"
       ? "Payment confirmed and registrations created."
       : intent.status === "fulfillment-failed"
         ? "Payment was received, but registration needs arena assistance. Contact the arena with this submission ID."
@@ -561,17 +689,14 @@ const publicIntent = (intent) => ({
           : "Payment is awaiting authoritative confirmation.",
 });
 
-export async function createPublicSignupPayment(request) {
-  if (!VALID_APP_ID.test(String(request?.submissionId || ""))) {
-    throw publicError("INVALID_SUBMISSION", "Start a new registration checkout.");
-  }
-  const session = await getSignupSession(request.signupToken);
+async function createPublicSignupPaymentLocked(request, session) {
   const id = intentId(session.contestantId, request.submissionId);
   const storedIntent = await wixData
     .get(PAYMENT_INTENTS_COLLECTION, id, OPTIONS)
     .catch(() => null);
   if (storedIntent) {
     const existing = await expireStalePaymentCreatedIntent(storedIntent);
+    assertPublicSignupIntentPaymentMethod(existing, PUBLIC_SIGNUP_CARD_METHOD);
     const storedSelections = storedPublicSignupSelectionsForRetry(
       request.selections,
       JSON.parse(existing.selections),
@@ -623,6 +748,7 @@ export async function createPublicSignupPayment(request) {
   );
   const matchingActiveIntent = activeIntents.find(
     (intent) =>
+      publicSignupIntentPaymentMethod(intent) === PUBLIC_SIGNUP_CARD_METHOD &&
       ACTIVE_PAYMENT_STATUSES.has(intent.status) &&
       JSON.stringify(JSON.parse(intent.selections)) ===
         JSON.stringify(selections),
@@ -636,6 +762,7 @@ export async function createPublicSignupPayment(request) {
     contestantId: contestant.id,
     submissionId: request.submissionId,
     fingerprint,
+    paymentMethod: PUBLIC_SIGNUP_CARD_METHOD,
     status: "creating",
     amount,
     currency: "USD",
@@ -650,7 +777,13 @@ export async function createPublicSignupPayment(request) {
     const concurrent = await wixData
       .get(PAYMENT_INTENTS_COLLECTION, id, OPTIONS)
       .catch(() => null);
-    if (concurrent?.fingerprint === fingerprint) return publicIntent(concurrent);
+    if (concurrent) {
+      assertPublicSignupIntentPaymentMethod(
+        concurrent,
+        PUBLIC_SIGNUP_CARD_METHOD,
+      );
+      if (concurrent.fingerprint === fingerprint) return publicIntent(concurrent);
+    }
     throw error;
   }
 
@@ -751,6 +884,261 @@ export async function createPublicSignupPayment(request) {
   return publicIntent(ready);
 }
 
+export async function createPublicSignupPayment(request) {
+  if (!VALID_APP_ID.test(String(request?.submissionId || ""))) {
+    throw publicError("INVALID_SUBMISSION", "Start a new registration checkout.");
+  }
+  const session = await getSignupSession(request.signupToken);
+  return withResourceLocks([`contestant:${session.contestantId}`], () =>
+    createPublicSignupPaymentLocked(request, session),
+  );
+}
+
+async function activeContestantIntents(contestantId) {
+  const activeResult = await wixData
+    .query(PAYMENT_INTENTS_COLLECTION)
+    .eq("contestantId", contestantId)
+    .limit(100)
+    .find(OPTIONS);
+  return Promise.all(
+    activeResult.items.map((intent) => expireStalePaymentCreatedIntent(intent)),
+  );
+}
+
+async function finalizeCashSubmission(intent) {
+  return withPublicSignupCompetitionLocks(
+    JSON.parse(intent.competitionIds),
+    async () => {
+      const latestIntent = await wixData
+        .get(PAYMENT_INTENTS_COLLECTION, intent._id, OPTIONS)
+        .catch(() => null);
+      if (!latestIntent) {
+        throw publicError(
+          "SUBMISSION_UNAVAILABLE",
+          "That cash registration is unavailable. Start a new registration.",
+        );
+      }
+      assertPublicSignupIntentPaymentMethod(
+        latestIntent,
+        PUBLIC_SIGNUP_CASH_METHOD,
+      );
+      if (latestIntent.status === "cash-due") {
+        return publicSignupCashConfirmation(latestIntent);
+      }
+      if (!["creating", "cash-finalizing"].includes(latestIntent.status)) {
+        throw publicError(
+          "SUBMISSION_CONFLICT",
+          "That submission ID is already bound to a different checkout.",
+        );
+      }
+
+      const workspace = await readWorkspace();
+      const contestant = workspace.contestants.find(
+        (item) => item.id === latestIntent.contestantId,
+      );
+      if (!contestant) {
+        throw publicError(
+          "CONTESTANT_UNAVAILABLE",
+          "Your contestant profile is unavailable. Contact the arena for help.",
+        );
+      }
+      const selections = normalizePublicSignupSelections(
+        workspace,
+        contestant,
+        JSON.parse(latestIntent.selections),
+        latestIntent.submissionId,
+      );
+      const fingerprint = hash(
+        publicSignupFingerprintPayload(
+          contestant.id,
+          latestIntent.submissionId,
+          selections,
+          PUBLIC_SIGNUP_CASH_METHOD,
+        ),
+      );
+      if (fingerprint !== latestIntent.fingerprint) {
+        throw publicError(
+          "SELECTION_CHANGED",
+          "A selected roping changed. Reload registration and try again.",
+        );
+      }
+
+      await reserveEntries(
+        latestIntent,
+        workspace,
+        contestant,
+        selections,
+      );
+      const finalizingIntent =
+        latestIntent.status === "cash-finalizing"
+          ? latestIntent
+          : await updateWithRetry(
+              PAYMENT_INTENTS_COLLECTION,
+              {
+                ...latestIntent,
+                status: "cash-finalizing",
+                updatedAt: new Date(),
+              },
+              "start-cash-finalization",
+            );
+      const records = buildPublicSignupRecords(
+        workspace,
+        contestant,
+        finalizingIntent,
+        selections,
+        {
+          paid: false,
+          paymentMethod: PUBLIC_SIGNUP_CASH_METHOD,
+          paymentReference: finalizingIntent.submissionId,
+        },
+      );
+      let insertedRecord = false;
+      for (const team of records.teams) {
+        insertedRecord =
+          (await insertUniqueArenaRecord(COLLECTIONS.teams, team)) ||
+          insertedRecord;
+      }
+      for (const registration of records.registrations) {
+        insertedRecord =
+          (await insertUniqueArenaRecord(
+            COLLECTIONS.registrations,
+            registration,
+          )) || insertedRecord;
+      }
+      if (insertedRecord) await advanceOnlineRevision();
+      const completedIntent = await updateWithRetry(
+        PAYMENT_INTENTS_COLLECTION,
+        {
+          ...finalizingIntent,
+          status: "cash-due",
+          finalizedAt: new Date(),
+          updatedAt: new Date(),
+        },
+        "finalize-cash-submission",
+      );
+      await releaseEntryReservations(completedIntent).catch((error) => {
+        console.error("Cash signup reservation cleanup failed.", {
+          submissionId: completedIntent.submissionId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+      return publicSignupCashConfirmation(completedIntent);
+    },
+  );
+}
+
+async function submitPublicSignupCashLocked(request, session) {
+  const id = intentId(session.contestantId, request.submissionId);
+  const storedIntent = await wixData
+    .get(PAYMENT_INTENTS_COLLECTION, id, OPTIONS)
+    .catch(() => null);
+  if (storedIntent) {
+    assertPublicSignupIntentPaymentMethod(
+      storedIntent,
+      PUBLIC_SIGNUP_CASH_METHOD,
+    );
+    const storedSelections = storedPublicSignupSelectionsForRetry(
+      request.selections,
+      JSON.parse(storedIntent.selections),
+    );
+    const fingerprint = hash(
+      publicSignupFingerprintPayload(
+        session.contestantId,
+        request.submissionId,
+        storedSelections,
+        PUBLIC_SIGNUP_CASH_METHOD,
+      ),
+    );
+    if (storedIntent.fingerprint !== fingerprint) {
+      throw publicError(
+        "SUBMISSION_CONFLICT",
+        "That submission ID is already bound to a different checkout.",
+      );
+    }
+    if (storedIntent.status === "cash-due") {
+      return publicSignupCashConfirmation(storedIntent);
+    }
+    const activeIntents = await activeContestantIntents(session.contestantId);
+    assertCashSubmissionHasNoActiveCardPayment(
+      activeIntents.filter(({ _id }) => _id !== storedIntent._id),
+    );
+    return finalizeCashSubmission(storedIntent);
+  }
+
+  const workspace = await readWorkspace();
+  const contestant = workspace.contestants.find(
+    (item) => item.id === session.contestantId,
+  );
+  if (!contestant) {
+    throw publicError(
+      "CONTESTANT_UNAVAILABLE",
+      "Your contestant profile is unavailable. Contact the arena for help.",
+    );
+  }
+  const selections = normalizePublicSignupSelections(
+    workspace,
+    contestant,
+    request.selections,
+    request.submissionId,
+  );
+  assertCashSubmissionHasNoActiveCardPayment(
+    await activeContestantIntents(contestant.id),
+  );
+  const fingerprint = hash(
+    publicSignupFingerprintPayload(
+      contestant.id,
+      request.submissionId,
+      selections,
+      PUBLIC_SIGNUP_CASH_METHOD,
+    ),
+  );
+  const competitionIds = selections.map(({ competitionId }) => competitionId);
+  let intent = {
+    _id: id,
+    contestantId: contestant.id,
+    submissionId: request.submissionId,
+    fingerprint,
+    paymentMethod: PUBLIC_SIGNUP_CASH_METHOD,
+    status: "creating",
+    amount: selections.length * PUBLIC_SIGNUP_PRICE_USD,
+    currency: "USD",
+    competitionIds: JSON.stringify(competitionIds),
+    selections: JSON.stringify(selections),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  try {
+    await wixData.insert(PAYMENT_INTENTS_COLLECTION, intent, OPTIONS);
+  } catch (error) {
+    const concurrent = await wixData
+      .get(PAYMENT_INTENTS_COLLECTION, id, OPTIONS)
+      .catch(() => null);
+    if (!concurrent) throw error;
+    assertPublicSignupIntentPaymentMethod(
+      concurrent,
+      PUBLIC_SIGNUP_CASH_METHOD,
+    );
+    if (concurrent.fingerprint !== fingerprint) {
+      throw publicError(
+        "SUBMISSION_CONFLICT",
+        "That submission ID is already bound to a different checkout.",
+      );
+    }
+    intent = concurrent;
+  }
+  return finalizeCashSubmission(intent);
+}
+
+export async function submitPublicSignupCash(request) {
+  if (!VALID_APP_ID.test(String(request?.submissionId || ""))) {
+    throw publicError("INVALID_SUBMISSION", "Start a new registration checkout.");
+  }
+  const session = await getSignupSession(request.signupToken);
+  return withResourceLocks([`contestant:${session.contestantId}`], () =>
+    submitPublicSignupCashLocked(request, session),
+  );
+}
+
 export async function getPublicSignupPaymentStatus(request) {
   if (!VALID_APP_ID.test(String(request?.submissionId || ""))) {
     throw publicError("INVALID_SUBMISSION", "Start a new registration checkout.");
@@ -771,90 +1159,6 @@ export async function getPublicSignupPaymentStatus(request) {
   return publicIntent(intent);
 }
 
-const recordId = (kind, intent, competitionId, suffix = "") =>
-  `${kind}-${hash(
-    `${intent.fingerprint}:${competitionId}:${suffix}`,
-  ).slice(0, 32)}`;
-
-function buildPaidRecords(workspace, contestant, intent, selections) {
-  const submittedAt = new Date().toISOString();
-  const metadata = {
-    paid: true,
-    paymentMethod: "wix-payments",
-    paymentReference: intent.paymentId,
-    paymentAmount: PUBLIC_SIGNUP_PRICE_USD,
-    paymentCurrency: "USD",
-    source: "online",
-    submissionId: intent.submissionId,
-    submissionFingerprint: intent.fingerprint,
-    submittedAt,
-  };
-  const teams = [];
-  const registrations = [];
-  selections.forEach((selection) => {
-    const event = workspace.events.find(
-      (item) => item.id === selection.competitionId,
-    );
-    if (event.competitionType !== "pick-and-draw") {
-      registrations.push({
-        id: recordId("online-registration", intent, event.id),
-        eventId: event.id,
-        contestantId: contestant.id,
-        role: selection.role,
-        entries: 1,
-        checkedIn: false,
-        status: "entered",
-        notes: "",
-        ...metadata,
-      });
-      return;
-    }
-
-    const partner = workspace.contestants.find(
-      (item) => item.id === selection.partnerId,
-    );
-    const header = selection.role === "Header" ? contestant : partner;
-    const heeler = selection.role === "Heeler" ? contestant : partner;
-    const teamId = recordId("online-team", intent, event.id);
-    teams.push({
-      id: teamId,
-      eventId: event.id,
-      headerId: header.id,
-      heelerId: heeler.id,
-      drawPosition: 0,
-      status: "ready",
-      rawTime: null,
-      penalties: 0,
-      notes: "",
-      round: 1,
-      checkedIn: false,
-      scratched: false,
-      generated: false,
-      points: 0,
-      ...metadata,
-    });
-    const roles =
-      event.pickDrawRole === "both"
-        ? ["Header", "Heeler"]
-        : [event.pickDrawRole === "header" ? "Header" : "Heeler"];
-    roles.forEach((role, index) => {
-      registrations.push({
-        id: recordId("online-registration", intent, event.id, `${role}-${index}`),
-        eventId: event.id,
-        contestantId: role === "Header" ? header.id : heeler.id,
-        sourceTeamId: teamId,
-        role,
-        entries: 1,
-        checkedIn: false,
-        status: "entered",
-        notes: "",
-        ...metadata,
-      });
-    });
-  });
-  return { teams, registrations };
-}
-
 async function insertUniqueArenaRecord(collectionId, record) {
   const id = storageId(collectionId, record.id);
   try {
@@ -863,6 +1167,7 @@ async function insertUniqueArenaRecord(collectionId, record) {
       { _id: id, appId: record.id, payload: JSON.stringify(record) },
       OPTIONS,
     );
+    return true;
   } catch (error) {
     const existing = await wixData.get(collectionId, id, OPTIONS).catch(() => null);
     if (
@@ -870,10 +1175,25 @@ async function insertUniqueArenaRecord(collectionId, record) {
       JSON.parse(existing.payload).submissionFingerprint ===
         record.submissionFingerprint
     ) {
-      return;
+      return false;
     }
     throw error;
   }
+}
+
+async function advanceOnlineRevision() {
+  const revision = await wixData
+    .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
+    .catch(() => null);
+  await wixData.save(
+    SETTINGS_COLLECTION,
+    {
+      _id: ONLINE_REVISION_ID,
+      value: Number(revision?.value || 0) + 1,
+      updatedAt: new Date(),
+    },
+    OPTIONS,
+  );
 }
 
 async function finalizeSuccessfulPayment(intent, transactionId) {
@@ -911,25 +1231,24 @@ async function finalizeSuccessfulPayment(intent, transactionId) {
       "Payment registration details no longer match.",
     );
   }
-  const records = buildPaidRecords(workspace, contestant, intent, selections);
+  const records = buildPublicSignupRecords(
+    workspace,
+    contestant,
+    intent,
+    selections,
+    {
+      paid: true,
+      paymentMethod: PUBLIC_SIGNUP_CARD_METHOD,
+      paymentReference: intent.paymentId,
+    },
+  );
   for (const team of records.teams) {
     await insertUniqueArenaRecord(COLLECTIONS.teams, team);
   }
   for (const registration of records.registrations) {
     await insertUniqueArenaRecord(COLLECTIONS.registrations, registration);
   }
-  const revision = await wixData
-    .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
-    .catch(() => null);
-  await wixData.save(
-    SETTINGS_COLLECTION,
-    {
-      _id: ONLINE_REVISION_ID,
-      value: Number(revision?.value || 0) + 1,
-      updatedAt: new Date(),
-    },
-    OPTIONS,
-  );
+  await advanceOnlineRevision();
   const successfulIntent = await updateWithRetry(
     PAYMENT_INTENTS_COLLECTION,
     {

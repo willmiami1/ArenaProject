@@ -20,6 +20,7 @@ import {
   createPublicSignupPayment as createPublicSignupPaymentIntent,
   getPublicSignupPaymentStatus as readPublicSignupPaymentStatus,
   loadPublicSignupOptions,
+  submitPublicSignupCash as submitPublicSignupCashRegistration,
 } from "./public-signup-payments";
 import {
   prepareRegistrationDeskSignup,
@@ -2481,6 +2482,14 @@ export const createPublicSignupPayment = webMethod(
   async (request) =>
     publicSignupEnvelope("createPublicSignupPayment", () =>
       createPublicSignupPaymentIntent(request),
+    ),
+);
+
+export const submitPublicSignupCash = webMethod(
+  Permissions.Anyone,
+  async (request) =>
+    publicSignupEnvelope("submitPublicSignupCash", () =>
+      submitPublicSignupCashRegistration(request),
     ),
 );
 
