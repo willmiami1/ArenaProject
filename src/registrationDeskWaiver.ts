@@ -30,6 +30,22 @@ export function registrationDeskWaiverParticipants(
   );
 }
 
+/**
+ * Roster participants who still owe a current-version waiver. Contestants whose
+ * waiver is already confirmed are omitted so the desk roster only lists work
+ * that is still outstanding.
+ */
+export function registrationDeskOutstandingWaiverParticipants(
+  data: RegistrationDeskData | null,
+  eventId: string,
+  entries: RegistrationDeskRosterEntry[],
+): RegistrationDeskWaiverParticipant[] {
+  return registrationDeskWaiverParticipants(entries).filter(
+    ({ contestantId }) =>
+      !registrationDeskWaiverStatus(data, eventId, contestantId),
+  );
+}
+
 export function registrationDeskWaiverStatus(
   data: RegistrationDeskData | null,
   eventId: string,

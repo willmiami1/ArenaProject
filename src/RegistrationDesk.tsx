@@ -59,7 +59,7 @@ import {
   type RegistrationDeskRosterEntry,
 } from "./registrationDeskRoster";
 import {
-  registrationDeskWaiverParticipants,
+  registrationDeskOutstandingWaiverParticipants,
   registrationDeskWaiverStatus,
   submitLocalRegistrationDeskWaiver,
 } from "./registrationDeskWaiver";
@@ -253,9 +253,10 @@ export function RegistrationDesk() {
     () => registrationDeskEventRoster(data, eventId),
     [data, eventId],
   );
-  const waiverParticipants = useMemo(
-    () => registrationDeskWaiverParticipants(eventRoster),
-    [eventRoster],
+  const outstandingWaivers = useMemo(
+    () =>
+      registrationDeskOutstandingWaiverParticipants(data, eventId, eventRoster),
+    [data, eventId, eventRoster],
   );
   const rosterSections = [
     {
@@ -949,31 +950,26 @@ export function RegistrationDesk() {
                 </h2>
               </div>
             </div>
-            {event && waiverParticipants.length > 0 && (
+            {event && outstandingWaivers.length > 0 && (
               <section
                 className="registration-waiver-roster"
                 aria-labelledby="registration-waiver-roster-heading"
               >
                 <div>
                   <h3 id="registration-waiver-roster-heading">
-                    Participant waivers
+                    Waivers still needed
                   </h3>
                   <p>
-                    Each contestant is listed once for this competition,
-                    including riders entered on multiple picked teams.
+                    Only contestants who have not signed the current waiver are
+                    listed. Confirmed waivers drop off this list automatically.
                   </p>
                 </div>
                 <ul>
-                  {waiverParticipants.map((participant) => (
+                  {outstandingWaivers.map((participant) => (
                     <li key={participant.contestantId}>
                       <strong>{participant.name}</strong>
                       <WaiverStatusControl
                         contestantName={participant.name}
-                        status={registrationDeskWaiverStatus(
-                          data,
-                          event.id,
-                          participant.contestantId,
-                        )}
                         available={data.waiverDocument.available}
                         disabled={busy || waiverBusy}
                         onSign={() => launchWaiver(participant.contestantId)}
