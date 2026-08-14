@@ -284,9 +284,9 @@ export function RegistrationDesk() {
   const entryUnavailableMessage = !event
     ? ""
     : !event.registrationOpen
-      ? "This live competition is visible, but registration is closed."
+      ? "This competition is visible, but registration is closed."
       : event.drawLocked
-        ? "This live competition is visible, but entries are blocked while the draw is locked."
+        ? "This competition is visible, but entries are blocked while the draw is locked."
         : "";
   const contestant = data?.contestants.find((item) => item.id === contestantId);
   const waiverContestant = data?.contestants.find(
@@ -873,7 +873,7 @@ export function RegistrationDesk() {
       <main className="registration-desk-main">
         <section className="registration-desk-events">
           <label>
-            Live competition
+            Live or upcoming competition
             <select value={eventId} onChange={(change) => {
               setEventId(change.target.value);
               setPinOpen(false);
@@ -886,7 +886,7 @@ export function RegistrationDesk() {
             }}>
               {(data?.events ?? []).map((item) => (
                 <option value={item.id} key={item.id}>
-                  {item.name} · {item.date} · {competitionName(item.competitionType)}
+                  {item.name} · {item.date} · {competitionName(item.competitionType)} · {item.status}
                 </option>
               ))}
             </select>
@@ -924,7 +924,7 @@ export function RegistrationDesk() {
           )}
           {!data && <p>Loading registration desk…</p>}
           {data && !data.events.length && (
-            <p>No live competitions are currently available.</p>
+            <p>No live or upcoming competitions are currently available.</p>
           )}
           {entryUnavailableMessage && <p>{entryUnavailableMessage}</p>}
           {data && !data.waiverDocument.available && (

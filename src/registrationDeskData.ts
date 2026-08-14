@@ -1,5 +1,8 @@
 import { seedData } from "./data";
-import { registrationDeskIsVisible } from "./registrationWindow";
+import {
+  assertRegistrationDeskOpen,
+  registrationDeskIsVisible,
+} from "./registrationWindow";
 import { normalizeHorseNames } from "./contestantHorses";
 import {
   supportedRegistrationDeskModes,
@@ -474,11 +477,7 @@ export function submitLocalRegistrationDeskSignup(
   }
   const event = data.events.find(({ id }) => id === request.eventId);
   if (!event) throw new Error("Competition not found.");
-  if (event.status !== "Live") {
-    fail("Registration Desk entries are limited to live competitions.");
-  }
-  if (!event.registrationOpen) fail("Registration is closed.");
-  if (event.drawLocked) fail("The draw is locked.");
+  assertRegistrationDeskOpen(event);
   if (
     [...data.registrations, ...data.teams].some(
       (record) =>

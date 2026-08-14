@@ -1,6 +1,10 @@
 import type { ArenaEvent } from "./types";
 
 export const ONLINE_REGISTRATION_LEAD_MS = 60 * 60 * 1000;
+const REGISTRATION_DESK_EVENT_STATUSES = new Set(["Live", "Upcoming"]);
+
+export const REGISTRATION_DESK_EVENT_STATUS_ERROR =
+  "Registration Desk entries are limited to live or upcoming competitions.";
 
 export function competitionStartTime(
   event: Pick<ArenaEvent, "date" | "startTime">,
@@ -47,14 +51,14 @@ export function assertOnlineRegistrationOpen(
 export function registrationDeskIsVisible(
   event: Pick<ArenaEvent, "status">,
 ) {
-  return event.status === "Live";
+  return REGISTRATION_DESK_EVENT_STATUSES.has(event.status);
 }
 
 export function assertRegistrationDeskOpen(
   event: Pick<ArenaEvent, "registrationOpen" | "drawLocked" | "status">,
 ) {
-  if (event.status !== "Live") {
-    throw new Error("Registration Desk entries are limited to live competitions.");
+  if (!registrationDeskIsVisible(event)) {
+    throw new Error(REGISTRATION_DESK_EVENT_STATUS_ERROR);
   }
   if (!event.registrationOpen) throw new Error("Registration is closed.");
   if (event.drawLocked) throw new Error("The draw is locked.");

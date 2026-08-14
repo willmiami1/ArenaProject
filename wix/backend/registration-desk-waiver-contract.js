@@ -1,4 +1,7 @@
 import { createHash } from "crypto";
+import {
+  registrationDeskIsVisible,
+} from "./registration-desk-event-contract.js";
 
 const validId = /^[A-Za-z0-9_-]{1,100}$/;
 const pngDataUrlPattern = /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/;
@@ -374,8 +377,10 @@ export function prepareRegistrationDeskWaiver(
     throw new Error("Choose a valid competition and contestant, then accept the waiver.");
   }
   const event = workspace.events.find(({ id: eventId }) => eventId === request.eventId);
-  if (!event || event.status !== "Live") {
-    throw new Error("Waivers can be signed only for a live Registration Desk competition.");
+  if (!event || !registrationDeskIsVisible(event)) {
+    throw new Error(
+      "Waivers can be signed only for a live or upcoming Registration Desk competition.",
+    );
   }
   const contestant = workspace.contestants.find(
     ({ id: contestantId }) => contestantId === request.contestantId,

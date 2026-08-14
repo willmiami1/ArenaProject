@@ -5,6 +5,10 @@ const dialogSource = readFileSync(
   new URL("./RegistrationDeskWaiverDialog.tsx", import.meta.url),
   "utf8",
 );
+const deskSource = readFileSync(
+  new URL("./RegistrationDesk.tsx", import.meta.url),
+  "utf8",
+);
 const styles = readFileSync(
   new URL("./styles.css", import.meta.url),
   "utf8",
@@ -16,6 +20,15 @@ const cssRule = (selector) => {
 };
 
 describe("Registration Desk tablet browser compatibility", () => {
+  it("labels the selector and empty state for live and upcoming competitions", () => {
+    expect(deskSource).toContain("Live or upcoming competition");
+    expect(deskSource).toContain(
+      "No live or upcoming competitions are currently available.",
+    );
+    expect(deskSource).toContain("{item.status}");
+    expect(deskSource).not.toContain("Live competition");
+  });
+
   it("scopes touch blocking to the signature canvas while keeping dialog scrolling", () => {
     const canvas = cssRule(".registration-waiver-canvas");
     const content = cssRule(".registration-waiver-content");

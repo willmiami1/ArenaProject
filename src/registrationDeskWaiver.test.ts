@@ -181,6 +181,7 @@ describe("Registration Desk tablet waiver", () => {
       signedAt: "2026-08-12T13:45:00.000Z",
       waiverVersion: "2026-08-12-v1",
     });
+
     expect(
       registrationDeskWaiverStatus(
         result.data,
@@ -194,6 +195,21 @@ describe("Registration Desk tablet waiver", () => {
     });
     expect(JSON.stringify(result)).not.toContain("signatureDataUrl");
     expect(JSON.stringify(result)).not.toContain("iVBORw0KGgo");
+  });
+
+  it("allows upcoming-event waivers and rejects completed events", () => {
+    const upcoming = availableDeskData();
+    upcoming.events[0].status = "Upcoming";
+    expect(
+      submitLocalRegistrationDeskWaiver(upcoming, signatureRequest).signature
+        .eventId,
+    ).toBe("event-one");
+
+    const completed = availableDeskData();
+    completed.events[0].status = "Complete";
+    expect(() =>
+      submitLocalRegistrationDeskWaiver(completed, signatureRequest),
+    ).toThrow("live or upcoming");
   });
 
   it("recognizes the current waiver globally across live events", () => {

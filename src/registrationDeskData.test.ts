@@ -131,21 +131,39 @@ const drawRegistration = (
 });
 
 describe("Registration Desk local mirror", () => {
-  it("projects live events with backend-supported entry formats", () => {
+  it("projects live and upcoming events with backend-supported entry formats", () => {
     const selectedEvent = event("pick-and-draw");
+    const upcomingEvent = event("pick-only", {
+      id: "upcoming",
+      status: "Upcoming",
+    });
     const projected = registrationDeskProjection(
       workspace(selectedEvent, {
         events: [
           selectedEvent,
+          upcomingEvent,
           event("pick-only", { id: "closed", status: "Complete" }),
         ],
       }),
     );
-    expect(projected.events).toHaveLength(1);
+    expect(projected.events.map(({ id }) => id)).toEqual([
+      selectedEvent.id,
+      upcomingEvent.id,
+    ]);
     expect(projected.events[0].supportedEntryTypes).toEqual([
       "draws",
       "picked-teams",
     ]);
+  });
+
+  it("accepts entries for open, unlocked upcoming events", () => {
+    const selectedEvent = event("draw-pot", { status: "Upcoming" });
+    expect(
+      submitLocalRegistrationDeskSignup(
+        workspace(selectedEvent),
+        draw(selectedEvent),
+      ).data.registrations,
+    ).toHaveLength(1);
   });
 
   it("keeps contestant profile validation and canonical horse names", () => {

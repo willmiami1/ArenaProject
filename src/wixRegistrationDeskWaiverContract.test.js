@@ -27,10 +27,11 @@ const preparedFor = ({
   contestantId = "contestant-1",
   signedAt = "2026-08-12T15:00:00.000Z",
   waiverDocument = document,
+  status = "Live",
 } = {}) =>
   prepareRegistrationDeskWaiver(
     {
-      events: [{ id: eventId, name: "Roping", status: "Live" }],
+      events: [{ id: eventId, name: "Roping", status }],
       contestants: [{ id: contestantId, name: contestantId.toUpperCase() }],
     },
     waiverDocument,
@@ -54,6 +55,15 @@ const preparedFor = ({
 const evidenceFor = (options) => preparedFor(options).evidence;
 
 describe("Wix Registration Desk waiver contract", () => {
+  it("allows upcoming waivers and rejects completed competitions", () => {
+    expect(preparedFor({ status: "Upcoming" }).signature.eventId).toBe(
+      "event-1",
+    );
+    expect(() => preparedFor({ status: "Complete" })).toThrow(
+      "live or upcoming",
+    );
+  });
+
   it("returns unavailable without inventing missing legal language", () => {
     expect(normalizeRegistrationDeskWaiverDocument(null)).toEqual({
       title: "",
