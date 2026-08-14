@@ -1,6 +1,5 @@
 import wixData from "wix-data";
 import { collections } from "wix-data.v2";
-import { items } from "@wix/data";
 import { elevate } from "wix-auth";
 import wixPayBackend from "wix-pay-backend";
 import { contacts, triggeredEmails } from "wix-crm-backend";
@@ -65,8 +64,28 @@ const ACTIVE_PAYMENT_STATUSES = new Set([
   "settling",
 ]);
 const getSecretValue = elevate(secrets.getSecretValue);
-const updateLockItem = elevate(items.update);
-const removeLockItem = elevate(items.remove);
+let conditionalLockApiPromise;
+
+function loadConditionalLockApi() {
+  if (!conditionalLockApiPromise) {
+    conditionalLockApiPromise = import("./conditional-lock-data")
+      .then(({ createConditionalLockApi }) => createConditionalLockApi())
+      .catch((error) => {
+        console.error("Arena resource lock adapter is unavailable.", {
+          code: "RESOURCE_LOCK_ADAPTER_UNAVAILABLE",
+          dependency: "@wix/data",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        const failure = new Error(
+          "Protected arena updates are temporarily unavailable because the Wix Data lock adapter could not be initialized. Install @wix/data for this site and publish again.",
+        );
+        failure.code = "RESOURCE_LOCK_ADAPTER_UNAVAILABLE";
+        failure.cause = error;
+        throw failure;
+      });
+  }
+  return conditionalLockApiPromise;
+}
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const storageId = (namespace, value) =>
@@ -135,9 +154,14 @@ const resourceLockStore = {
     }
   },
   async update(lock) {
+    const lockApi = await loadConditionalLockApi();
     const paymentId = encodeLockOwner(lock.resource, lock.ownerToken);
+    const condition = lockApi.items
+      .filter()
+      .eq("paymentId", lock.storedOwnerValue || paymentId)
+      .gt("expiresAt", new Date(lock.mustBeValidAt));
     return decodeLockRecord(
-      await updateLockItem(
+      await lockApi.update(
         PAYMENT_LOCKS_COLLECTION,
         {
           _id: lock.id,
@@ -146,24 +170,24 @@ const resourceLockStore = {
         },
         {
           suppressHooks: true,
-          condition: {
-            paymentId: lock.storedOwnerValue || paymentId,
-            expiresAt: { $gt: new Date(lock.mustBeValidAt) },
-          },
+          condition,
         },
       ),
     );
   },
   async remove(lock) {
+    const lockApi = await loadConditionalLockApi();
+    const paymentId =
+      lock.storedOwnerValue ||
+      encodeLockOwner(lock.resource, lock.ownerToken);
+    const condition = lockApi.items
+      .filter()
+      .eq("paymentId", paymentId)
+      .le("expiresAt", new Date(lock.expiresAt));
     return decodeLockRecord(
-      await removeLockItem(PAYMENT_LOCKS_COLLECTION, lock.id, {
+      await lockApi.remove(PAYMENT_LOCKS_COLLECTION, lock.id, {
         suppressHooks: true,
-        condition: {
-          paymentId:
-            lock.storedOwnerValue ||
-            encodeLockOwner(lock.resource, lock.ownerToken),
-          expiresAt: { $lte: new Date(lock.expiresAt) },
-        },
+        condition,
       }),
     );
   },
@@ -364,8 +388,10 @@ const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 const noLockFence = async () => undefined;
 
-const withResourceLocks = (resources, callback) =>
-  resourceLockManager.run(resources, callback);
+const withResourceLocks = async (resources, callback) => {
+  await loadConditionalLockApi();
+  return resourceLockManager.run(resources, callback);
+};
 
 export async function withPublicSignupCompetitionLocks(
   competitionIds,
