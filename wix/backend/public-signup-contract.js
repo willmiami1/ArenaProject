@@ -99,7 +99,10 @@ export function assertRoundRobinRoleCapacity(
       pendingCount >
       limit
   ) {
-    fail("ROLE_CAPACITY_REACHED", `${role} registration is full.`);
+    fail(
+      "ROLE_CAPACITY_REACHED",
+      `${role} registration is full.`,
+    );
   }
 }
 
@@ -239,6 +242,163 @@ const activeTeamIncludes = (team, contestantId) =>
   !team.generated &&
   !team.scratched &&
   (team.headerId === contestantId || team.heelerId === contestantId);
+
+const activeReservationConflict = () =>
+  fail(
+    "ACTIVE_SIGNUP_RESERVATION_CONFLICT",
+    "Workspace changes conflict with an active public signup. Wait for it to finish or expire, then retry.",
+  );
+
+export function assertWorkspaceSupportsActivePublicSignupReservations(
+  workspace,
+  reservations,
+  intents,
+  now = Date.now(),
+) {
+  const intentsById = new Map(intents.map((intent) => [intent._id, intent]));
+  const activeStatuses = new Set([
+    "creating",
+    "payment-created",
+    "pending",
+    "settling",
+    "cash-finalizing",
+    "fulfillment-failed",
+  ]);
+  const activeReservations = reservations.filter((reservation) => {
+    const intent = intentsById.get(reservation.intentId);
+    if (!intent) activeReservationConflict();
+    return activeStatuses.has(intent.status);
+  });
+  const activeIntentIds = new Set(
+    activeReservations.map((reservation) => reservation.intentId),
+  );
+
+  for (const intentId of activeIntentIds) {
+    const intent = intentsById.get(intentId);
+    const contestant = workspace.contestants.find(
+      (item) => item.id === intent.contestantId,
+    );
+    if (!contestant) activeReservationConflict();
+    try {
+      normalizePublicSignupSelections(
+        workspace,
+        contestant,
+        JSON.parse(intent.selections),
+        intent.submissionId,
+        now,
+        false,
+      );
+    } catch (error) {
+      if (error instanceof PublicSignupError || error instanceof SyntaxError) {
+        activeReservationConflict();
+      }
+      throw error;
+    }
+  }
+
+  const pendingReservations = activeReservations.filter((reservation) => {
+    const intent = intentsById.get(reservation.intentId);
+    return !workspace.registrations.some(
+      (registration) =>
+        registration.eventId === reservation.competitionId &&
+        registration.contestantId === intent.contestantId &&
+        registration.submissionId === intent.submissionId &&
+        registration.role === reservation.role &&
+        registration.status === "entered",
+    );
+  });
+  const reservationsByCompetition = new Map();
+  for (const reservation of pendingReservations) {
+    const event = workspace.events.find(
+      ({ id }) => id === reservation.competitionId,
+    );
+    if (!event) activeReservationConflict();
+    const current =
+      reservationsByCompetition.get(reservation.competitionId) || [];
+    current.push(reservation);
+    reservationsByCompetition.set(reservation.competitionId, current);
+  }
+
+  for (const [competitionId, eventReservations] of reservationsByCompetition) {
+    const event = workspace.events.find(({ id }) => id === competitionId);
+    if (event.competitionType === "round-robin") {
+      for (const role of ["Header", "Heeler"]) {
+        const reservedCount = eventReservations
+          .filter((reservation) =>
+            roundRobinReservationOccupiesRole(reservation, role),
+          )
+          .reduce(
+            (total, reservation) =>
+              total + roundRobinReservationEntries(reservation),
+            0,
+          );
+        try {
+          assertRoundRobinRoleCapacity(
+            event,
+            workspace.registrations,
+            role,
+            reservedCount,
+          );
+        } catch (error) {
+          if (error instanceof PublicSignupError) {
+            activeReservationConflict();
+          }
+          throw error;
+        }
+      }
+    }
+
+    if (event.competitionType !== "pick-and-draw") continue;
+    const participantReservationCounts = new Map();
+    const partnershipReservationCounts = new Map();
+    for (const reservation of eventReservations) {
+      let participantIds;
+      try {
+        participantIds = JSON.parse(reservation.participantIds);
+      } catch {
+        activeReservationConflict();
+      }
+      if (!Array.isArray(participantIds) || participantIds.length === 0) {
+        activeReservationConflict();
+      }
+      for (const participantId of participantIds) {
+        participantReservationCounts.set(
+          participantId,
+          (participantReservationCounts.get(participantId) || 0) + 1,
+        );
+      }
+      if (reservation.partnershipKey) {
+        partnershipReservationCounts.set(
+          reservation.partnershipKey,
+          (partnershipReservationCounts.get(reservation.partnershipKey) || 0) +
+            1,
+        );
+      }
+    }
+
+    const activeTeams = workspace.teams.filter(
+      (team) =>
+        team.eventId === competitionId && !team.generated && !team.scratched,
+    );
+    const entryLimit = Number(event.entriesAllowed || 1);
+    for (const [participantId, reservedCount] of participantReservationCounts) {
+      if (
+        activeTeams.filter((team) => activeTeamIncludes(team, participantId))
+          .length +
+          reservedCount >
+        entryLimit
+      ) {
+        activeReservationConflict();
+      }
+    }
+    if (
+      !event.allowRepeatPartners &&
+      [...partnershipReservationCounts.values()].some((count) => count > 1)
+    ) {
+      activeReservationConflict();
+    }
+  }
+}
 
 export function normalizePublicSignupSelections(
   workspace,
