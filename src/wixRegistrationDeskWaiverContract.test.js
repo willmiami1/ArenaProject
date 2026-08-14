@@ -27,16 +27,11 @@ const preparedFor = ({
   contestantId = "contestant-1",
   signedAt = "2026-08-12T15:00:00.000Z",
   waiverDocument = document,
+  status = "Live",
 } = {}) =>
   prepareRegistrationDeskWaiver(
     {
-      events: [{
-        id: eventId,
-        name: "Roping",
-        status: "Live",
-        registrationOpen: true,
-        drawLocked: false,
-      }],
+      events: [{ id: eventId, name: "Roping", status }],
       contestants: [{ id: contestantId, name: contestantId.toUpperCase() }],
     },
     waiverDocument,
@@ -60,70 +55,13 @@ const preparedFor = ({
 const evidenceFor = (options) => preparedFor(options).evidence;
 
 describe("Wix Registration Desk waiver contract", () => {
-  it("allows waiver signing for an Upcoming Registration Desk competition", () => {
-    const prepared = prepareRegistrationDeskWaiver(
-      {
-        events: [{
-          id: "event-1",
-          name: "Roping",
-          status: "Upcoming",
-          registrationOpen: true,
-          drawLocked: false,
-        }],
-        contestants: [{ id: "contestant-1", name: "RIDER ONE" }],
-      },
-      document,
-      {
-        eventId: "event-1",
-        contestantId: "contestant-1",
-        signerName: "Rider One",
-        signatureDataUrl,
-        accepted: true,
-      },
-      {
-        id: registrationDeskWaiverRecordId(
-          "event-1",
-          "contestant-1",
-          document.version,
-        ),
-      },
+  it("allows upcoming waivers and rejects completed competitions", () => {
+    expect(preparedFor({ status: "Upcoming" }).signature.eventId).toBe(
+      "event-1",
     );
-    expect(prepared.signature.eventId).toBe("event-1");
-  });
-
-  it.each([
-    ["closed", { registrationOpen: false, drawLocked: false }],
-    ["locked", { registrationOpen: true, drawLocked: true }],
-    ["missing a lock state", { registrationOpen: true }],
-  ])("rejects an Upcoming waiver when registration is %s", (_label, window) => {
-    expect(() =>
-      prepareRegistrationDeskWaiver(
-        {
-          events: [{
-            id: "event-1",
-            name: "Roping",
-            status: "Upcoming",
-            ...window,
-          }],
-          contestants: [{ id: "contestant-1", name: "RIDER ONE" }],
-        },
-        document,
-        {
-          eventId: "event-1",
-          contestantId: "contestant-1",
-          signerName: "Rider One",
-          signatureDataUrl,
-          accepted: true,
-        },
-        {
-          id: registrationDeskWaiverRecordId(
-            "event-1",
-            "contestant-1",
-            document.version,
-          ),
-        },
-      ),
-    ).toThrow(/open, unlocked Live or Upcoming/);
+    expect(() => preparedFor({ status: "Complete" })).toThrow(
+      "live or upcoming",
+    );
   });
 
   it("returns unavailable without inventing missing legal language", () => {

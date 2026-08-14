@@ -131,9 +131,9 @@ const drawRegistration = (
 });
 
 describe("Registration Desk local mirror", () => {
-  it("projects only open, unlocked Live and Upcoming events", () => {
+  it("projects live and upcoming events with backend-supported entry formats", () => {
     const selectedEvent = event("pick-and-draw");
-    const upcoming = event("pick-only", {
+    const upcomingEvent = event("pick-only", {
       id: "upcoming",
       status: "Upcoming",
     });
@@ -141,48 +141,29 @@ describe("Registration Desk local mirror", () => {
       workspace(selectedEvent, {
         events: [
           selectedEvent,
-          upcoming,
-          event("pick-only", { id: "complete", status: "Complete" }),
-          event("pick-only", { id: "closed", registrationOpen: false }),
-          event("pick-only", { id: "locked", drawLocked: true }),
+          upcomingEvent,
+          event("pick-only", { id: "closed", status: "Complete" }),
         ],
-        registrations: [drawRegistration(upcoming, "header-1")],
       }),
     );
     expect(projected.events.map(({ id }) => id)).toEqual([
       selectedEvent.id,
-      upcoming.id,
+      upcomingEvent.id,
     ]);
     expect(projected.events[0].supportedEntryTypes).toEqual([
       "draws",
       "picked-teams",
     ]);
-    expect(projected.registrations).toHaveLength(1);
-    expect(projected.registrations[0].eventId).toBe(upcoming.id);
   });
 
-  it("accepts an open Upcoming entry and rejects unavailable statuses and windows", () => {
-    const upcoming = event("draw-pot", { status: "Upcoming" });
+  it("accepts entries for open, unlocked upcoming events", () => {
+    const selectedEvent = event("draw-pot", { status: "Upcoming" });
     expect(
       submitLocalRegistrationDeskSignup(
-        workspace(upcoming),
-        draw(upcoming),
+        workspace(selectedEvent),
+        draw(selectedEvent),
       ).data.registrations,
     ).toHaveLength(1);
-
-    for (const [overrides, message] of [
-      [{ status: "Upcoming", registrationOpen: false }, /Registration is closed/],
-      [{ status: "Upcoming", drawLocked: true }, /draw is locked/],
-      [{ status: "Complete" }, /Live or Upcoming/],
-    ] as const) {
-      const unavailable = event("draw-pot", overrides);
-      expect(() =>
-        submitLocalRegistrationDeskSignup(
-          workspace(unavailable),
-          draw(unavailable),
-        ),
-      ).toThrow(message);
-    }
   });
 
   it("keeps contestant profile validation and canonical horse names", () => {

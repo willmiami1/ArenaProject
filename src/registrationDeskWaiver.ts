@@ -102,7 +102,7 @@ export function submitLocalRegistrationDeskWaiver(
   if (!event) throw new Error("Competition not found.");
   if (!registrationDeskIsVisible(event)) {
     throw new Error(
-      "Waivers can be signed only for an open, unlocked Live or Upcoming Registration Desk competition.",
+      "Waivers can be signed only for a live or upcoming Registration Desk competition.",
     );
   }
   const contestant = data.contestants.find(

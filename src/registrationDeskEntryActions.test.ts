@@ -12,6 +12,10 @@ const liveEvent = {
   registrationOpen: true,
   drawLocked: false,
 } as RegistrationDeskEvent;
+const upcomingEvent = {
+  ...liveEvent,
+  status: "Upcoming",
+} as RegistrationDeskEvent;
 
 const draft: RegistrationDeskEntryDraft = {
   key: "registration:entry:Header",
@@ -26,17 +30,13 @@ const draft: RegistrationDeskEntryDraft = {
 };
 
 describe("Registration Desk entry actions", () => {
-  it("allows edits only for secured, open, unlocked Live or Upcoming entries", () => {
+  it("allows edits for secured, open, unlocked live or upcoming entries", () => {
     expect(registrationDeskEntryPermissions(liveEvent, true, false)).toEqual({
       canEdit: true,
       canScratch: true,
     });
     expect(
-      registrationDeskEntryPermissions(
-        { ...liveEvent, status: "Upcoming" },
-        true,
-        false,
-      ),
+      registrationDeskEntryPermissions(upcomingEvent, true, false),
     ).toEqual({
       canEdit: true,
       canScratch: true,
@@ -48,17 +48,17 @@ describe("Registration Desk entry actions", () => {
         false,
       ).canEdit,
     ).toBe(false);
+    expect(registrationDeskEntryPermissions(liveEvent, false, false)).toEqual({
+      canEdit: false,
+      canScratch: false,
+    });
     expect(
       registrationDeskEntryPermissions(
-        { ...liveEvent, registrationOpen: false },
+        { ...liveEvent, status: "Complete" },
         true,
         false,
       ),
     ).toEqual({
-      canEdit: false,
-      canScratch: false,
-    });
-    expect(registrationDeskEntryPermissions(liveEvent, false, false)).toEqual({
       canEdit: false,
       canScratch: false,
     });

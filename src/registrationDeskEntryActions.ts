@@ -23,6 +23,8 @@ export function registrationDeskEntryPermissions(
     canEdit:
       embedded &&
       available &&
+      event.registrationOpen === true &&
+      event.drawLocked !== true &&
       !generatedTeam,
     canScratch: embedded && available,
   };

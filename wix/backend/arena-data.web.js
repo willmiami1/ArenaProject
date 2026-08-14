@@ -31,6 +31,10 @@ import {
   supportedRegistrationDeskEntryTypes,
 } from "./registration-desk-signup-contract";
 import {
+  assertRegistrationDeskOpen,
+  registrationDeskRosterScope,
+} from "./registration-desk-event-contract";
+import {
   REGISTRATION_DESK_WAIVER_ERROR_CODES,
   RegistrationDeskWaiverError,
   ensureRegistrationDeskWaiverStatusIndexRecord,
@@ -111,21 +115,6 @@ const assertOnlineRegistrationOpen = (event, now = Date.now()) => {
     throw new Error("Online registration closes one hour before the competition starts.");
   }
 };
-const registrationDeskIsVisible = (event) =>
-  (event.status === "Live" || event.status === "Upcoming") &&
-  event.registrationOpen === true &&
-  event.drawLocked === false;
-
-const assertRegistrationDeskOpen = (event) => {
-  if (event.status !== "Live" && event.status !== "Upcoming") {
-    throw new Error(
-      "Registration Desk entries are limited to Live or Upcoming competitions.",
-    );
-  }
-  if (event.registrationOpen !== true) throw new Error("Registration is closed.");
-  if (event.drawLocked !== false) throw new Error("The draw is locked.");
-};
-
 async function resolveAdminAccess() {
   let member;
   try {
@@ -1522,8 +1511,8 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
 });
 
 async function registrationDeskProjection(workspace) {
-  const events = workspace.events.filter(registrationDeskIsVisible);
-  const eventIds = new Set(events.map((event) => event.id));
+  const { events, teams, registrations } =
+    registrationDeskRosterScope(workspace);
   const waiverDocument = await readRegistrationDeskWaiverDocument();
   const waiverStatus =
     await loadRegistrationDeskWaiverStatusSnapshot(waiverDocument);
@@ -1577,40 +1566,39 @@ async function registrationDeskProjection(workspace) {
       }),
     ),
     contestants: workspace.contestants,
-    teams: workspace.teams
-      .filter((team) => eventIds.has(team.eventId) && Number(team.round) === 1)
-      .map((team) => ({
-        id: team.id,
-        eventId: team.eventId,
-        rowId: team.rowId,
-        entryType: team.entryType,
-        headerId: team.headerId,
-        heelerId: team.heelerId,
-        headerHorseName: team.headerHorseName || "",
-        heelerHorseName: team.heelerHorseName || "",
-        drawPosition: Number(team.drawPosition || 0),
-        originalTeamNumber: Number(
-          team.originalTeamNumber || team.drawPosition || 0,
-        ),
-        status: team.status,
-        rawTime: null,
-        penalties: 0,
-        notes: "",
-        round: 1,
-        checkedIn: false,
-        scratched: team.scratched === true,
-        generated: team.generated === true,
-        points: 0,
-        paid: team.paid === true,
-        paymentMethod: team.paymentMethod,
-        payerContestantId: team.payerContestantId,
-        source: team.source,
-        submissionId: team.submissionId,
-        submittedAt: team.submittedAt,
-      })),
-    registrations: workspace.registrations
-      .filter((registration) => eventIds.has(registration.eventId))
-      .map((registration) => ({ ...registration, notes: "" })),
+    teams: teams.map((team) => ({
+      id: team.id,
+      eventId: team.eventId,
+      rowId: team.rowId,
+      entryType: team.entryType,
+      headerId: team.headerId,
+      heelerId: team.heelerId,
+      headerHorseName: team.headerHorseName || "",
+      heelerHorseName: team.heelerHorseName || "",
+      drawPosition: Number(team.drawPosition || 0),
+      originalTeamNumber: Number(
+        team.originalTeamNumber || team.drawPosition || 0,
+      ),
+      status: team.status,
+      rawTime: null,
+      penalties: 0,
+      notes: "",
+      round: 1,
+      checkedIn: false,
+      scratched: team.scratched === true,
+      generated: team.generated === true,
+      points: 0,
+      paid: team.paid === true,
+      paymentMethod: team.paymentMethod,
+      payerContestantId: team.payerContestantId,
+      source: team.source,
+      submissionId: team.submissionId,
+      submittedAt: team.submittedAt,
+    })),
+    registrations: registrations.map((registration) => ({
+      ...registration,
+      notes: "",
+    })),
     waiverDocument,
     waiverStatus,
     waiverSignatures: [],
