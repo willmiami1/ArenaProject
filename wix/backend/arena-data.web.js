@@ -17,10 +17,13 @@ import {
   successfulCredentialMetadata,
 } from "./public-signup-contract";
 import {
+  WORKSPACE_MUTATION_LOCK_RESOURCE,
+  assertWorkspacePreservesPublicSignupReservations,
   createPublicSignupPayment as createPublicSignupPaymentIntent,
   getPublicSignupPaymentStatus as readPublicSignupPaymentStatus,
   loadPublicSignupOptions,
   submitPublicSignupCash as submitPublicSignupCashRegistration,
+  withWorkspaceLocks,
 } from "./public-signup-payments";
 import {
   prepareRegistrationDeskSignup,
@@ -1230,7 +1233,12 @@ async function ensureCredentialLockCollection() {
   );
 }
 
-async function syncRecords(collectionId, records, removableAppIds) {
+async function syncRecords(
+  collectionId,
+  records,
+  removableAppIds,
+  assertLockOwned = async () => undefined,
+) {
   let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
   const currentItems = [...result.items];
   while (result.hasNext()) {
@@ -1248,9 +1256,11 @@ async function syncRecords(collectionId, records, removableAppIds) {
     )
     .map((item) => item._id);
   if (removeIds.length) {
+    await assertLockOwned();
     await wixData.bulkRemove(collectionId, removeIds, OPTIONS);
   }
   if (records.length) {
+    await assertLockOwned();
     await wixData.bulkSave(
       collectionId,
       records.map((record) => ({
@@ -1263,7 +1273,10 @@ async function syncRecords(collectionId, records, removableAppIds) {
   }
 }
 
-async function removeOrphanedContestantCredentials(contestants) {
+async function removeOrphanedContestantCredentials(
+  contestants,
+  assertLockOwned = async () => undefined,
+) {
   const contestantIds = new Set(contestants.map((contestant) => contestant.id));
   let result = await wixData
     .query(CREDENTIALS_COLLECTION)
@@ -1280,6 +1293,7 @@ async function removeOrphanedContestantCredentials(contestants) {
     result = await result.next();
   }
   for (let index = 0; index < removeIds.length; index += 1000) {
+    await assertLockOwned();
     await wixData.bulkRemove(
       CREDENTIALS_COLLECTION,
       removeIds.slice(index, index + 1000),
@@ -1344,13 +1358,17 @@ export const loadContestantSignedWaiver = webMethod(
   },
 );
 
+const withFullWorkspaceLocks = (callback) =>
+  withWorkspaceLocks([WORKSPACE_MUTATION_LOCK_RESOURCE], callback);
+
 export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
   await requireArenaAdmin();
   await ensureWorkspaceCollections();
   await ensureRiderAccountCollections();
+  return withFullWorkspaceLocks(async (lockScope) => {
   let latest;
   try {
-    latest = await readWorkspace();
+    latest = await readWorkspace({ consistentRead: true });
   } catch (error) {
     if (
       error?.code !== "WDE0025" &&
@@ -1360,6 +1378,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       throw error;
     }
     await ensureSettingsCollection();
+    await lockScope.assertOwned();
     await savePublicScheduleSnapshot(data);
     return {
       ...data,
@@ -1411,6 +1430,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     spectators: latest.spectators,
     spectatorPredictions: latest.spectatorPredictions,
   };
+  await assertWorkspacePreservesPublicSignupReservations(next);
   const removableIds = (records) =>
     new Set(
       records
@@ -1426,35 +1446,50 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       COLLECTIONS.meets,
       next.meets || [],
       removableIds(latest.meets),
+      lockScope.assertOwned,
     ),
     syncRecords(
       COLLECTIONS.events,
       next.events || [],
       removableIds(latest.events),
+      lockScope.assertOwned,
     ),
     syncRecords(
       COLLECTIONS.contestants,
       next.contestants || [],
       removableIds(latest.contestants),
+      lockScope.assertOwned,
     ),
-    syncRecords(COLLECTIONS.teams, next.teams, removableIds(latest.teams)),
+    syncRecords(
+      COLLECTIONS.teams,
+      next.teams,
+      removableIds(latest.teams),
+      lockScope.assertOwned,
+    ),
     syncRecords(
       COLLECTIONS.registrations,
       next.registrations,
       removableIds(latest.registrations),
+      lockScope.assertOwned,
     ),
     syncRecords(
       COLLECTIONS.spectators,
       next.spectators,
       removableIds(latest.spectators),
+      lockScope.assertOwned,
     ),
     syncRecords(
       COLLECTIONS.spectatorPredictions,
       next.spectatorPredictions,
       removableIds(latest.spectatorPredictions),
+      lockScope.assertOwned,
     ),
   ]);
-  await removeOrphanedContestantCredentials(next.contestants || []);
+  await removeOrphanedContestantCredentials(
+    next.contestants || [],
+    lockScope.assertOwned,
+  );
+  await lockScope.assertOwned();
   await Promise.all([
     wixData.save(
       SETTINGS_COLLECTION,
@@ -1477,7 +1512,8 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     ),
     savePublicScheduleSnapshot(next),
   ]);
-  return readWorkspace();
+  return readWorkspace({ consistentRead: true });
+  });
 });
 
 async function registrationDeskProjection(workspace) {
@@ -1588,7 +1624,8 @@ export const saveRegistrationDeskContestant = webMethod(
   Permissions.SiteMember,
   async (input) => {
     await requireRegistrationDesk();
-    const workspace = await readWorkspace();
+    return withFullWorkspaceLocks(async (lockScope) => {
+    const workspace = await readWorkspace({ consistentRead: true });
     const name = normalizeUppercaseText(input.name);
     const email = normalizeEmail(input.email);
     const phone = String(input.phone || "").trim();
@@ -1636,13 +1673,13 @@ export const saveRegistrationDeskContestant = webMethod(
         .query(CREDENTIALS_COLLECTION)
         .eq("contestantId", id)
         .limit(1)
-        .find(OPTIONS),
+        .find(CONSISTENT_READ_OPTIONS),
       email
         ? wixData
             .query(CREDENTIALS_COLLECTION)
             .eq("emailNormalized", email)
             .limit(1)
-            .find(OPTIONS)
+            .find(CONSISTENT_READ_OPTIONS)
         : Promise.resolve({ items: [] }),
     ]);
     if (
@@ -1682,7 +1719,8 @@ export const saveRegistrationDeskContestant = webMethod(
       .query(COLLECTIONS.contestants)
       .eq("appId", id)
       .limit(1)
-      .find(OPTIONS);
+      .find(CONSISTENT_READ_OPTIONS);
+    await lockScope.assertOwned();
     await wixData.save(
       COLLECTIONS.contestants,
       {
@@ -1698,8 +1736,11 @@ export const saveRegistrationDeskContestant = webMethod(
     });
     return {
       contestant,
-      data: await registrationDeskProjection(await readWorkspace()),
+      data: await registrationDeskProjection(
+        await readWorkspace({ consistentRead: true }),
+      ),
     };
+    });
   },
 );
 
@@ -1707,10 +1748,11 @@ export const setRegistrationDeskContestantPin = webMethod(
   Permissions.SiteMember,
   async ({ contestantId, pin }) => {
     await requireRegistrationDesk();
+    return withFullWorkspaceLocks(async (lockScope) => {
     if (!validAppId(contestantId) || !validPin(pin)) {
       throw new Error("Choose a contestant and enter a four-digit PIN.");
     }
-    const workspace = await readWorkspace();
+    const workspace = await readWorkspace({ consistentRead: true });
     const contestant = workspace.contestants.find(
       (item) => item.id === contestantId,
     );
@@ -1725,12 +1767,12 @@ export const setRegistrationDeskContestantPin = webMethod(
         .query(CREDENTIALS_COLLECTION)
         .eq("emailNormalized", email)
         .limit(1)
-        .find(OPTIONS),
+        .find(CONSISTENT_READ_OPTIONS),
       wixData
         .query(CREDENTIALS_COLLECTION)
         .eq("contestantId", contestantId)
         .limit(1)
-        .find(OPTIONS),
+        .find(CONSISTENT_READ_OPTIONS),
     ]);
     if (
       duplicateEmail.items.some(
@@ -1748,12 +1790,14 @@ export const setRegistrationDeskContestantPin = webMethod(
       pinSalt: salt,
       pinHash: pinHash(pin, salt, pepper),
     });
+    await lockScope.assertOwned();
     await wixData.save(
       CREDENTIALS_COLLECTION,
       nextCredential,
       OPTIONS,
     );
     return { configured: true };
+    });
   },
 );
 
@@ -1856,8 +1900,13 @@ export const publishPublicSchedule = webMethod(
   async (events) => {
     await requireArenaAdmin();
     await ensureSettingsCollection();
-    await savePublicScheduleSnapshot(events);
-    return { publishedAt: new Date().toISOString(), count: events.length };
+    return withWorkspaceLocks(
+      [WORKSPACE_MUTATION_LOCK_RESOURCE],
+      async () => {
+        await savePublicScheduleSnapshot(events);
+        return { publishedAt: new Date().toISOString(), count: events.length };
+      },
+    );
   },
 );
 
@@ -1875,58 +1924,69 @@ export const setContestantPin = webMethod(
     ) {
       throw new Error("Contestant email and a four-digit PIN are required.");
     }
-    const duplicateEmail = await wixData
-      .query(CREDENTIALS_COLLECTION)
-      .eq("emailNormalized", normalizedEmail)
-      .limit(1)
-      .find(OPTIONS);
-    if (
-      duplicateEmail.items.length &&
-      duplicateEmail.items[0].contestantId !== contestantId
-    ) {
-      throw new Error("That email is already used by another contestant login.");
-    }
-    const existing = await wixData
-      .query(CREDENTIALS_COLLECTION)
-      .eq("contestantId", contestantId)
-      .limit(1)
-      .find(OPTIONS);
-    const pepper = await getSecret(PIN_PEPPER_SECRET);
-    const salt = randomBytes(16).toString("hex");
-    const existingContestant = await wixData
-      .query(COLLECTIONS.contestants)
-      .eq("appId", contestantId)
-      .limit(1)
-      .find(OPTIONS);
-    const previousPayload = existingContestant.items[0]?.payload;
-    const previousContestant =
-      typeof previousPayload === "string"
-        ? JSON.parse(previousPayload)
-        : previousPayload || null;
-    const normalizedContestant = normalizeContestantCasing(
-      mergeContestantPhoto(
-        { ...contestant, email: normalizedEmail },
-        previousContestant,
-      ),
-    );
-    await wixData.save(
-      COLLECTIONS.contestants,
-      {
-        ...(existingContestant.items[0] || {}),
-        appId: contestantId,
-        payload: JSON.stringify(normalizedContestant),
+    return withWorkspaceLocks(
+      [
+        WORKSPACE_MUTATION_LOCK_RESOURCE,
+        `contestant-${contestantId}`,
+        `contestant-email-${normalizedEmail}`,
+      ],
+      async () => {
+        const duplicateEmail = await wixData
+          .query(CREDENTIALS_COLLECTION)
+          .eq("emailNormalized", normalizedEmail)
+          .limit(1)
+          .find(CONSISTENT_READ_OPTIONS);
+        if (
+          duplicateEmail.items.length &&
+          duplicateEmail.items[0].contestantId !== contestantId
+        ) {
+          throw new Error(
+            "That email is already used by another contestant login.",
+          );
+        }
+        const existing = await wixData
+          .query(CREDENTIALS_COLLECTION)
+          .eq("contestantId", contestantId)
+          .limit(1)
+          .find(CONSISTENT_READ_OPTIONS);
+        const pepper = await getSecret(PIN_PEPPER_SECRET);
+        const salt = randomBytes(16).toString("hex");
+        const existingContestant = await wixData
+          .query(COLLECTIONS.contestants)
+          .eq("appId", contestantId)
+          .limit(1)
+          .find(CONSISTENT_READ_OPTIONS);
+        const previousPayload = existingContestant.items[0]?.payload;
+        const previousContestant =
+          typeof previousPayload === "string"
+            ? JSON.parse(previousPayload)
+            : previousPayload || null;
+        const normalizedContestant = normalizeContestantCasing(
+          mergeContestantPhoto(
+            { ...contestant, email: normalizedEmail },
+            previousContestant,
+          ),
+        );
+        await wixData.save(
+          COLLECTIONS.contestants,
+          {
+            ...(existingContestant.items[0] || {}),
+            appId: contestantId,
+            payload: JSON.stringify(normalizedContestant),
+          },
+          OPTIONS,
+        );
+        const nextCredential = successfulCredentialMetadata({
+          ...(existing.items[0] || {}),
+          contestantId,
+          emailNormalized: normalizedEmail,
+          pinSalt: salt,
+          pinHash: pinHash(pin, salt, pepper),
+        });
+        await wixData.save(CREDENTIALS_COLLECTION, nextCredential, OPTIONS);
+        return { configured: true };
       },
-      OPTIONS,
     );
-    const nextCredential = successfulCredentialMetadata({
-      ...(existing.items[0] || {}),
-      contestantId,
-      emailNormalized: normalizedEmail,
-      pinSalt: salt,
-      pinHash: pinHash(pin, salt, pepper),
-    });
-    await wixData.save(CREDENTIALS_COLLECTION, nextCredential, OPTIONS);
-    return { configured: true };
   },
 );
 
@@ -1983,7 +2043,14 @@ export const createContestantAccount = webMethod(
       .update(`contestant-credential:${email}`)
       .digest("hex")
       .slice(0, 32);
-    const workspace = await readWorkspace();
+    return withPublicSignupCompetitionLocks(
+      [
+        WORKSPACE_MUTATION_LOCK_RESOURCE,
+        `contestant-${contestantId}`,
+        `contestant-email-${email}`,
+      ],
+      async () => {
+    const workspace = await readWorkspace({ consistentRead: true });
     const event = workspace.events.find(
       (item) => item.id === request.competitionId,
     );
@@ -2008,7 +2075,7 @@ export const createContestantAccount = webMethod(
       .query(CREDENTIALS_COLLECTION)
       .eq("emailNormalized", email)
       .limit(1)
-      .find(OPTIONS);
+      .find(CONSISTENT_READ_OPTIONS);
     if (duplicateEmail.items.length) {
       throw new Error("A contestant account already uses that email.");
     }
@@ -2096,6 +2163,8 @@ export const createContestantAccount = webMethod(
       competitionId: request.competitionId,
     });
     return publicContestantAccountResult(workspace, event, contestant);
+      },
+    );
   },
 );
 
@@ -2148,17 +2217,24 @@ export const createRiderAccount = webMethod(
       .update(`contestant-phone:${phone}`)
       .digest("hex")
       .slice(0, 24)}`;
+    return withPublicSignupCompetitionLocks(
+      [
+        WORKSPACE_MUTATION_LOCK_RESOURCE,
+        `contestant-${contestantId}`,
+        `contestant-email-${email}`,
+      ],
+      async () => {
     const [duplicateEmail, existingPhone] = await Promise.all([
       wixData
         .query(CREDENTIALS_COLLECTION)
         .eq("emailNormalized", email)
         .limit(1)
-        .find(OPTIONS),
+        .find(CONSISTENT_READ_OPTIONS),
       wixData
         .query(COLLECTIONS.contestants)
         .eq("appId", contestantId)
         .limit(1)
-        .find(OPTIONS),
+        .find(CONSISTENT_READ_OPTIONS),
     ]);
     if (duplicateEmail.items.length) {
       throw new Error("A rider account already uses that email.");
@@ -2227,6 +2303,8 @@ export const createRiderAccount = webMethod(
       throw error;
     }
     return { contestantId, name };
+      },
+    );
   },
 );
 
@@ -2520,75 +2598,13 @@ async function insertUniqueArenaRecord(collectionId, record) {
 }
 
 async function withRegistrationDeskEventLock(eventId, callback) {
-  await ensureCredentialLockCollection();
-  const lockKey = `registration-desk:${eventId}`;
-  const owner = randomBytes(16).toString("hex");
-  const slotDuration = 10 * 60 * 1000;
-  for (let attempt = 1; attempt <= 30; attempt += 1) {
-    const currentSlot = Math.floor(Date.now() / slotDuration);
-    const slotKeys = [currentSlot, currentSlot + 1].map(
-      (slot) => `${lockKey}:${slot}`,
-    );
-    const insertedLockIds = [];
-    try {
-      for (const slotKey of slotKeys) {
-        const lockId = arenaRecordStorageId(
-          CREDENTIAL_LOCKS_COLLECTION,
-          slotKey,
-        );
-        await wixData.insert(
-          CREDENTIAL_LOCKS_COLLECTION,
-          {
-            _id: lockId,
-            emailNormalized: `${slotKey}:${owner}`,
-            expiresAt: new Date((currentSlot + 2) * slotDuration),
-          },
-          OPTIONS,
-        );
-        insertedLockIds.push(lockId);
-      }
-      try {
-        return await callback();
-      } finally {
-        await Promise.allSettled(
-          insertedLockIds.map((lockId) =>
-            wixData.remove(CREDENTIAL_LOCKS_COLLECTION, lockId, OPTIONS),
-          ),
-        );
-      }
-    } catch (error) {
-      await Promise.allSettled(
-        insertedLockIds.map((lockId) =>
-          wixData.remove(CREDENTIAL_LOCKS_COLLECTION, lockId, OPTIONS),
-        ),
-      );
-      const currentLocks = await Promise.all(
-        slotKeys.map((slotKey) =>
-          wixData
-            .get(
-              CREDENTIAL_LOCKS_COLLECTION,
-              arenaRecordStorageId(CREDENTIAL_LOCKS_COLLECTION, slotKey),
-              { ...OPTIONS, consistentRead: true },
-            )
-            .catch(() => null),
-        ),
-      );
-      if (!currentLocks.some(Boolean)) throw error;
-      await new Promise((resolve) => setTimeout(resolve, attempt * 25));
-    }
-  }
-  throw new Error("Registration is busy processing another entry. Try again.");
+  void eventId;
+  return withFullWorkspaceLocks(callback);
 }
 
 async function withRegistrationDeskLocks(lockIds, callback) {
-  const orderedLockIds = [...new Set(lockIds)].sort();
-  const run = (index) =>
-    index === orderedLockIds.length
-      ? callback()
-      : withRegistrationDeskEventLock(orderedLockIds[index], () =>
-          run(index + 1),
-        );
-  return run(0);
+  void lockIds;
+  return withFullWorkspaceLocks(callback);
 }
 
 async function createRegistrationDeskSignupRecords(request) {

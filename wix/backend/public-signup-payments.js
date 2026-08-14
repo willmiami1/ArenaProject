@@ -1,5 +1,6 @@
 import wixData from "wix-data";
 import { collections } from "wix-data.v2";
+import { items } from "@wix/data";
 import { elevate } from "wix-auth";
 import wixPayBackend from "wix-pay-backend";
 import { contacts, triggeredEmails } from "wix-crm-backend";
@@ -17,6 +18,7 @@ import {
   assertPublicSignupSessionActive,
   assertPublicSignupTokenFormat,
   assertRoundRobinRoleCapacity,
+  assertWorkspaceSupportsActivePublicSignupReservations,
   buildPublicSignupRecords,
   buildPublicSignupOptions,
   normalizePublicSignupSelections,
@@ -33,7 +35,8 @@ import {
   deliverOwnerPaymentNotification,
 } from "./public-signup-owner-notification";
 import {
-  withResourceLocks as withResourceLocksContract,
+  competitionLockResources,
+  createResourceLockManager,
 } from "./resource-lock-contract";
 
 const OPTIONS = { suppressAuth: true, consistentRead: true };
@@ -52,6 +55,7 @@ const PAYMENT_LOCKS_COLLECTION = "ArenaPublicSignupPaymentLocks";
 const OWNER_NOTIFICATIONS_COLLECTION = "ArenaOwnerPaymentNotifications";
 const OWNER_EMAIL = "willmiami1@gmail.com";
 const OWNER_TRIGGERED_EMAIL_SECRET = "ArenaOwnerPaymentTriggeredEmailId";
+export const WORKSPACE_MUTATION_LOCK_RESOURCE = "arena-workspace-mutation";
 const VALID_APP_ID = /^[a-zA-Z0-9_-]{1,100}$/;
 const SECURITY_WRITE_ATTEMPTS = 3;
 const PENDING_RESERVATION_MINUTES = 24 * 60;
@@ -61,12 +65,146 @@ const ACTIVE_PAYMENT_STATUSES = new Set([
   "settling",
 ]);
 const getSecretValue = elevate(secrets.getSecretValue);
+const updateLockItem = elevate(items.update);
+const removeLockItem = elevate(items.remove);
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const storageId = (namespace, value) =>
   hash(`${namespace}:${value}`).slice(0, 32);
 
 const publicError = (code, message) => new PublicSignupError(code, message);
+
+const LOCK_RECORD_PREFIX = "arena-resource-lock-v2:";
+
+const encodeLockOwner = (resource, ownerToken) =>
+  `${LOCK_RECORD_PREFIX}${JSON.stringify([resource, ownerToken])}`;
+
+function decodeLockRecord(item) {
+  if (!item) return null;
+  const storedOwnerValue = String(item.paymentId || "");
+  let resource = storedOwnerValue;
+  let ownerToken = "";
+  if (resource.startsWith(LOCK_RECORD_PREFIX)) {
+    try {
+      const decoded = JSON.parse(resource.slice(LOCK_RECORD_PREFIX.length));
+      if (
+        Array.isArray(decoded) &&
+        typeof decoded[0] === "string" &&
+        typeof decoded[1] === "string"
+      ) {
+        [resource, ownerToken] = decoded;
+      }
+    } catch (error) {
+      console.error("Arena resource lock metadata could not be decoded.", {
+        lockId: String(item._id || "").slice(0, 12),
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return {
+    id: item._id,
+    resource,
+    ownerToken,
+    expiresAt: new Date(item.expiresAt).getTime(),
+    storedOwnerValue,
+  };
+}
+
+const resourceLockStore = {
+  async insert(lock) {
+    return decodeLockRecord(
+      await wixData.insert(
+        PAYMENT_LOCKS_COLLECTION,
+        {
+          _id: lock.id,
+          paymentId: encodeLockOwner(lock.resource, lock.ownerToken),
+          expiresAt: new Date(lock.expiresAt),
+        },
+        OPTIONS,
+      ),
+    );
+  },
+  async get(id) {
+    try {
+      return decodeLockRecord(
+        await wixData.get(PAYMENT_LOCKS_COLLECTION, id, OPTIONS),
+      );
+    } catch (error) {
+      if (error?.code === "WDE0073") return null;
+      throw error;
+    }
+  },
+  async update(lock) {
+    const paymentId = encodeLockOwner(lock.resource, lock.ownerToken);
+    return decodeLockRecord(
+      await updateLockItem(
+        PAYMENT_LOCKS_COLLECTION,
+        {
+          _id: lock.id,
+          paymentId,
+          expiresAt: new Date(lock.expiresAt),
+        },
+        {
+          suppressHooks: true,
+          condition: {
+            paymentId: lock.storedOwnerValue || paymentId,
+            expiresAt: { $gt: new Date(lock.mustBeValidAt) },
+          },
+        },
+      ),
+    );
+  },
+  async remove(lock) {
+    return decodeLockRecord(
+      await removeLockItem(PAYMENT_LOCKS_COLLECTION, lock.id, {
+        suppressHooks: true,
+        condition: {
+          paymentId:
+            lock.storedOwnerValue ||
+            encodeLockOwner(lock.resource, lock.ownerToken),
+          expiresAt: { $lte: new Date(lock.expiresAt) },
+        },
+      }),
+    );
+  },
+};
+
+function safeLockResourceContext(resource, id) {
+  let type = "resource";
+  if (resource === "competition:arena-workspace-mutation") {
+    type = "workspace";
+  } else if (resource.startsWith("competition:revision-")) {
+    type = "revision";
+  } else if (resource.startsWith("competition:contestant-email-")) {
+    type = "contestant-email";
+  } else if (
+    resource.startsWith("competition:contestant-") ||
+    resource.startsWith("contestant:")
+  ) {
+    type = "contestant";
+  } else if (resource.startsWith("competition:")) {
+    type = "competition";
+  } else if (resource.startsWith("payment:")) {
+    type = "payment";
+  }
+  return { type, lockId: String(id).slice(0, 12) };
+}
+
+const resourceLockManager = createResourceLockManager({
+  store: resourceLockStore,
+  idForResource: (resource) =>
+    storageId("public-signup-resource-lock", resource),
+  createOwnerToken: () => randomBytes(16).toString("hex"),
+  describeResource: safeLockResourceContext,
+  onDiagnostic: ({ event, resource, message }) => {
+    console.error("Arena resource lock diagnostic.", {
+      event,
+      resourceType: resource?.type || "",
+      lockId: resource?.lockId || "",
+      message: message || "",
+    });
+  },
+});
 
 const _verifiedCollections = new Set();
 
@@ -161,8 +299,6 @@ async function ensurePublicSignupCollections() {
       "Arena Public Signup Payment Locks",
       [
         { key: "paymentId", displayName: "Payment ID", type: "TEXT" },
-        { key: "resource", displayName: "Resource", type: "TEXT" },
-        { key: "owner", displayName: "Owner Token", type: "TEXT" },
         { key: "expiresAt", displayName: "Expires At", type: "DATETIME" },
       ],
     ),
@@ -226,33 +362,10 @@ async function updateWithRetry(collectionId, item, context) {
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+const noLockFence = async () => undefined;
 
-const resourceLockClient = {
-  insert: (record) => wixData.insert(PAYMENT_LOCKS_COLLECTION, record, OPTIONS),
-  get: (id) =>
-    wixData.get(PAYMENT_LOCKS_COLLECTION, id, {
-      ...OPTIONS,
-      consistentRead: true,
-    }),
-  remove: (id) => wixData.remove(PAYMENT_LOCKS_COLLECTION, id, OPTIONS),
-  now: () => Date.now(),
-  wait,
-  random: Math.random,
-  newOwner: () => randomBytes(16).toString("hex"),
-  recordId: (resource) => storageId("public-signup-resource-lock", resource),
-  onContended: ({ resource, attempt, maxAttempts, reason }) => {
-    console.warn("Resource lock contended.", {
-      resource,
-      attempt,
-      maxAttempts,
-      reason,
-    });
-  },
-};
-
-async function withResourceLocks(resources, callback) {
-  return withResourceLocksContract(resourceLockClient, resources, callback);
-}
+const withResourceLocks = (resources, callback) =>
+  resourceLockManager.run(resources, callback);
 
 export async function withPublicSignupCompetitionLocks(
   competitionIds,
@@ -260,7 +373,7 @@ export async function withPublicSignupCompetitionLocks(
 ) {
   await ensurePublicSignupCollections();
   return withResourceLocks(
-    competitionIds.map((competitionId) => `competition:${competitionId}`),
+    competitionLockResources(competitionIds),
     callback,
   );
 }
@@ -271,8 +384,6 @@ async function ensureLockCollection() {
     "Arena Public Signup Payment Locks",
     [
       { key: "paymentId", displayName: "Payment ID", type: "TEXT" },
-      { key: "resource", displayName: "Resource", type: "TEXT" },
-      { key: "owner", displayName: "Owner Token", type: "TEXT" },
       { key: "expiresAt", displayName: "Expires At", type: "DATETIME" },
     ],
   );
@@ -280,11 +391,11 @@ async function ensureLockCollection() {
 
 export async function withWorkspaceLocks(resources, callback) {
   await ensureLockCollection();
-  return withResourceLocks(
-    resources.map((resource) => `competition:${resource}`),
-    callback,
-  );
+  return withResourceLocks(competitionLockResources(resources), callback);
 }
+
+const withPublicSignupMutationLock = (callback) =>
+  withWorkspaceLocks([WORKSPACE_MUTATION_LOCK_RESOURCE], callback);
 
 async function getSignupSession(signupToken) {
   assertPublicSignupTokenFormat(signupToken);
@@ -367,39 +478,7 @@ const entryReservationId = (intentIdValue, competitionId) =>
     `${intentIdValue}:${competitionId}`,
   );
 
-async function activeEntryReservations(competitionId) {
-  let existingResult;
-  try {
-    existingResult = await wixData
-      .query(ENTRY_RESERVATIONS_COLLECTION)
-      .eq("competitionId", competitionId)
-      .limit(1000)
-      .find(OPTIONS);
-  } catch (error) {
-    if (
-      error?.code === "WDE0025" ||
-      error?.code === "WD_SCHEMA_DOES_NOT_EXIST"
-    ) {
-      return [];
-    }
-    throw error;
-  }
-  const expiredIds = existingResult.items
-    .filter(
-      (reservation) =>
-        new Date(reservation.expiresAt).getTime() <= Date.now(),
-    )
-    .map(({ _id }) => _id);
-  if (expiredIds.length) {
-    await wixData.bulkRemove(
-      ENTRY_RESERVATIONS_COLLECTION,
-      expiredIds,
-      OPTIONS,
-    );
-  }
-  const activeReservations = existingResult.items.filter(
-    (reservation) => !expiredIds.includes(reservation._id),
-  );
+async function hydrateReservationRoles(activeReservations) {
   const legacyIntentIds = [
     ...new Set(
       activeReservations
@@ -445,6 +524,95 @@ async function activeEntryReservations(competitionId) {
   });
 }
 
+async function activeEntryReservations(competitionId) {
+  let existingResult;
+  try {
+    existingResult = await wixData
+      .query(ENTRY_RESERVATIONS_COLLECTION)
+      .eq("competitionId", competitionId)
+      .limit(1000)
+      .find(OPTIONS);
+  } catch (error) {
+    if (
+      error?.code === "WDE0025" ||
+      error?.code === "WD_SCHEMA_DOES_NOT_EXIST"
+    ) {
+      return [];
+    }
+    throw error;
+  }
+  const expiredIds = existingResult.items
+    .filter(
+      (reservation) =>
+        new Date(reservation.expiresAt).getTime() <= Date.now(),
+    )
+    .map(({ _id }) => _id);
+  if (expiredIds.length) {
+    await wixData.bulkRemove(
+      ENTRY_RESERVATIONS_COLLECTION,
+      expiredIds,
+      OPTIONS,
+    );
+  }
+  const activeReservations = existingResult.items.filter(
+    (reservation) => !expiredIds.includes(reservation._id),
+  );
+  return hydrateReservationRoles(activeReservations);
+}
+
+export async function assertWorkspacePreservesPublicSignupReservations(
+  workspace,
+  competitionIds = null,
+) {
+  let result;
+  try {
+    result = await wixData
+      .query(ENTRY_RESERVATIONS_COLLECTION)
+      .limit(1000)
+      .find(OPTIONS);
+  } catch (error) {
+    if (
+      error?.code === "WDE0025" ||
+      error?.code === "WD_SCHEMA_DOES_NOT_EXIST"
+    ) {
+      return;
+    }
+    throw error;
+  }
+  const reservations = [...result.items];
+  while (result.hasNext()) {
+    result = await result.next();
+    reservations.push(...result.items);
+  }
+  const competitionIdSet = competitionIds
+    ? new Set(competitionIds.map((id) => String(id)))
+    : null;
+  const activeReservations = await hydrateReservationRoles(
+    reservations.filter(
+      (reservation) =>
+        new Date(reservation.expiresAt).getTime() > Date.now() &&
+        (!competitionIdSet ||
+          competitionIdSet.has(String(reservation.competitionId))),
+    ),
+  );
+  if (activeReservations.length === 0) return;
+  const intentIds = [
+    ...new Set(activeReservations.map((reservation) => reservation.intentId)),
+  ];
+  const intents = (
+    await Promise.all(
+      intentIds.map((id) =>
+        wixData.get(PAYMENT_INTENTS_COLLECTION, id, OPTIONS).catch(() => null),
+      ),
+    )
+  ).filter(Boolean);
+  assertWorkspaceSupportsActivePublicSignupReservations(
+    workspace,
+    activeReservations,
+    intents,
+  );
+}
+
 export async function countActivePublicSignupRoleReservations(
   competitionId,
   role,
@@ -464,7 +632,13 @@ export async function countActivePublicSignupRoleReservations(
     );
 }
 
-async function reserveEntries(intent, workspace, contestant, selections) {
+async function reserveEntries(
+  intent,
+  workspace,
+  contestant,
+  selections,
+  assertLockOwned = noLockFence,
+) {
   const acquiredIds = [];
   try {
     for (const selection of selections) {
@@ -576,6 +750,7 @@ async function reserveEntries(intent, workspace, contestant, selections) {
         createdAt: new Date(),
       };
       try {
+        await assertLockOwned();
         await wixData.insert(
           ENTRY_RESERVATIONS_COLLECTION,
           reservation,
@@ -639,7 +814,11 @@ async function renewEntryReservations(intent, minutes) {
   }
 }
 
-async function expireStalePaymentCreatedIntentLocked(intent, now = Date.now()) {
+async function expireStalePaymentCreatedIntentLocked(
+  intent,
+  now = Date.now(),
+  assertLockOwned = noLockFence,
+) {
   if (intent.status !== "payment-created") return intent;
   const reservationResult = await wixData
     .query(ENTRY_RESERVATIONS_COLLECTION)
@@ -655,6 +834,7 @@ async function expireStalePaymentCreatedIntentLocked(intent, now = Date.now()) {
   ) {
     return intent;
   }
+  await assertLockOwned();
   await releaseEntryReservations(intent);
   const expired = {
     ...intent,
@@ -671,14 +851,18 @@ async function expireStalePaymentCreatedIntentLocked(intent, now = Date.now()) {
 
 async function expireStalePaymentCreatedIntent(intent, now = Date.now()) {
   if (intent.status !== "payment-created") return intent;
-  return withResourceLocks([`payment:${intent.paymentId}`], async () => {
+  return withResourceLocks([`payment:${intent.paymentId}`], async (lockScope) => {
     const latest = await wixData
       .get(PAYMENT_INTENTS_COLLECTION, intent._id, OPTIONS)
       .catch(() => null);
     if (!latest || latest.status !== "payment-created") {
       return latest || intent;
     }
-    return expireStalePaymentCreatedIntentLocked(latest, now);
+    return expireStalePaymentCreatedIntentLocked(
+      latest,
+      now,
+      lockScope.assertOwned,
+    );
   });
 }
 
@@ -702,7 +886,8 @@ const publicIntent = (intent) => ({
           : "Payment is awaiting authoritative confirmation.",
 });
 
-async function createPublicSignupPaymentLocked(request, session) {
+async function createPublicSignupPaymentLocked(request, session, lockScope) {
+  await lockScope.assertOwned();
   const id = intentId(session.contestantId, request.submissionId);
   const storedIntent = await wixData
     .get(PAYMENT_INTENTS_COLLECTION, id, OPTIONS)
@@ -785,6 +970,7 @@ async function createPublicSignupPaymentLocked(request, session) {
     updatedAt: new Date(),
   };
   try {
+    await lockScope.assertOwned();
     await wixData.insert(PAYMENT_INTENTS_COLLECTION, reserved, OPTIONS);
   } catch (error) {
     const concurrent = await wixData
@@ -801,9 +987,8 @@ async function createPublicSignupPaymentLocked(request, session) {
   }
 
   try {
-    await withPublicSignupCompetitionLocks(
-      selections.map(({ competitionId }) => competitionId),
-      async () => {
+    await withPublicSignupMutationLock(
+      async (mutationLockScope) => {
         const latestWorkspace = await readWorkspace();
         const latestContestant = latestWorkspace.contestants.find(
           (item) => item.id === contestant.id,
@@ -833,6 +1018,7 @@ async function createPublicSignupPaymentLocked(request, session) {
           latestWorkspace,
           latestContestant,
           latestSelections,
+          mutationLockScope.assertOwned,
         );
       },
     );
@@ -849,6 +1035,7 @@ async function createPublicSignupPaymentLocked(request, session) {
       ...(contestant.email ? { email: contestant.email } : {}),
       ...(contestant.phone ? { phone: contestant.phone } : {}),
     };
+    await lockScope.assertOwned();
     payment = await wixPayBackend.createPayment({
       items: selections.map(({ competitionId }) => ({
         name:
@@ -884,6 +1071,7 @@ async function createPublicSignupPaymentLocked(request, session) {
     updatedAt: new Date(),
   };
   try {
+    await lockScope.assertOwned();
     await updateWithRetry(PAYMENT_INTENTS_COLLECTION, ready, "store-payment-id");
   } catch (error) {
     await releaseEntryReservations(reserved).catch(() => undefined);
@@ -900,8 +1088,8 @@ export async function createPublicSignupPayment(request) {
     throw publicError("INVALID_SUBMISSION", "Start a new registration checkout.");
   }
   const session = await getSignupSession(request.signupToken);
-  return withResourceLocks([`contestant:${session.contestantId}`], () =>
-    createPublicSignupPaymentLocked(request, session),
+  return withResourceLocks([`contestant:${session.contestantId}`], (lockScope) =>
+    createPublicSignupPaymentLocked(request, session, lockScope),
   );
 }
 
@@ -917,9 +1105,8 @@ async function activeContestantIntents(contestantId) {
 }
 
 async function finalizeCashSubmission(intent) {
-  return withPublicSignupCompetitionLocks(
-    JSON.parse(intent.competitionIds),
-    async () => {
+  return withPublicSignupMutationLock(
+    async (lockScope) => {
       const latestIntent = await wixData
         .get(PAYMENT_INTENTS_COLLECTION, intent._id, OPTIONS)
         .catch(() => null);
@@ -958,6 +1145,8 @@ async function finalizeCashSubmission(intent) {
         contestant,
         JSON.parse(latestIntent.selections),
         latestIntent.submissionId,
+        Date.now(),
+        latestIntent.status === "creating",
       );
       const fingerprint = hash(
         publicSignupFingerprintPayload(
@@ -979,7 +1168,9 @@ async function finalizeCashSubmission(intent) {
         workspace,
         contestant,
         selections,
+        lockScope.assertOwned,
       );
+      await lockScope.assertOwned();
       const finalizingIntent =
         latestIntent.status === "cash-finalizing"
           ? latestIntent
@@ -1005,18 +1196,24 @@ async function finalizeCashSubmission(intent) {
       );
       let insertedRecord = false;
       for (const team of records.teams) {
+        await lockScope.assertOwned();
         insertedRecord =
           (await insertUniqueArenaRecord(COLLECTIONS.teams, team)) ||
           insertedRecord;
       }
       for (const registration of records.registrations) {
+        await lockScope.assertOwned();
         insertedRecord =
           (await insertUniqueArenaRecord(
             COLLECTIONS.registrations,
             registration,
           )) || insertedRecord;
       }
-      if (insertedRecord) await advanceOnlineRevision();
+      if (insertedRecord) {
+        await lockScope.assertOwned();
+        await advanceOnlineRevision();
+      }
+      await lockScope.assertOwned();
       const completedIntent = await updateWithRetry(
         PAYMENT_INTENTS_COLLECTION,
         {
@@ -1038,7 +1235,8 @@ async function finalizeCashSubmission(intent) {
   );
 }
 
-async function submitPublicSignupCashLocked(request, session) {
+async function submitPublicSignupCashLocked(request, session, lockScope) {
+  await lockScope.assertOwned();
   const id = intentId(session.contestantId, request.submissionId);
   const storedIntent = await wixData
     .get(PAYMENT_INTENTS_COLLECTION, id, OPTIONS)
@@ -1073,6 +1271,7 @@ async function submitPublicSignupCashLocked(request, session) {
     assertCashSubmissionHasNoActiveCardPayment(
       activeIntents.filter(({ _id }) => _id !== storedIntent._id),
     );
+    await lockScope.assertOwned();
     return finalizeCashSubmission(storedIntent);
   }
 
@@ -1119,6 +1318,7 @@ async function submitPublicSignupCashLocked(request, session) {
     updatedAt: new Date(),
   };
   try {
+    await lockScope.assertOwned();
     await wixData.insert(PAYMENT_INTENTS_COLLECTION, intent, OPTIONS);
   } catch (error) {
     const concurrent = await wixData
@@ -1137,6 +1337,7 @@ async function submitPublicSignupCashLocked(request, session) {
     }
     intent = concurrent;
   }
+  await lockScope.assertOwned();
   return finalizeCashSubmission(intent);
 }
 
@@ -1145,8 +1346,8 @@ export async function submitPublicSignupCash(request) {
     throw publicError("INVALID_SUBMISSION", "Start a new registration checkout.");
   }
   const session = await getSignupSession(request.signupToken);
-  return withResourceLocks([`contestant:${session.contestantId}`], () =>
-    submitPublicSignupCashLocked(request, session),
+  return withResourceLocks([`contestant:${session.contestantId}`], (lockScope) =>
+    submitPublicSignupCashLocked(request, session, lockScope),
   );
 }
 
@@ -1193,21 +1394,31 @@ async function insertUniqueArenaRecord(collectionId, record) {
 }
 
 async function advanceOnlineRevision() {
-  const revision = await wixData
-    .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
-    .catch(() => null);
-  await wixData.save(
-    SETTINGS_COLLECTION,
-    {
-      _id: ONLINE_REVISION_ID,
-      value: Number(revision?.value || 0) + 1,
-      updatedAt: new Date(),
+  return withResourceLocks(
+    competitionLockResources([`revision-${ONLINE_REVISION_ID}`]),
+    async (lockScope) => {
+      const revision = await wixData
+        .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
+        .catch(() => null);
+      await lockScope.assertOwned();
+      await wixData.save(
+        SETTINGS_COLLECTION,
+        {
+          _id: ONLINE_REVISION_ID,
+          value: Number(revision?.value || 0) + 1,
+          updatedAt: new Date(),
+        },
+        OPTIONS,
+      );
     },
-    OPTIONS,
   );
 }
 
-async function finalizeSuccessfulPayment(intent, transactionId) {
+async function finalizeSuccessfulPayment(
+  intent,
+  transactionId,
+  assertLockOwned = noLockFence,
+) {
   if (intent.status === "successful") return intent;
   const workspace = await readWorkspace();
   const contestant = workspace.contestants.find(
@@ -1254,12 +1465,16 @@ async function finalizeSuccessfulPayment(intent, transactionId) {
     },
   );
   for (const team of records.teams) {
+    await assertLockOwned();
     await insertUniqueArenaRecord(COLLECTIONS.teams, team);
   }
   for (const registration of records.registrations) {
+    await assertLockOwned();
     await insertUniqueArenaRecord(COLLECTIONS.registrations, registration);
   }
+  await assertLockOwned();
   await advanceOnlineRevision();
+  await assertLockOwned();
   const successfulIntent = await updateWithRetry(
     PAYMENT_INTENTS_COLLECTION,
     {
@@ -1382,15 +1597,21 @@ async function notifyOwnerAfterSuccessfulPayment(intent) {
   });
 }
 
-async function processPublicSignupPaymentUpdateLocked(event) {
+async function processPublicSignupPaymentUpdateLocked(event, paymentLockScope) {
   const paymentId = String(event?.payment?.id || "");
   if (!paymentId) return;
   await ensurePublicSignupCollections();
   const storedIntent = await findPaymentIntent(paymentId);
   if (!storedIntent) return;
-  const intent = await expireStalePaymentCreatedIntentLocked(storedIntent);
+  const intent = await expireStalePaymentCreatedIntentLocked(
+    storedIntent,
+    Date.now(),
+    paymentLockScope.assertOwned,
+  );
   if (intent.status === "successful") {
+    await paymentLockScope.assertOwned();
     await releaseEntryReservations(intent).catch(() => undefined);
+    await paymentLockScope.assertOwned();
     await notifyOwnerAfterSuccessfulPayment(intent);
     return;
   }
@@ -1403,6 +1624,7 @@ async function processPublicSignupPaymentUpdateLocked(event) {
       paymentId,
       submissionId: intent.submissionId,
     });
+    await paymentLockScope.assertOwned();
     await updateWithRetry(
       PAYMENT_INTENTS_COLLECTION,
       { ...intent, status: "fulfillment-failed", updatedAt: new Date() },
@@ -1418,6 +1640,7 @@ async function processPublicSignupPaymentUpdateLocked(event) {
         paymentId,
         submissionId: intent.submissionId,
       });
+      await paymentLockScope.assertOwned();
       await updateWithRetry(
         PAYMENT_INTENTS_COLLECTION,
         {
@@ -1439,6 +1662,7 @@ async function processPublicSignupPaymentUpdateLocked(event) {
     ) {
       return;
     }
+    await paymentLockScope.assertOwned();
     await updateWithRetry(
       PAYMENT_INTENTS_COLLECTION,
       {
@@ -1451,8 +1675,10 @@ async function processPublicSignupPaymentUpdateLocked(event) {
       "payment-status-update",
     );
     if (status === "failed" || status === "cancelled") {
+      await paymentLockScope.assertOwned();
       await releaseEntryReservations(intent);
     } else if (status === "pending") {
+      await paymentLockScope.assertOwned();
       await renewEntryReservations(intent, PENDING_RESERVATION_MINUTES);
     }
     return;
@@ -1460,14 +1686,12 @@ async function processPublicSignupPaymentUpdateLocked(event) {
 
   let successfulIntent;
   try {
-    successfulIntent = await withResourceLocks(
-      JSON.parse(intent.competitionIds).map(
-        (competitionId) => `competition:${competitionId}`,
-      ),
-      () =>
+    successfulIntent = await withPublicSignupMutationLock(
+      (mutationLockScope) =>
         finalizeSuccessfulPayment(
           intent,
           String(event.transactionId || ""),
+          mutationLockScope.assertOwned,
         ),
     );
   } catch (error) {
@@ -1481,6 +1705,7 @@ async function processPublicSignupPaymentUpdateLocked(event) {
       .get(PAYMENT_INTENTS_COLLECTION, intent._id, OPTIONS)
       .catch(() => null);
     if (latestIntent?.status !== "successful") {
+      await paymentLockScope.assertOwned();
       await updateWithRetry(
         PAYMENT_INTENTS_COLLECTION,
         {
@@ -1494,6 +1719,7 @@ async function processPublicSignupPaymentUpdateLocked(event) {
     return;
   }
 
+  await paymentLockScope.assertOwned();
   await notifyOwnerAfterSuccessfulPayment(successfulIntent);
 }
 
@@ -1501,7 +1727,7 @@ export async function processPublicSignupPaymentUpdate(event) {
   const paymentId = String(event?.payment?.id || "");
   if (!paymentId) return;
   await ensurePublicSignupCollections();
-  await withResourceLocks([`payment:${paymentId}`], () =>
-    processPublicSignupPaymentUpdateLocked(event),
+  await withResourceLocks([`payment:${paymentId}`], (lockScope) =>
+    processPublicSignupPaymentUpdateLocked(event, lockScope),
   );
 }

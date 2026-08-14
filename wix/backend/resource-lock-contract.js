@@ -1,172 +1,489 @@
-// Quota-safe distributed resource lock primitives.
-//
-// The previous implementation looped up to 20 times at a fixed 250ms interval
-// and, on every failed insert, issued an extra get plus a possible remove. Under
-// repeated live Workspace saves that produced roughly 40 Wix Data requests in
-// ~5 seconds per contended save, which tripped WDE0014 (requests-per-minute
-// quota) and the "Timed out waiting for a public signup resource lock" error.
-//
-// These helpers are intentionally pure and dependency-injected so they can be
-// unit tested without the Wix runtime. The only atomic primitive we rely on is
-// an insert against a deterministic `_id` (unique-key compare-and-set). Every
-// lock carries an owner token so a release only ever deletes the record it
-// created and can never delete a successor's valid lock.
+const wait = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export const DEFAULT_LOCK_LEASE_MS = 30 * 1000;
-export const DEFAULT_LOCK_MAX_ATTEMPTS = 5;
-export const DEFAULT_LOCK_BASE_DELAY_MS = 120;
-export const DEFAULT_LOCK_MAX_DELAY_MS = 750;
+export const DEFAULT_RESOURCE_LOCK_OPTIONS = Object.freeze({
+  leaseMs: 15000,
+  renewIntervalMs: 4000,
+  waitTimeoutMs: 20000,
+  retryDelayMs: 500,
+  maxRetryDelayMs: 3000,
+  retryJitterRatio: 0.2,
+  claimSettleMs: 50,
+  ownershipCheckIntervalMs: 1000,
+});
 
-export class ResourceLockError extends Error {
-  constructor(
-    message,
-    {
-      code = "RESOURCE_LOCK_TIMEOUT",
-      resource,
-      attempts,
-      reason,
-    } = {},
+export const competitionLockResources = (resources) =>
+  resources.map((resource) => `competition:${resource}`);
+
+const expiresAtTime = (lock) => {
+  const value =
+    lock?.expiresAt instanceof Date
+      ? lock.expiresAt.getTime()
+      : Number(lock?.expiresAt);
+  return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
+};
+
+const uniqueSortedResources = (resources) =>
+  [...new Set(resources.map((resource) => String(resource)))].sort();
+
+const errorMessage = (error) =>
+  error instanceof Error ? error.message : String(error);
+
+export class ResourceLockTimeoutError extends Error {
+  constructor({ context, waitedMs, holderLeaseRemainingMs }) {
+    super(
+      `Timed out waiting for an arena resource lock ` +
+        `(resource=${context.type}, lock=${context.lockId}, ` +
+        `waitedMs=${waitedMs}, holderLeaseRemainingMs=${holderLeaseRemainingMs}).`,
+    );
+    this.name = "ResourceLockTimeoutError";
+    this.code = "RESOURCE_LOCK_TIMEOUT";
+    this.resourceType = context.type;
+    this.lockId = context.lockId;
+    this.waitedMs = waitedMs;
+    this.holderLeaseRemainingMs = holderLeaseRemainingMs;
+  }
+}
+
+export class ResourceLockOwnershipError extends Error {
+  constructor(context, reason = "ownership changed") {
+    super(
+      `Arena resource lock ownership was lost ` +
+        `(resource=${context.type}, lock=${context.lockId}, reason=${reason}).`,
+    );
+    this.name = "ResourceLockOwnershipError";
+    this.code = "RESOURCE_LOCK_OWNERSHIP_LOST";
+    this.resourceType = context.type;
+    this.lockId = context.lockId;
+  }
+}
+
+export class ResourceLockOrderError extends Error {
+  constructor(context) {
+    super(
+      `Arena resource locks must be acquired in deterministic order ` +
+        `(resource=${context.type}, lock=${context.lockId}).`,
+    );
+    this.name = "ResourceLockOrderError";
+    this.code = "RESOURCE_LOCK_ORDER_VIOLATION";
+    this.resourceType = context.type;
+    this.lockId = context.lockId;
+  }
+}
+
+export function createResourceLockManager({
+  store,
+  idForResource,
+  createOwnerToken,
+  describeResource = (_resource, id) => ({
+    type: "resource",
+    lockId: String(id).slice(0, 12),
+  }),
+  now = () => Date.now(),
+  sleep = wait,
+  random = Math.random,
+  schedule = (callback, milliseconds) => setTimeout(callback, milliseconds),
+  cancel = (timer) => clearTimeout(timer),
+  options = {},
+  onDiagnostic = () => undefined,
+}) {
+  const settings = { ...DEFAULT_RESOURCE_LOCK_OPTIONS, ...options };
+
+  if (settings.waitTimeoutMs <= settings.leaseMs) {
+    throw new Error("Resource lock waitTimeoutMs must exceed leaseMs.");
+  }
+  if (
+    settings.renewIntervalMs <= 0 ||
+    settings.renewIntervalMs >= settings.leaseMs
   ) {
-    super(message);
-    this.name = "ResourceLockError";
-    this.code = code;
-    this.resource = resource;
-    this.attempts = attempts;
-    this.reason = reason;
+    throw new Error("Resource lock renewIntervalMs must be below leaseMs.");
   }
-}
-
-export function orderedLockResources(resources) {
-  return [...new Set(resources)].sort();
-}
-
-function toMillis(value) {
-  if (value instanceof Date) return value.getTime();
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const parsed = new Date(value).getTime();
-    return Number.isNaN(parsed) ? 0 : parsed;
+  if (
+    settings.retryDelayMs <= 0 ||
+    settings.maxRetryDelayMs < settings.retryDelayMs
+  ) {
+    throw new Error(
+      "Resource lock maxRetryDelayMs must be at least retryDelayMs.",
+    );
   }
-  return 0;
-}
-
-export function lockIsExpired(record, now) {
-  if (!record) return true;
-  return toMillis(record.expiresAt) <= now;
-}
-
-// Exponential backoff capped at maxMs, with 50%-100% jitter to avoid lockstep
-// retries from concurrent invocations hammering the quota in unison.
-export function computeLockBackoffMs(
-  attempt,
-  {
-    baseMs = DEFAULT_LOCK_BASE_DELAY_MS,
-    maxMs = DEFAULT_LOCK_MAX_DELAY_MS,
-    random,
-  } = {},
-) {
-  const exponential = Math.min(maxMs, baseMs * 2 ** (attempt - 1));
-  const roll = typeof random === "function" ? random() : Math.random();
-  return Math.round(exponential * (0.5 + 0.5 * roll));
-}
-
-async function safeGet(client, id) {
-  try {
-    return await client.get(id);
-  } catch {
-    return null;
+  if (
+    settings.retryJitterRatio < 0 ||
+    settings.retryJitterRatio > 1
+  ) {
+    throw new Error("Resource lock retryJitterRatio must be between 0 and 1.");
   }
-}
+  if (
+    settings.ownershipCheckIntervalMs < 0 ||
+    settings.ownershipCheckIntervalMs >= settings.leaseMs
+  ) {
+    throw new Error(
+      "Resource lock ownershipCheckIntervalMs must be below leaseMs.",
+    );
+  }
 
-// Reclaim an expired lock without ever deleting a successor. We re-read the
-// record immediately before removing it and only remove when it is still the
-// same expired holder we observed. Ownership is then re-established through the
-// atomic insert on the next loop iteration, never through a blind overwrite.
-async function reclaimExpiredLock(client, id, observed) {
-  const current = await safeGet(client, id);
-  if (!current) return;
-  if (current.owner !== observed.owner) return;
-  if (!lockIsExpired(current, client.now())) return;
-  await Promise.resolve(client.remove(id)).catch(() => undefined);
-}
+  const contextFor = (resource, id = idForResource(resource)) =>
+    describeResource(resource, id);
 
-export async function acquireResourceLock(client, resource, options = {}) {
-  const leaseMs = options.leaseMs ?? DEFAULT_LOCK_LEASE_MS;
-  const maxAttempts = options.maxAttempts ?? DEFAULT_LOCK_MAX_ATTEMPTS;
-  const baseMs = options.baseDelayMs ?? DEFAULT_LOCK_BASE_DELAY_MS;
-  const maxMs = options.maxDelayMs ?? DEFAULT_LOCK_MAX_DELAY_MS;
-  const id = client.recordId(resource);
-  const owner = client.newOwner();
-  let reason = "unknown";
+  const emit = (event, details) => onDiagnostic({ event, ...details });
+  const jitteredRetryDelay = (delayMs, maximumMs) =>
+    Math.min(
+      Math.max(
+        1,
+        Math.round(
+          delayMs *
+            (1 + (random() * 2 - 1) * settings.retryJitterRatio),
+        ),
+      ),
+      maximumMs,
+    );
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const expiresAt = new Date(client.now() + leaseMs);
+  async function removeExpiredLock(expected) {
     try {
-      await client.insert({
-        _id: id,
-        resource,
-        paymentId: resource,
-        owner,
-        expiresAt,
-      });
-      return { id, owner, resource, expiresAt: expiresAt.getTime() };
-    } catch {
-      const existing = await safeGet(client, id);
-      if (!existing) {
-        reason = "transient-insert-failure";
-      } else if (lockIsExpired(existing, client.now())) {
-        reason = "expired-holder";
-        await reclaimExpiredLock(client, id, existing);
+      await store.remove(expected);
+    } catch (error) {
+      const current = await store.get(expected.id);
+      if (
+        !current ||
+        current.ownerToken !== expected.ownerToken ||
+        expiresAtTime(current) > expiresAtTime(expected)
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async function acquireLock(scope, resource, startedAt) {
+    const id = idForResource(resource);
+    let lastHolder = null;
+    let pollOnly = false;
+    let retryDelayMs = settings.retryDelayMs;
+
+    while (now() - startedAt < settings.waitTimeoutMs) {
+      if (pollOnly) {
+        const existing = await store.get(id);
+        if (!existing) {
+          pollOnly = false;
+        } else if (existing.ownerToken === scope.ownerToken) {
+          return existing;
+        } else {
+          lastHolder = existing;
+          if (expiresAtTime(existing) <= now()) {
+            await removeExpiredLock(existing);
+            pollOnly = false;
+          }
+        }
       } else {
-        reason = "active-holder";
+        const candidate = {
+          id,
+          resource,
+          ownerToken: scope.ownerToken,
+          expiresAt: now() + settings.leaseMs,
+        };
+        try {
+          await store.insert(candidate);
+          if (settings.claimSettleMs > 0) {
+            await sleep(settings.claimSettleMs);
+          }
+          const confirmed = await store.get(id);
+          if (confirmed?.ownerToken === scope.ownerToken) {
+            return confirmed;
+          }
+          lastHolder = confirmed;
+          pollOnly =
+            Boolean(confirmed) && expiresAtTime(confirmed) > now();
+          emit("claim-displaced-before-use", {
+            resource: contextFor(resource, id),
+          });
+        } catch (insertError) {
+          const existing = await store.get(id);
+          if (!existing) throw insertError;
+          if (existing.ownerToken === scope.ownerToken) return existing;
+          lastHolder = existing;
+          if (expiresAtTime(existing) <= now()) {
+            await removeExpiredLock(existing);
+          } else {
+            pollOnly = true;
+          }
+        }
+      }
+
+      if (!pollOnly) continue;
+      const remainingMs = settings.waitTimeoutMs - (now() - startedAt);
+      if (remainingMs > 0) {
+        await sleep(
+          Math.min(
+            jitteredRetryDelay(
+              retryDelayMs,
+              settings.maxRetryDelayMs,
+            ),
+            remainingMs,
+          ),
+        );
+        retryDelayMs = Math.min(
+          retryDelayMs * 2,
+          settings.maxRetryDelayMs,
+        );
       }
     }
 
-    if (typeof client.onContended === "function") {
-      client.onContended({ resource, attempt, maxAttempts, reason });
-    }
+    const waitedMs = now() - startedAt;
+    const holderExpiresAt = expiresAtTime(lastHolder);
+    throw new ResourceLockTimeoutError({
+      context: contextFor(resource, id),
+      waitedMs,
+      holderLeaseRemainingMs: Number.isFinite(holderExpiresAt)
+        ? Math.max(0, Math.ceil(holderExpiresAt - now()))
+        : 0,
+    });
+  }
 
-    if (attempt < maxAttempts) {
-      await client.wait(
-        computeLockBackoffMs(attempt, {
-          baseMs,
-          maxMs,
-          random: client.random,
-        }),
+  async function assertLockOwned(scope, lock) {
+    const current = await store.get(lock.id);
+    if (current?.ownerToken !== scope.ownerToken) {
+      throw new ResourceLockOwnershipError(
+        contextFor(lock.resource, lock.id),
       );
     }
+    if (expiresAtTime(current) <= now()) {
+      throw new ResourceLockOwnershipError(
+        contextFor(lock.resource, lock.id),
+        "lease expired",
+      );
+    }
+    scope.locks.set(lock.resource, current);
+    scope.confirmedAt.set(lock.resource, now());
   }
 
-  throw new ResourceLockError(
-    `Timed out acquiring lock for resource "${resource}" after ${maxAttempts} attempts (${reason}).`,
-    { resource, attempts: maxAttempts, reason },
-  );
-}
-
-export async function releaseResourceLock(client, lock) {
-  if (!lock || !lock.id) return;
-  const current = await safeGet(client, lock.id);
-  if (!current) return;
-  if (current.owner !== lock.owner) return;
-  await Promise.resolve(client.remove(lock.id)).catch(() => undefined);
-}
-
-export async function withResourceLocks(
-  client,
-  resources,
-  callback,
-  options = {},
-) {
-  const ordered = orderedLockResources(resources);
-  const acquired = [];
-  try {
-    for (const resource of ordered) {
-      acquired.push(await acquireResourceLock(client, resource, options));
-    }
-    return await callback();
-  } finally {
-    for (const lock of acquired.reverse()) {
-      await releaseResourceLock(client, lock);
+  async function releaseLock(scope, lock) {
+    try {
+      await store.remove(lock);
+    } catch (error) {
+      const afterFailure = await store.get(lock.id);
+      if (!afterFailure || afterFailure.ownerToken !== scope.ownerToken) {
+        if (afterFailure) {
+          emit("release-skipped-not-owner", {
+            resource: contextFor(lock.resource, lock.id),
+          });
+        }
+        return;
+      }
+      throw error;
     }
   }
+
+  const queueScopeOperation = (scope, operation) => {
+    const result = scope.operation.then(operation, operation);
+    scope.operation = result.catch(() => undefined);
+    return result;
+  };
+
+  async function renewScope(scope) {
+    const locks = [...scope.locks.values()].sort((left, right) =>
+      left.resource.localeCompare(right.resource),
+    );
+    for (const lock of locks) {
+      const renewalStartedAt = now();
+      let renewed;
+      try {
+        renewed = await store.update({
+          ...lock,
+          expiresAt: renewalStartedAt + settings.leaseMs,
+          mustBeValidAt: renewalStartedAt,
+        });
+      } catch (error) {
+        const current = await store.get(lock.id);
+        if (
+          current?.ownerToken !== scope.ownerToken ||
+          expiresAtTime(current) <= now()
+        ) {
+          throw new ResourceLockOwnershipError(
+            contextFor(lock.resource, lock.id),
+            "lease could not be renewed",
+          );
+        }
+        throw error;
+      }
+      if (renewed?.ownerToken !== scope.ownerToken) {
+        throw new ResourceLockOwnershipError(
+          contextFor(lock.resource, lock.id),
+          "renewal was displaced",
+        );
+      }
+      scope.locks.set(lock.resource, renewed);
+      scope.confirmedAt.set(lock.resource, now());
+    }
+  }
+
+  const scheduleRenewal = (scope, delay = settings.renewIntervalMs) => {
+    if (scope.stopping || scope.timer || scope.locks.size === 0) return;
+    scope.timer = schedule(() => {
+      scope.timer = null;
+      const renewal = queueScopeOperation(scope, () => renewScope(scope));
+      scope.renewal = renewal.then(
+        () => {
+          scope.renewalFailed = false;
+          scope.renewalRetryDelayMs = settings.retryDelayMs;
+        },
+        (error) => {
+          scope.renewalFailed = true;
+          if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") {
+            scope.lostError = error;
+          }
+          emit("renewal-failed", {
+            message: errorMessage(error),
+          });
+        },
+      ).finally(() => {
+        scope.renewal = null;
+        let nextDelayMs = settings.renewIntervalMs;
+        if (scope.renewalFailed) {
+          nextDelayMs = jitteredRetryDelay(
+            scope.renewalRetryDelayMs,
+            Math.min(
+              settings.maxRetryDelayMs,
+              settings.renewIntervalMs,
+            ),
+          );
+          scope.renewalRetryDelayMs = Math.min(
+            scope.renewalRetryDelayMs * 2,
+            settings.maxRetryDelayMs,
+          );
+        }
+        scheduleRenewal(scope, nextDelayMs);
+      });
+    }, delay);
+  };
+
+  async function stopRenewal(scope) {
+    scope.stopping = true;
+    if (scope.timer) {
+      cancel(scope.timer);
+      scope.timer = null;
+    }
+    if (scope.renewal) await scope.renewal;
+    await scope.operation;
+  }
+
+  async function assertScopeOwned(scope) {
+    if (scope.lostError) throw scope.lostError;
+    await queueScopeOperation(scope, async () => {
+      for (const lock of scope.locks.values()) {
+        const checkedAt = now();
+        const lastConfirmedAt = scope.confirmedAt.get(lock.resource) || 0;
+        if (
+          settings.ownershipCheckIntervalMs === 0 ||
+          checkedAt - lastConfirmedAt >= settings.ownershipCheckIntervalMs ||
+          expiresAtTime(lock) <= checkedAt
+        ) {
+          await assertLockOwned(scope, lock);
+        }
+      }
+    });
+    if (scope.lostError) throw scope.lostError;
+  }
+
+  async function releaseLocks(scope, locks) {
+    let firstError = null;
+    for (const lock of [...locks].reverse()) {
+      try {
+        await queueScopeOperation(scope, () =>
+          releaseLock(scope, scope.locks.get(lock.resource) || lock),
+        );
+      } catch (error) {
+        firstError ||= error;
+        emit("release-failed", {
+          resource: contextFor(lock.resource, lock.id),
+          message: errorMessage(error),
+        });
+      } finally {
+        scope.locks.delete(lock.resource);
+        scope.confirmedAt.delete(lock.resource);
+      }
+    }
+    if (firstError) throw firstError;
+  }
+
+  async function runInScope(scope, resources, callback, root = false) {
+    const requested = uniqueSortedResources(resources);
+    const missing = requested.filter((resource) => !scope.locks.has(resource));
+    const held = [...scope.locks.keys()].sort();
+    const highestHeld = held[held.length - 1];
+    if (highestHeld && missing.some((resource) => resource < highestHeld)) {
+      const resource = missing.find((item) => item < highestHeld);
+      throw new ResourceLockOrderError(contextFor(resource));
+    }
+
+    const acquiredHere = [];
+    let result;
+    let callbackError = null;
+    let ownershipError = null;
+    let cleanupError = null;
+    const acquisitionStartedAt = now();
+
+    try {
+      for (const resource of missing) {
+        const lock = await acquireLock(scope, resource, acquisitionStartedAt);
+        scope.locks.set(resource, lock);
+        scope.confirmedAt.set(resource, now());
+        acquiredHere.push(lock);
+        scheduleRenewal(scope);
+      }
+      await assertScopeOwned(scope);
+      result = await callback(scope.api);
+    } catch (error) {
+      callbackError = error;
+    }
+
+    if (!callbackError) {
+      try {
+        await assertScopeOwned(scope);
+      } catch (error) {
+        ownershipError = error;
+      }
+    }
+    if (root) await stopRenewal(scope);
+    try {
+      await releaseLocks(scope, acquiredHere);
+    } catch (error) {
+      cleanupError = error;
+    }
+
+    if (callbackError) {
+      if (cleanupError) {
+        emit("callback-and-cleanup-failed", {
+          callbackMessage: errorMessage(callbackError),
+          cleanupMessage: errorMessage(cleanupError),
+        });
+      }
+      throw callbackError;
+    }
+    if (ownershipError) throw ownershipError;
+    if (cleanupError) throw cleanupError;
+    return result;
+  }
+
+  return {
+    run(resources, callback) {
+      const scope = {
+        ownerToken: createOwnerToken(),
+        locks: new Map(),
+        confirmedAt: new Map(),
+        operation: Promise.resolve(),
+        renewal: null,
+        renewalFailed: false,
+        renewalRetryDelayMs: settings.retryDelayMs,
+        lostError: null,
+        timer: null,
+        stopping: false,
+        api: null,
+      };
+      scope.api = {
+        run: (nestedResources, nestedCallback) =>
+          runInScope(scope, nestedResources, nestedCallback),
+        assertOwned: () => assertScopeOwned(scope),
+      };
+      return runInScope(scope, resources, callback, true);
+    },
+  };
 }

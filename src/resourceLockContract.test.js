@@ -2,201 +2,317 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_LOCK_MAX_ATTEMPTS,
-  ResourceLockError,
-  acquireResourceLock,
-  computeLockBackoffMs,
-  lockIsExpired,
-  orderedLockResources,
-  releaseResourceLock,
-  withResourceLocks,
+  DEFAULT_RESOURCE_LOCK_OPTIONS,
+  ResourceLockOwnershipError,
+  competitionLockResources,
+  createResourceLockManager,
 } from "../wix/backend/resource-lock-contract.js";
 
-function createClient(overrides = {}) {
-  const store = new Map();
-  const ops = { insert: 0, get: 0, remove: 0, wait: 0 };
-  const waits = [];
-  let clock = overrides.startClock ?? 0;
-  let ownerSequence = 0;
+const delay = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-  return {
-    store,
-    ops,
-    waits,
-    dataOps: () => ops.insert + ops.get + ops.remove,
-    seed: (id, record) => store.set(id, { _id: id, ...record }),
-    insert: async (record) => {
-      ops.insert += 1;
-      if (store.has(record._id)) {
-        throw new Error("Insert failed: item already exists.");
-      }
-      store.set(record._id, { ...record });
-      return { ...record };
-    },
-    get: async (id) => {
-      ops.get += 1;
-      const record = store.get(id);
-      return record ? { ...record } : null;
-    },
-    remove: async (id) => {
-      ops.remove += 1;
-      store.delete(id);
-    },
-    now: () => clock,
-    wait: async (milliseconds) => {
-      ops.wait += 1;
-      waits.push(milliseconds);
-      clock += milliseconds;
-    },
-    random: () => 0,
-    newOwner: () => `owner-${++ownerSequence}`,
-    recordId: (resource) => `lock:${resource}`,
-    ...overrides,
-  };
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
+
+class MemoryLockStore {
+  constructor() {
+    this.items = new Map();
+    this.requests = { get: 0, insert: 0, remove: 0, update: 0 };
+    this.beforeRemove = null;
+  }
+
+  copy(lock) {
+    return lock ? { ...lock } : null;
+  }
+
+  async insert(lock) {
+    this.requests.insert += 1;
+    if (this.items.has(lock.id)) throw new Error("Lock already exists.");
+    this.items.set(lock.id, this.copy(lock));
+    return this.copy(lock);
+  }
+
+  async get(id) {
+    this.requests.get += 1;
+    return this.copy(this.items.get(id));
+  }
+
+  async update(lock) {
+    this.requests.update += 1;
+    const current = this.items.get(lock.id);
+    if (
+      !current ||
+      current.ownerToken !== lock.ownerToken ||
+      current.expiresAt <= lock.mustBeValidAt
+    ) {
+      throw new Error("Lock update condition failed.");
+    }
+    const renewed = { ...lock };
+    delete renewed.mustBeValidAt;
+    this.items.set(lock.id, this.copy(renewed));
+    return this.copy(renewed);
+  }
+
+  async remove(lock) {
+    this.requests.remove += 1;
+    if (this.beforeRemove) await this.beforeRemove(lock.id);
+    const current = this.items.get(lock.id);
+    if (
+      !current ||
+      current.ownerToken !== lock.ownerToken ||
+      current.expiresAt > lock.expiresAt
+    ) {
+      throw new Error("Lock removal condition failed.");
+    }
+    this.items.delete(lock.id);
+    return this.copy(current);
+  }
 }
 
-describe("quota-safe Wix resource lock mirror", () => {
-  it("deduplicates and orders lock acquisition", () => {
-    expect(orderedLockResources(["b", "a", "b", "c"])).toEqual([
-      "a",
-      "b",
-      "c",
-    ]);
+let ownerSequence = 0;
+
+const lockManager = (store, options = {}) =>
+  createResourceLockManager({
+    store,
+    idForResource: (resource) => `lock:${resource}`,
+    createOwnerToken: () => `owner-${(ownerSequence += 1)}`,
+    describeResource: (resource, id) => ({
+      type: resource.split(":")[0],
+      lockId: id,
+    }),
+    options: {
+      leaseMs: 80,
+      renewIntervalMs: 20,
+      waitTimeoutMs: 240,
+      retryDelayMs: 3,
+      maxRetryDelayMs: 12,
+      retryJitterRatio: 0,
+      claimSettleMs: 1,
+      ownershipCheckIntervalMs: 0,
+      ...options,
+    },
   });
 
-  it("recognizes expiry and keeps jittered backoff bounded", () => {
-    expect(lockIsExpired({ expiresAt: new Date(500) }, 1000)).toBe(true);
-    expect(lockIsExpired({ expiresAt: new Date(2000) }, 1000)).toBe(false);
-    expect(
-      computeLockBackoffMs(1, {
-        baseMs: 120,
-        maxMs: 750,
-        random: () => 0,
+describe("quota-safe renewable Wix resource locks", () => {
+  it("rejects the original 60-second lease and five-second wait mismatch", () => {
+    expect(() =>
+      createResourceLockManager({
+        store: new MemoryLockStore(),
+        idForResource: String,
+        createOwnerToken: () => "owner",
+        options: {
+          leaseMs: 60_000,
+          renewIntervalMs: 20_000,
+          waitTimeoutMs: 5_000,
+        },
       }),
-    ).toBe(60);
-    expect(
-      computeLockBackoffMs(10, {
-        baseMs: 120,
-        maxMs: 750,
-        random: () => 1,
-      }),
-    ).toBe(750);
+    ).toThrow(/waitTimeoutMs must exceed leaseMs/);
+    expect(DEFAULT_RESOURCE_LOCK_OPTIONS.waitTimeoutMs).toBeGreaterThan(
+      DEFAULT_RESOURCE_LOCK_OPTIONS.leaseMs,
+    );
   });
 
-  it("acquires an uncontended resource with one Wix Data write", async () => {
-    const client = createClient();
-    const lock = await acquireResourceLock(client, "competition:one");
+  it("acquires and releases an uncontended lock", async () => {
+    const store = new MemoryLockStore();
+    const manager = lockManager(store);
 
-    expect(lock.owner).toBeTruthy();
-    expect(client.ops.insert).toBe(1);
-    expect(client.ops.get).toBe(0);
-    expect(client.ops.wait).toBe(0);
+    await expect(
+      manager.run(["competition:event-1"], async () => "saved"),
+    ).resolves.toBe("saved");
+    expect(store.items.size).toBe(0);
   });
 
-  it("uses a small bounded request count instead of 250ms polling", async () => {
-    const client = createClient();
-    client.seed("lock:competition:one", {
-      owner: "active-holder",
-      expiresAt: new Date(10 * 60 * 1000),
+  it("waits for an active owner and then acquires", async () => {
+    const store = new MemoryLockStore();
+    const manager = lockManager(store);
+    const entered = deferred();
+    const release = deferred();
+    const order = [];
+
+    const first = manager.run(["competition:event-1"], async () => {
+      order.push("first");
+      entered.resolve();
+      await release.promise;
+    });
+    await entered.promise;
+    const second = manager.run(["competition:event-1"], async () => {
+      order.push("second");
+    });
+
+    await delay(15);
+    expect(order).toEqual(["first"]);
+    release.resolve();
+    await Promise.all([first, second]);
+    expect(order).toEqual(["first", "second"]);
+  });
+
+  it("keeps contention within the Wix Data request budget", async () => {
+    const store = new MemoryLockStore();
+    let clock = 0;
+    const sleeps = [];
+    store.items.set("lock:competition:workspace", {
+      id: "lock:competition:workspace",
+      resource: "competition:workspace",
+      ownerToken: "active-owner",
+      expiresAt: 100_000,
+    });
+    const manager = createResourceLockManager({
+      store,
+      idForResource: (resource) => `lock:${resource}`,
+      createOwnerToken: () => "waiting-owner",
+      now: () => clock,
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+        clock += milliseconds;
+      },
+      random: () => 1,
+      options: {
+        ...DEFAULT_RESOURCE_LOCK_OPTIONS,
+        claimSettleMs: 0,
+      },
     });
 
     await expect(
-      acquireResourceLock(client, "competition:one"),
-    ).rejects.toMatchObject({
-      name: "ResourceLockError",
-      attempts: DEFAULT_LOCK_MAX_ATTEMPTS,
-      resource: "competition:one",
-    });
-    expect(client.dataOps()).toBeLessThanOrEqual(15);
-    expect(client.ops.wait).toBe(DEFAULT_LOCK_MAX_ATTEMPTS - 1);
-    expect(client.waits).not.toContain(250);
+      manager.run(["competition:workspace"], async () => undefined),
+    ).rejects.toMatchObject({ code: "RESOURCE_LOCK_TIMEOUT" });
+    expect(store.requests.insert).toBe(1);
+    expect(sleeps.slice(0, 4)).toEqual([600, 1200, 2400, 3000]);
+    expect(store.requests.insert + store.requests.get).toBeLessThanOrEqual(12);
   });
 
-  it("reclaims an expired holder and takes ownership", async () => {
-    const client = createClient({ startClock: 1000 });
-    client.seed("lock:resource", {
-      owner: "stale-owner",
-      expiresAt: new Date(500),
+  it("renews long callbacks so consecutive saves never overlap", async () => {
+    const store = new MemoryLockStore();
+    const manager = lockManager(store, {
+      leaseMs: 40,
+      renewIntervalMs: 10,
+      waitTimeoutMs: 220,
+      retryDelayMs: 2,
     });
+    let active = 0;
+    let maximumActive = 0;
+    const save = (milliseconds) =>
+      manager.run(["competition:arena-workspace-mutation"], async () => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await delay(milliseconds);
+        active -= 1;
+      });
 
-    const lock = await acquireResourceLock(client, "resource");
-
-    expect(lock.owner).not.toBe("stale-owner");
-    expect(client.store.get("lock:resource").owner).toBe(lock.owner);
+    const first = save(90);
+    await delay(4);
+    const second = save(5);
+    await Promise.all([first, second]);
+    expect(maximumActive).toBe(1);
+    expect(store.requests.update).toBeGreaterThan(0);
   });
 
-  it("does not remove a successor observed during expired reclaim", async () => {
-    let reads = 0;
-    let removed = false;
-    const client = createClient({
-      startClock: 1000,
-      insert: async () => {
-        throw new Error("held");
-      },
-      get: async (id) => {
-        reads += 1;
-        return reads === 1
-          ? {
-              _id: id,
-              owner: "stale-owner",
-              expiresAt: new Date(500),
-            }
-          : {
-              _id: id,
-              owner: "successor",
-              expiresAt: new Date(10 * 60 * 1000),
-            };
-      },
-      remove: async () => {
-        removed = true;
-      },
+  it("prevents an expired cleanup from deleting a successor", async () => {
+    const store = new MemoryLockStore();
+    const lockId = "lock:competition:event-1";
+    const successor = {
+      id: lockId,
+      resource: "competition:event-1",
+      ownerToken: "successor",
+      expiresAt: Date.now() + 1000,
+    };
+    store.items.set(lockId, {
+      id: lockId,
+      resource: "competition:event-1",
+      ownerToken: "expired-owner",
+      expiresAt: Date.now() - 1,
     });
+    store.beforeRemove = async () => {
+      store.beforeRemove = null;
+      store.items.set(lockId, { ...successor });
+    };
 
     await expect(
-      acquireResourceLock(client, "resource", { maxAttempts: 2 }),
-    ).rejects.toBeInstanceOf(ResourceLockError);
-    expect(removed).toBe(false);
+      lockManager(store, {
+        leaseMs: 30,
+        renewIntervalMs: 8,
+        waitTimeoutMs: 80,
+      }).run(["competition:event-1"], async () => undefined),
+    ).rejects.toMatchObject({ code: "RESOURCE_LOCK_TIMEOUT" });
+    expect(store.items.get(lockId)).toEqual(successor);
   });
 
-  it("releases only the caller's current ownership", async () => {
-    const client = createClient();
-    const lock = await acquireResourceLock(client, "resource");
-    client.store.set(lock.id, {
-      _id: lock.id,
-      owner: "successor",
-      expiresAt: new Date(10 * 60 * 1000),
-    });
-
-    await releaseResourceLock(client, lock);
-
-    expect(client.store.get(lock.id).owner).toBe("successor");
-  });
-
-  it("releases all locks when the protected callback fails", async () => {
-    const client = createClient();
+  it("stops mutation when ownership is lost", async () => {
+    const store = new MemoryLockStore();
+    const manager = lockManager(store);
+    let mutated = false;
 
     await expect(
-      withResourceLocks(client, ["b", "a"], async () => {
-        expect(client.store.has("lock:a")).toBe(true);
-        expect(client.store.has("lock:b")).toBe(true);
-        throw new Error("callback failed");
+      manager.run(["competition:event-1"], async (scope) => {
+        store.items.set("lock:competition:event-1", {
+          id: "lock:competition:event-1",
+          resource: "competition:event-1",
+          ownerToken: "successor",
+          expiresAt: Date.now() + 1000,
+        });
+        await scope.assertOwned();
+        mutated = true;
       }),
-    ).rejects.toThrow("callback failed");
-    expect(client.store.size).toBe(0);
+    ).rejects.toBeInstanceOf(ResourceLockOwnershipError);
+    expect(mutated).toBe(false);
   });
 
-  it("keeps the Wix backend integration aligned with the contract", () => {
-    const backend = readFileSync(
+  it("serializes Workspace and signup on one mutation barrier", async () => {
+    const store = new MemoryLockStore();
+    const manager = lockManager(store);
+    const resource = competitionLockResources([
+      "arena-workspace-mutation",
+    ])[0];
+    const entered = deferred();
+    const release = deferred();
+    const order = [];
+
+    const workspaceSave = manager.run([resource], async () => {
+      order.push("workspace");
+      entered.resolve();
+      await release.promise;
+    });
+    await entered.promise;
+    const signup = manager.run([resource], async () => {
+      order.push("signup");
+    });
+
+    await delay(15);
+    expect(order).toEqual(["workspace"]);
+    release.resolve();
+    await Promise.all([workspaceSave, signup]);
+    expect(order).toEqual(["workspace", "signup"]);
+  });
+
+  it("wires every mirrored mutation flow to the shared barrier", () => {
+    const payments = readFileSync(
       new URL("../wix/backend/public-signup-payments.js", import.meta.url),
       "utf8",
     );
-
-    expect(backend).toContain(
-      "withResourceLocks as withResourceLocksContract",
+    const backend = readFileSync(
+      new URL("../wix/backend/arena-data.web.js", import.meta.url),
+      "utf8",
     );
-    expect(backend).toContain('{ key: "owner", displayName: "Owner Token"');
-    expect(backend).toContain("export async function withWorkspaceLocks");
-    expect(backend).not.toContain("attempt <= 20");
-    expect(backend).not.toContain("await wait(250)");
+
+    expect(backend).toMatch(
+      /withFullWorkspaceLocks = \(callback\) =>\s*withWorkspaceLocks\(\[WORKSPACE_MUTATION_LOCK_RESOURCE\], callback\)/,
+    );
+    expect(backend).toContain(
+      "await assertWorkspacePreservesPublicSignupReservations(next)",
+    );
+    expect(backend).toContain("lockScope.assertOwned");
+    expect(backend).not.toContain("slotDuration = 10 * 60 * 1000");
+    expect(payments).toMatch(
+      /withPublicSignupMutationLock = \(callback\) =>\s*withWorkspaceLocks\(\[WORKSPACE_MUTATION_LOCK_RESOURCE\], callback\)/,
+    );
+    expect(payments).toContain("mutationLockScope.assertOwned");
+    expect(payments).toContain("paymentLockScope.assertOwned");
+    expect(payments).toContain("condition:");
+    expect(payments).not.toContain("attempt <= 20");
+    expect(payments).not.toContain("await wait(250)");
   });
 });
