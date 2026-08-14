@@ -246,6 +246,8 @@ main { grid-column: 2; min-width: 0; }
 .waiver-load-message { margin-top: 5px !important; color: #9a4740 !important; font-weight: 700; }
 .contestant-waiver-state { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 5px 7px; }
 .contestant-waiver-state time { color: var(--muted); font-size: 9px; white-space: nowrap; }
+.contestant-waiver-view { min-height: 24px; display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; color: #46514b; background: #fff; border: 1px solid #dfe3df; border-radius: 999px; font-size: 9px; font-weight: 700; white-space: nowrap; }
+.contestant-waiver-view:disabled { opacity: .7; cursor: wait; }
 .contestant-waiver-badge { width: fit-content; display: inline-flex; align-items: center; gap: 4px; padding: 5px 7px; border: 1px solid transparent; border-radius: 999px; font-size: 9px; font-weight: 800; line-height: 1.2; white-space: nowrap; }
 .contestant-waiver-badge.signed { color: #2d694c; background: #e7f2eb; border-color: #bdd8c6; }
 .contestant-waiver-badge.not-signed { color: #765e3e; background: #f5eee3; border-color: #e5d4bb; }
@@ -263,6 +265,17 @@ main { grid-column: 2; min-width: 0; }
 .contestant-roster-card .contestant-card-waiver { grid-column: 1 / -1; }
 .contestant-profile-overlay { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(17,31,24,.72); }
 .contestant-profile-dialog { width: min(920px,100%); max-height: calc(100dvh - 48px); overflow: auto; background: #fff; border-radius: 12px; box-shadow: 0 24px 70px rgba(0,0,0,.35); }
+.signed-waiver-dialog { width: min(980px, 100%); }
+.signed-waiver-body { display: grid; gap: 16px; padding: 0 24px 22px; }
+.signed-waiver-meta { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 14px; }
+.signed-waiver-meta span { min-width: 0; display: grid; gap: 2px; }
+.signed-waiver-meta small { color: #6a766f; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.signed-waiver-meta strong { min-width: 0; font-size: 12px; word-break: break-word; }
+.signed-waiver-signature { display: grid; gap: 8px; }
+.signed-waiver-signature h3,.signed-waiver-text h3 { margin: 0; color: #2f3c34; font-size: 13px; font-family: "Manrope",sans-serif; }
+.signed-waiver-signature img { width: min(100%, 520px); max-height: 220px; object-fit: contain; background: #fff; border: 1px solid #d8dfda; border-radius: 8px; }
+.signed-waiver-text { display: grid; gap: 8px; }
+.signed-waiver-text pre { margin: 0; max-height: 340px; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: 12px; background: #f6f8f6; border: 1px solid #dfe5e1; border-radius: 8px; font: 11px/1.5 "Inter",sans-serif; }
 .contestant-profile-header { position: sticky; z-index: 2; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 24px; color: #fff; background: #244c39; }
 .contestant-profile-identity { display: flex; align-items: center; gap: 15px; }
 .contestant-profile-identity > img,.contestant-profile-identity > i { width: 64px; height: 64px; display: grid; place-items: center; object-fit: cover; color: #244c39; background: #e7efe9; border: 3px solid rgba(255,255,255,.45); border-radius: 50%; font-size: 17px; font-style: normal; font-weight: 900; }
@@ -758,6 +771,11 @@ main { grid-column: 2; min-width: 0; }
 .app-shell .contestant-waiver-badge.not-signed { color: #d6b98c; background: #332516; border-color: #62492d; }
 .app-shell .contestant-waiver-badge.loading { color: #cabaa8; background: #2b231d; border-color: #4a3c32; }
 .app-shell .contestant-waiver-badge.unavailable { color: #efaaa2; background: #3a1d1a; border-color: #6f3c36; }
+.app-shell .contestant-waiver-view { color: #d7e3d7; background: #1e2b24; border-color: #41554a; }
+.app-shell .signed-waiver-signature h3,.app-shell .signed-waiver-text h3 { color: #d7e3d7; }
+.app-shell .signed-waiver-meta small { color: #a5b7aa; }
+.app-shell .signed-waiver-signature img { background: #0f1512; border-color: #34443a; }
+.app-shell .signed-waiver-text pre { color: #dce7dd; background: #132019; border-color: #34443a; }
 .app-shell .waiver-load-message { color: #efaaa2 !important; }
 .app-shell .report-catalog-list > button:hover,
 .app-shell .competition-row.selected,
@@ -1073,6 +1091,9 @@ main { grid-column: 2; min-width: 0; }
   .event-switcher svg:first-child { display: none; }
   .event-switcher select { max-width: 135px; font-size: 11px; }
   .content { padding: 20px 15px 35px; }
+  .signed-waiver-body { padding: 0 14px 16px; }
+  .signed-waiver-meta { grid-template-columns: 1fr; }
+  .signed-waiver-signature img { width: 100%; }
   .hero { min-height: 270px; align-items: flex-start; flex-direction: column; padding: 27px 24px; }
   .hero .primary { margin-top: auto; }
   .hero p i { display: none; }

@@ -56,6 +56,7 @@ type WixAction =
   | "promptAdminLogin"
   | "logoutAdmin"
   | "loadContestantWaiverStatuses"
+  | "loadContestantSignedWaiver"
   | "getRegistrationDeskAccess"
   | "promptRegistrationDeskLogin"
   | "loadRegistrationDeskData"
@@ -73,6 +74,19 @@ export interface ContestantPortalData {
   events: ArenaEvent[];
   registrations: EventRegistration[];
   teams: Team[];
+}
+
+export interface ContestantSignedWaiverEvidence {
+  id: string;
+  contestantId: string;
+  contestantName: string;
+  signerName: string;
+  eventId: string;
+  signedAt: string;
+  waiverVersion: string;
+  waiverTitle: string;
+  waiverText: string;
+  signatureDataUrl: string;
 }
 
 export interface WorkspaceSaveConfirmation {
@@ -323,6 +337,7 @@ export function sensitiveWixAction(action: WixAction) {
     action === "promptAdminLogin" ||
     action === "logoutAdmin" ||
     action === "loadContestantWaiverStatuses" ||
+    action === "loadContestantSignedWaiver" ||
     action === "getRegistrationDeskAccess" ||
     action === "promptRegistrationDeskLogin" ||
     action === "loadRegistrationDeskData" ||
@@ -574,6 +589,55 @@ export async function loadContestantWaiverStatuses(): Promise<
     throw new Error("Wix returned an empty waiver status response.");
   }
   return normalizeContestantWaiverStatusesResponse(response);
+}
+
+const normalizeContestantSignedWaiverEvidence = (
+  value: unknown,
+): ContestantSignedWaiverEvidence => {
+  if (!value || typeof value !== "object") {
+    throw new Error("Wix returned an invalid signed waiver response.");
+  }
+  const record = value as Partial<ContestantSignedWaiverEvidence>;
+  const required = (
+    field: keyof ContestantSignedWaiverEvidence,
+    label: string,
+  ) => {
+    const text = typeof record[field] === "string" ? record[field] : "";
+    if (!text?.trim()) {
+      throw new Error(`Wix returned an invalid signed waiver ${label}.`);
+    }
+    return text;
+  };
+  const signedAt = required("signedAt", "signed timestamp");
+  if (!Number.isFinite(Date.parse(signedAt))) {
+    throw new Error("Wix returned an invalid signed waiver timestamp.");
+  }
+  return {
+    id: required("id", "record ID"),
+    contestantId: required("contestantId", "contestant ID"),
+    contestantName: required("contestantName", "contestant name"),
+    signerName: required("signerName", "signer name"),
+    eventId: required("eventId", "event ID"),
+    signedAt,
+    waiverVersion: required("waiverVersion", "waiver version"),
+    waiverTitle: required("waiverTitle", "waiver title"),
+    waiverText: required("waiverText", "waiver text"),
+    signatureDataUrl: required("signatureDataUrl", "signature image"),
+  };
+};
+
+export async function loadContestantSignedWaiver(contestantId: string): Promise<
+  ContestantSignedWaiverEvidence | null
+> {
+  const normalizedContestantId = contestantId.trim();
+  if (!normalizedContestantId) {
+    throw new Error("Choose a contestant to view the signed waiver.");
+  }
+  const response = await requestWix<unknown>("loadContestantSignedWaiver", {
+    contestantId: normalizedContestantId,
+  });
+  if (!response) return null;
+  return normalizeContestantSignedWaiverEvidence(response);
 }
 
 export function getRegistrationDeskAccess() {

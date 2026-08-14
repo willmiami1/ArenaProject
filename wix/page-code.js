@@ -8,6 +8,7 @@ import {
   getPublicSignupPaymentStatus,
   loadArenaData,
   loadContestantWaiverStatuses,
+  loadContestantSignedWaiver,
   saveArenaData,
   setContestantPin,
   submitSpectatorPrediction,
@@ -105,6 +106,8 @@ $w.onReady(() => {
       if (message.action === "load") data = await loadArenaData();
       else if (message.action === "loadContestantWaiverStatuses") {
         data = await loadContestantWaiverStatuses();
+      } else if (message.action === "loadContestantSignedWaiver") {
+        data = await loadContestantSignedWaiver(message.data);
       } else if (message.action === "save") {
         data = await saveArenaData(message.data);
       } else if (message.action === "authenticateContestant") {
