@@ -311,8 +311,61 @@ describe("quota-safe renewable Wix resource locks", () => {
     );
     expect(payments).toContain("mutationLockScope.assertOwned");
     expect(payments).toContain("paymentLockScope.assertOwned");
-    expect(payments).toContain("condition:");
+    expect(payments).toMatch(
+      /\.filter\(\)\s*\.eq\("paymentId", lock\.storedOwnerValue \|\| paymentId\)\s*\.gt\("expiresAt", new Date\(lock\.mustBeValidAt\)\)/,
+    );
+    expect(payments).toMatch(
+      /\.filter\(\)\s*\.eq\("paymentId", paymentId\)\s*\.le\("expiresAt", new Date\(lock\.expiresAt\)\)/,
+    );
+    expect(payments).toMatch(/await lockApi\.update\([\s\S]*?condition,/);
+    expect(payments).toMatch(/await lockApi\.remove\([\s\S]*?condition,/);
     expect(payments).not.toContain("attempt <= 20");
     expect(payments).not.toContain("await wait(250)");
+  });
+
+  it("keeps login loadable without the optional conditional lock SDK", () => {
+    const payments = readFileSync(
+      new URL("../wix/backend/public-signup-payments.js", import.meta.url),
+      "utf8",
+    );
+    const backend = readFileSync(
+      new URL("../wix/backend/arena-data.web.js", import.meta.url),
+      "utf8",
+    );
+    const lockAdapter = readFileSync(
+      new URL("../wix/backend/conditional-lock-data.js", import.meta.url),
+      "utf8",
+    );
+
+    expect(backend).toMatch(/export const getAdminAccess = webMethod\(/);
+    expect(backend).toMatch(/export const authenticateContestant = webMethod\(/);
+    expect(payments).not.toMatch(/^import .*["']@wix\/data["'];?$/m);
+    expect(payments).toMatch(
+      /conditionalLockApiPromise = import\("\.\/conditional-lock-data"\)/,
+    );
+    expect(lockAdapter).toMatch(
+      /^import \{ items \} from "@wix\/data";$/m,
+    );
+  });
+
+  it("fails protected mutations closed when the lock adapter is unavailable", () => {
+    const payments = readFileSync(
+      new URL("../wix/backend/public-signup-payments.js", import.meta.url),
+      "utf8",
+    );
+    const resourceLockBoundary = payments.slice(
+      payments.indexOf("const withResourceLocks ="),
+      payments.indexOf(
+        "export async function withPublicSignupCompetitionLocks",
+      ),
+    );
+
+    expect(resourceLockBoundary).toMatch(
+      /await loadConditionalLockApi\(\);\s+return resourceLockManager\.run/,
+    );
+    expect(payments).toContain(
+      'code: "RESOURCE_LOCK_ADAPTER_UNAVAILABLE"',
+    );
+    expect(payments).toContain('dependency: "@wix/data"');
   });
 });
