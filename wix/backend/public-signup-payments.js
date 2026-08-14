@@ -32,6 +32,9 @@ import {
   buildOwnerPaymentNotification,
   deliverOwnerPaymentNotification,
 } from "./public-signup-owner-notification";
+import {
+  withResourceLocks as withResourceLocksContract,
+} from "./resource-lock-contract";
 
 const OPTIONS = { suppressAuth: true, consistentRead: true };
 const COLLECTIONS = {
@@ -65,12 +68,17 @@ const storageId = (namespace, value) =>
 
 const publicError = (code, message) => new PublicSignupError(code, message);
 
+const _verifiedCollections = new Set();
+
 async function ensureCollection(collectionId, displayName, fields) {
+  if (_verifiedCollections.has(collectionId)) return;
   try {
     await wixData.query(collectionId).limit(1).find(OPTIONS);
+    _verifiedCollections.add(collectionId);
   } catch (error) {
     if (
       error?.code !== "WDE0025" &&
+      error?.code !== "WDE0026" &&
       error?.code !== "WD_SCHEMA_DOES_NOT_EXIST"
     ) {
       throw error;
@@ -88,9 +96,11 @@ async function ensureCollection(collectionId, displayName, fields) {
         },
         fields,
       });
+      _verifiedCollections.add(collectionId);
     } catch (createError) {
       try {
         await wixData.query(collectionId).limit(1).find(OPTIONS);
+        _verifiedCollections.add(collectionId);
       } catch {
         throw createError;
       }
@@ -151,6 +161,8 @@ async function ensurePublicSignupCollections() {
       "Arena Public Signup Payment Locks",
       [
         { key: "paymentId", displayName: "Payment ID", type: "TEXT" },
+        { key: "resource", displayName: "Resource", type: "TEXT" },
+        { key: "owner", displayName: "Owner Token", type: "TEXT" },
         { key: "expiresAt", displayName: "Expires At", type: "DATETIME" },
       ],
     ),
@@ -215,51 +227,31 @@ async function updateWithRetry(collectionId, item, context) {
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function acquireResourceLock(resource) {
-  const id = storageId("public-signup-resource-lock", resource);
-  for (let attempt = 1; attempt <= 20; attempt += 1) {
-    try {
-      await wixData.insert(
-        PAYMENT_LOCKS_COLLECTION,
-        {
-          _id: id,
-          paymentId: resource,
-          expiresAt: new Date(Date.now() + 60 * 1000),
-        },
-        OPTIONS,
-      );
-      return id;
-    } catch (error) {
-      const existing = await wixData
-        .get(PAYMENT_LOCKS_COLLECTION, id, OPTIONS)
-        .catch(() => null);
-      if (existing && new Date(existing.expiresAt).getTime() <= Date.now()) {
-        await wixData
-          .remove(PAYMENT_LOCKS_COLLECTION, id, OPTIONS)
-          .catch(() => undefined);
-      } else if (!existing) {
-        throw error;
-      }
-      await wait(250);
-    }
-  }
-  throw new Error("Timed out waiting for a public signup resource lock.");
-}
+const resourceLockClient = {
+  insert: (record) => wixData.insert(PAYMENT_LOCKS_COLLECTION, record, OPTIONS),
+  get: (id) =>
+    wixData.get(PAYMENT_LOCKS_COLLECTION, id, {
+      ...OPTIONS,
+      consistentRead: true,
+    }),
+  remove: (id) => wixData.remove(PAYMENT_LOCKS_COLLECTION, id, OPTIONS),
+  now: () => Date.now(),
+  wait,
+  random: Math.random,
+  newOwner: () => randomBytes(16).toString("hex"),
+  recordId: (resource) => storageId("public-signup-resource-lock", resource),
+  onContended: ({ resource, attempt, maxAttempts, reason }) => {
+    console.warn("Resource lock contended.", {
+      resource,
+      attempt,
+      maxAttempts,
+      reason,
+    });
+  },
+};
 
 async function withResourceLocks(resources, callback) {
-  const acquiredIds = [];
-  try {
-    for (const resource of [...new Set(resources)].sort()) {
-      acquiredIds.push(await acquireResourceLock(resource));
-    }
-    return await callback();
-  } finally {
-    for (const id of acquiredIds.reverse()) {
-      await wixData
-        .remove(PAYMENT_LOCKS_COLLECTION, id, OPTIONS)
-        .catch(() => undefined);
-    }
-  }
+  return withResourceLocksContract(resourceLockClient, resources, callback);
 }
 
 export async function withPublicSignupCompetitionLocks(
@@ -269,6 +261,27 @@ export async function withPublicSignupCompetitionLocks(
   await ensurePublicSignupCollections();
   return withResourceLocks(
     competitionIds.map((competitionId) => `competition:${competitionId}`),
+    callback,
+  );
+}
+
+async function ensureLockCollection() {
+  await ensureCollection(
+    PAYMENT_LOCKS_COLLECTION,
+    "Arena Public Signup Payment Locks",
+    [
+      { key: "paymentId", displayName: "Payment ID", type: "TEXT" },
+      { key: "resource", displayName: "Resource", type: "TEXT" },
+      { key: "owner", displayName: "Owner Token", type: "TEXT" },
+      { key: "expiresAt", displayName: "Expires At", type: "DATETIME" },
+    ],
+  );
+}
+
+export async function withWorkspaceLocks(resources, callback) {
+  await ensureLockCollection();
+  return withResourceLocks(
+    resources.map((resource) => `competition:${resource}`),
     callback,
   );
 }
@@ -788,10 +801,8 @@ async function createPublicSignupPaymentLocked(request, session) {
   }
 
   try {
-    await withResourceLocks(
-      selections.map(
-        ({ competitionId }) => `competition:${competitionId}`,
-      ),
+    await withPublicSignupCompetitionLocks(
+      selections.map(({ competitionId }) => competitionId),
       async () => {
         const latestWorkspace = await readWorkspace();
         const latestContestant = latestWorkspace.contestants.find(
