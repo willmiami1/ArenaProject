@@ -159,6 +159,10 @@ contestants whose waiver is still outstanding. Status contains only contestant
 ID, event ID, and signed timestamp as transient UI state; it is never added to
 `ArenaData` or browser storage.
 
+Arena admins can open read-only signed waiver evidence from the Workspace
+Contestants waiver status control. The viewer reads immutable records from
+`ArenaWaiverSignatures`; signing remains Registration Desk-only.
+
 ### Owner payment notification
 
 After authoritative fulfillment marks a payment intent `successful`, the backend

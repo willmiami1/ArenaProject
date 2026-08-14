@@ -80,10 +80,12 @@ import {
 import {
   authenticateContestant,
   isWixEmbed,
+  loadContestantSignedWaiver,
   loadContestantWaiverStatuses,
   loadPublicArenaData,
   logoutAdmin,
   setContestantPin,
+  type ContestantSignedWaiverEvidence,
   type ContestantPortalData,
 } from "./wixBridge";
 import { registrationDeskHref } from "./registrationDeskNavigation";
@@ -2030,9 +2032,13 @@ function EventForm({
 function ContestantWaiverStatus({
   contestantId,
   state,
+  viewing,
+  onViewSignedWaiver,
 }: {
   contestantId: string;
   state: ContestantWaiverStatusesState;
+  viewing?: boolean;
+  onViewSignedWaiver?: (contestantId: string) => void;
 }) {
   const status = contestantWaiverStatusPresentation(state, contestantId);
   if (status.kind === "signed") {
@@ -2048,6 +2054,17 @@ function ContestantWaiverStatus({
         >
           {status.dateLabel}
         </time>
+        {onViewSignedWaiver && (
+          <button
+            type="button"
+            className="contestant-waiver-view"
+            disabled={viewing}
+            onClick={() => onViewSignedWaiver(contestantId)}
+          >
+            <Eye size={12} aria-hidden="true" />
+            {viewing ? "Loading…" : "View waiver"}
+          </button>
+        )}
       </span>
     );
   }
@@ -2105,6 +2122,10 @@ function Contestants({
     useRef<ContestantWaiverStatusesResponse | null>(null);
   const [waiverStatuses, setWaiverStatuses] =
     useState<ContestantWaiverStatusesState>({ phase: "loading" });
+  const [waiverEvidence, setWaiverEvidence] =
+    useState<ContestantSignedWaiverEvidence | null>(null);
+  const [waiverEvidenceBusyId, setWaiverEvidenceBusyId] = useState("");
+  const [waiverEvidenceError, setWaiverEvidenceError] = useState("");
   const refreshWaiverStatuses = useCallback(async () => {
     const request = waiverRequestRef.current + 1;
     waiverRequestRef.current = request;
@@ -2214,6 +2235,34 @@ function Contestants({
     setEditing(contestant);
     setShowForm(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const viewSignedWaiver = async (contestantId: string) => {
+    setWaiverEvidenceBusyId(contestantId);
+    setWaiverEvidenceError("");
+    try {
+      if (!embedded) {
+        throw new Error(
+          "Signed waiver evidence is available only in the authenticated Wix workspace.",
+        );
+      }
+      const evidence = await loadContestantSignedWaiver(contestantId);
+      if (!evidence) {
+        throw new Error("No current signed waiver was found for this contestant.");
+      }
+      setWaiverEvidence(evidence);
+    } catch (error) {
+      setWaiverEvidenceError(
+        error instanceof Error
+          ? error.message
+          : "Signed waiver evidence could not be loaded.",
+      );
+    } finally {
+      setWaiverEvidenceBusyId("");
+    }
+  };
+  const closeSignedWaiver = () => {
+    setWaiverEvidence(null);
+    setWaiverEvidenceError("");
   };
   const deleteContestant = (contestant: Contestant) => {
     if (
@@ -2373,6 +2422,11 @@ function Contestants({
                   : "Waiver status is available only in the authenticated Wix workspace."}
               </p>
             )}
+            {waiverEvidenceError && (
+              <p className="waiver-load-message" role="status">
+                {waiverEvidenceError}
+              </p>
+            )}
           </div>
           <div className="roster-actions">
             <label className="search"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search riders" /></label>
@@ -2410,6 +2464,8 @@ function Contestants({
               <ContestantWaiverStatus
                 contestantId={contestant.id}
                 state={waiverStatuses}
+                viewing={waiverEvidenceBusyId === contestant.id}
+                onViewSignedWaiver={viewSignedWaiver}
               />
               {contestantActions(contestant)}
             </div>
@@ -2438,6 +2494,8 @@ function Contestants({
                     <ContestantWaiverStatus
                       contestantId={contestant.id}
                       state={waiverStatuses}
+                      viewing={waiverEvidenceBusyId === contestant.id}
+                      onViewSignedWaiver={viewSignedWaiver}
                     />
                   </dd>
                 </div>
@@ -2446,6 +2504,12 @@ function Contestants({
           ))}
         </div>
       </div>
+      {waiverEvidence && (
+        <SignedWaiverEvidenceDialog
+          evidence={waiverEvidence}
+          onClose={closeSignedWaiver}
+        />
+      )}
     </>
   );
 }
@@ -2912,6 +2976,71 @@ function ContestantForm({
       {loginError && <div className="form-error">{loginError}</div>}
       <FormActions onCancel={onCancel} submitLabel={contestant ? "Save changes" : "Add contestant"} />
     </form>
+  );
+}
+
+function SignedWaiverEvidenceDialog({
+  evidence,
+  onClose,
+}: {
+  evidence: ContestantSignedWaiverEvidence;
+  onClose: () => void;
+}) {
+  const signedAt = new Date(evidence.signedAt);
+  const signedLabel = Number.isNaN(signedAt.getTime())
+    ? evidence.signedAt
+    : signedAt.toLocaleString("en-US", {
+        dateStyle: "full",
+        timeStyle: "long",
+      });
+  return (
+    <div
+      className="contestant-profile-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="contestant-profile-dialog signed-waiver-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="signed-waiver-title"
+      >
+        <div className="contestant-profile-header">
+          <div className="contestant-profile-identity">
+            <i><ClipboardPen size={22} /></i>
+            <div>
+              <span>Read-only signed waiver evidence</span>
+              <h2 id="signed-waiver-title">{evidence.contestantName}</h2>
+              <p>Signer: {evidence.signerName}</p>
+            </div>
+          </div>
+          <button className="icon-action" title="Close waiver" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="signed-waiver-body">
+          <div className="signed-waiver-meta">
+            <span><small>Signed at</small><strong>{signedLabel}</strong></span>
+            <span><small>Event ID</small><strong>{evidence.eventId}</strong></span>
+            <span><small>Waiver version</small><strong>{evidence.waiverVersion}</strong></span>
+            <span><small>Evidence collection</small><strong>ArenaWaiverSignatures</strong></span>
+          </div>
+          <div className="signed-waiver-signature">
+            <h3>Signature</h3>
+            <img
+              src={evidence.signatureDataUrl}
+              alt={`Signature captured for ${evidence.signerName}`}
+            />
+          </div>
+          <div className="signed-waiver-text">
+            <h3>{evidence.waiverTitle}</h3>
+            <pre>{evidence.waiverText}</pre>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 

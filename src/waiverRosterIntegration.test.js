@@ -34,7 +34,11 @@ describe("workspace waiver roster integration", () => {
     expect(pageRelay).toContain(
       'message.action === "loadContestantWaiverStatuses"',
     );
+    expect(pageRelay).toContain(
+      'message.action === "loadContestantSignedWaiver"',
+    );
     expect(pageRelay).toContain("loadContestantWaiverStatuses()");
+    expect(pageRelay).toContain("loadContestantSignedWaiver(message.data)");
     expect(pageRelay).not.toContain(
       "loadContestantWaiverStatuses(message.data)",
     );
@@ -45,7 +49,7 @@ describe("workspace waiver roster integration", () => {
       backendMirror.indexOf(
         "export const loadContestantWaiverStatuses = webMethod(",
       ),
-      backendMirror.indexOf("export const saveArenaData"),
+      backendMirror.indexOf("export const loadContestantSignedWaiver = webMethod("),
     );
     expect(endpoint).toContain("await requireArenaAdmin()");
     expect(endpoint).toContain("loadRegistrationDeskWaiverStatusSnapshot");
@@ -56,9 +60,7 @@ describe("workspace waiver roster integration", () => {
       backendMirror.indexOf(
         "async function readRegistrationDeskWaiverStatusRecords(",
       ),
-      backendMirror.indexOf(
-        "async function findRegistrationDeskWaiverStorageItem(",
-      ),
+      backendMirror.indexOf("const signedWaiverStatusIsPreferred = ("),
     );
     expect(normalRead).toMatch(
       /query\(WAIVER_STATUS_INDEX_COLLECTION\)[\s\S]*?\.eq\("source", "registration-desk"\)[\s\S]*?\.eq\("waiverVersion", waiverVersion\)/,
@@ -68,6 +70,17 @@ describe("workspace waiver roster integration", () => {
     expect(normalRead).toContain("result = await result.next()");
     expect(normalRead).not.toMatch(
       /WAIVER_SIGNATURES_COLLECTION|payload|JSON\.parse|signatureDataUrl|waiverText/,
+    );
+
+    const viewerEndpoint = backendMirror.slice(
+      backendMirror.indexOf("export const loadContestantSignedWaiver = webMethod("),
+      backendMirror.indexOf("export const saveArenaData"),
+    );
+    expect(viewerEndpoint).toContain("await requireRegistrationDesk()");
+    expect(viewerEndpoint).toContain("findRegistrationDeskWaiverStorageItem(");
+    expect(viewerEndpoint).toContain("statusRecord.evidenceAppId");
+    expect(viewerEndpoint).toContain(
+      "signedWaiverEvidenceProjection(evidence, waiverDocument)",
     );
   });
 
@@ -281,5 +294,11 @@ describe("workspace waiver roster integration", () => {
     expect(registrationDeskNavigation).toContain(
       "export function registrationDeskHref(",
     );
+    expect(app).toContain("View waiver");
+    expect(app).toContain("loadContestantSignedWaiver(contestantId)");
+    expect(publicSite).not.toContain("loadContestantSignedWaiver");
+    expect(contestantAccount).not.toContain("loadContestantSignedWaiver");
+    expect(contestantPortal).not.toContain("loadContestantSignedWaiver");
+    expect(registrationDesk).not.toContain("loadContestantSignedWaiver");
   });
 });

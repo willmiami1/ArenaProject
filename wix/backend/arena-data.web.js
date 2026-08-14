@@ -1065,6 +1065,78 @@ async function loadRegistrationDeskWaiverStatusSnapshot(waiverDocument) {
   });
 }
 
+const signedWaiverStatusIsPreferred = (candidate, current) => {
+  const candidateMs = Date.parse(candidate.signedAt || "");
+  const currentMs = Date.parse(current.signedAt || "");
+  if (candidateMs !== currentMs) return candidateMs > currentMs;
+  if (candidate.eventId !== current.eventId) {
+    return String(candidate.eventId) < String(current.eventId);
+  }
+  return String(candidate.evidenceAppId) < String(current.evidenceAppId);
+};
+
+async function readLatestContestantWaiverStatusRecord(
+  contestantId,
+  waiverVersion,
+) {
+  let result = await wixData
+    .query(WAIVER_STATUS_INDEX_COLLECTION)
+    .eq("source", "registration-desk")
+    .eq("waiverVersion", waiverVersion)
+    .eq("contestantId", contestantId)
+    .limit(1000)
+    .find(CONSISTENT_READ_OPTIONS);
+  const records = [...result.items];
+  while (result.hasNext()) {
+    result = await result.next();
+    records.push(...result.items);
+  }
+  let preferred = null;
+  for (const record of records) {
+    if (
+      !record ||
+      typeof record.signedAt !== "string" ||
+      !record.eventId ||
+      !record.evidenceAppId
+    ) {
+      continue;
+    }
+    if (!preferred || signedWaiverStatusIsPreferred(record, preferred)) {
+      preferred = record;
+    }
+  }
+  return preferred;
+}
+
+function signedWaiverEvidenceProjection(evidence, waiverDocument) {
+  const document = normalizeRegistrationDeskWaiverDocument(waiverDocument);
+  if (!document.available) return null;
+  if (
+    !evidence ||
+    evidence.source !== "registration-desk" ||
+    evidence.accepted !== true ||
+    evidence.waiverVersion !== document.version ||
+    evidence.waiverTitle !== document.title ||
+    evidence.waiverText !== document.text
+  ) {
+    return null;
+  }
+  const signedAtMs = Date.parse(evidence.signedAt || "");
+  if (!Number.isFinite(signedAtMs)) return null;
+  return {
+    id: evidence.id,
+    contestantId: evidence.contestantId,
+    contestantName: evidence.contestantName,
+    signerName: evidence.signerName,
+    eventId: evidence.eventId,
+    signedAt: new Date(signedAtMs).toISOString(),
+    waiverVersion: evidence.waiverVersion,
+    waiverTitle: evidence.waiverTitle,
+    waiverText: evidence.waiverText,
+    signatureDataUrl: evidence.signatureDataUrl,
+  };
+}
+
 async function findRegistrationDeskWaiverStorageItem(recordId) {
   const storageId = arenaRecordStorageId(
     WAIVER_SIGNATURES_COLLECTION,
@@ -1241,6 +1313,33 @@ export const loadContestantWaiverStatuses = webMethod(
     await requireArenaAdmin();
     const waiverDocument = await readRegistrationDeskWaiverDocument();
     return loadRegistrationDeskWaiverStatusSnapshot(waiverDocument);
+  },
+);
+
+export const loadContestantSignedWaiver = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireRegistrationDesk();
+    if (!validAppId(request?.contestantId)) {
+      throw new Error("Choose a valid contestant to view the signed waiver.");
+    }
+    const waiverDocument = await readRegistrationDeskWaiverDocument();
+    if (!waiverDocument?.available || !waiverDocument.version) {
+      return null;
+    }
+    await ensureRegistrationDeskWaiverCollections();
+    await loadRegistrationDeskWaiverStatusSnapshot(waiverDocument);
+    const statusRecord = await readLatestContestantWaiverStatusRecord(
+      request.contestantId,
+      waiverDocument.version,
+    );
+    if (!statusRecord?.evidenceAppId) return null;
+    const evidenceItem = await findRegistrationDeskWaiverStorageItem(
+      statusRecord.evidenceAppId,
+    );
+    if (!evidenceItem) return null;
+    const evidence = parseRegistrationDeskWaiverStorageItem(evidenceItem);
+    return signedWaiverEvidenceProjection(evidence, waiverDocument);
   },
 );
 
