@@ -86,6 +86,7 @@ import {
   setContestantPin,
   type ContestantPortalData,
 } from "./wixBridge";
+import { registrationDeskHref } from "./registrationDeskNavigation";
 import {
   ledQualifiedRunsThroughRound,
   ledShowsFinalResults,
@@ -398,12 +399,7 @@ function StaffApp() {
     window.location.assign(url.toString());
   };
   const openRegistrationDesk = () => {
-    const url = new URL(window.location.href);
-    const wixHostOrigin = url.searchParams.get("wixHostOrigin");
-    url.search = "";
-    url.searchParams.set("app", "registration");
-    if (wixHostOrigin) url.searchParams.set("wixHostOrigin", wixHostOrigin);
-    window.location.assign(url.toString());
+    window.location.assign(registrationDeskHref(window.location.href));
   };
   const logOutAdmin = async () => {
     try {
@@ -736,6 +732,7 @@ function StaffApp() {
               events={data.events}
               teams={data.teams}
               registrations={data.registrations}
+              onOpenRegistrationDesk={openRegistrationDesk}
               onAdd={saveContestantImmediately}
               onUpdate={saveContestantImmediately}
               onDelete={(contestantId) =>
@@ -2077,6 +2074,7 @@ function Contestants({
   events,
   teams,
   registrations,
+  onOpenRegistrationDesk,
   onAdd,
   onUpdate,
   onDelete,
@@ -2087,6 +2085,7 @@ function Contestants({
   events: ArenaEvent[];
   teams: Team[];
   registrations: EventRegistration[];
+  onOpenRegistrationDesk: () => void;
   onAdd: (contestant: Contestant) => void | Promise<unknown>;
   onUpdate: (contestant: Contestant) => void | Promise<unknown>;
   onDelete: (contestantId: string) => void;
@@ -2343,6 +2342,7 @@ function Contestants({
       {(showForm || editing) && (
         <ContestantForm
           contestant={editing ?? undefined}
+          onOpenRegistrationDesk={onOpenRegistrationDesk}
           onSubmit={async (rider) => {
             if (editing) await onUpdate(rider);
             else await onAdd(rider);
@@ -2717,10 +2717,12 @@ function stableTextContestantId(value: string) {
 
 function ContestantForm({
   contestant,
+  onOpenRegistrationDesk,
   onSubmit,
   onCancel,
 }: {
   contestant?: Contestant;
+  onOpenRegistrationDesk: () => void;
   onSubmit: (contestant: Contestant) => void | Promise<unknown>;
   onCancel: () => void;
 }) {
@@ -2888,6 +2890,20 @@ function ContestantForm({
       <p className="contestant-account-help">
         Set the email and four-digit PIN the contestant will use for online entry and the contestant portal. Leave both PIN fields blank to keep the current login unchanged.
       </p>
+      <div className="contestant-waiver-shortcut">
+        <p>
+          Waiver signing is handled in Registration Desk only. Signed waiver
+          evidence is available to admins in Wix Data collection{" "}
+          <strong>ArenaWaiverSignatures</strong>.
+        </p>
+        <button
+          type="button"
+          className="secondary"
+          onClick={onOpenRegistrationDesk}
+        >
+          <ClipboardPen size={16} /> Open Registration Desk to sign waiver
+        </button>
+      </div>
       <div className="form-grid contestant-account-grid">
         <Field label="Login Email"><input type="email" autoComplete="off" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value.toLowerCase() }); setLoginError(""); }} placeholder="rider@example.com" /></Field>
         <Field label={contestant ? "Set or Reset 4-digit PIN" : "Set 4-digit PIN"}><input type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="new-password" value={loginPin} onChange={(e) => { setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setLoginError(""); }} placeholder="••••" /></Field>

@@ -162,6 +162,9 @@ main { grid-column: 2; min-width: 0; }
 .form-section-title { margin: 25px 0 13px; padding-bottom: 8px; color: #445149; border-bottom: 1px solid #eaedea; font-family: "Manrope", sans-serif; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; }
 .form-section-title:first-of-type { margin-top: 0; }
 .contestant-account-help { max-width: 760px; margin: -4px 0 16px; color: #65736b; font-size: 12px; line-height: 1.55; }
+.contestant-waiver-shortcut { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px; padding: 12px 14px; background: #f7f9f7; border: 1px solid #dfe5e1; border-radius: 8px; }
+.contestant-waiver-shortcut p { margin: 0; color: #55625b; font-size: 11px; line-height: 1.5; }
+.contestant-waiver-shortcut .secondary { flex: 0 0 auto; white-space: nowrap; }
 .contestant-account-grid { padding: 18px; background: #f7f9f7; border: 1px solid #dfe5e1; }
 .toggle-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 18px; }
 .toggle-row { display: flex; align-items: flex-start; gap: 10px; padding: 13px; background: #f8faf8; border: 1px solid #e2e7e3; border-radius: 8px; cursor: pointer; }
@@ -1077,6 +1080,8 @@ main { grid-column: 2; min-width: 0; }
   .page-intro { align-items: flex-start; }
   .page-intro p { max-width: 400px; }
   .form-grid, .form-grid.two, .form-grid.team-entry-grid { grid-template-columns: 1fr; }
+  .contestant-waiver-shortcut { align-items: flex-start; flex-direction: column; }
+  .contestant-waiver-shortcut .secondary { width: 100%; }
   .toggle-grid { grid-template-columns: 1fr; }
   .table-panel { overflow: hidden; }
   .data-table { overflow-x: auto; }

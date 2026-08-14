@@ -13,6 +13,7 @@ const publicSite = source("./PublicSite.tsx");
 const contestantAccount = source("./contestantAccount.ts");
 const registrationDesk = source("./RegistrationDesk.tsx");
 const registrationDeskWaiver = source("./registrationDeskWaiver.ts");
+const registrationDeskNavigation = source("./registrationDeskNavigation.ts");
 const contestantPortal = app.slice(
   app.indexOf("function ContestantPortal()"),
   app.indexOf("function LedLeaderboard("),
@@ -274,5 +275,11 @@ describe("workspace waiver roster integration", () => {
     expect(contestantsWorkspace).not.toContain("submitRegistrationDeskWaiver");
     expect(contestantsWorkspace).not.toContain("signatureDataUrl");
     expect(contestantsWorkspace).not.toContain("waiverText");
+    expect(app).toContain("Open Registration Desk to sign waiver");
+    expect(app).toContain("ArenaWaiverSignatures");
+    expect(app).toContain("onOpenRegistrationDesk={openRegistrationDesk}");
+    expect(registrationDeskNavigation).toContain(
+      "export function registrationDeskHref(",
+    );
   });
 });
