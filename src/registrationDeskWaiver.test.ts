@@ -196,10 +196,15 @@ describe("Registration Desk tablet waiver", () => {
     expect(JSON.stringify(result)).not.toContain("iVBORw0KGgo");
   });
 
-  it("recognizes the current waiver globally across live events", () => {
+  it("signs an Upcoming competition while preserving global waiver status", () => {
+    const arenaWorkspace = workspace();
+    arenaWorkspace.events = arenaWorkspace.events.map((item) =>
+      item.id === "event-two" ? { ...item, status: "Upcoming" } : item,
+    );
+    const upcomingData = registrationDeskProjection(arenaWorkspace);
     const result = submitLocalRegistrationDeskWaiver(
-      availableDeskData(),
-      signatureRequest,
+      upcomingData,
+      { ...signatureRequest, eventId: "event-two" },
     );
     expect(
       registrationDeskWaiverStatus(
@@ -216,7 +221,7 @@ describe("Registration Desk tablet waiver", () => {
       ),
     ).toMatchObject({
       contestantId: "rider-one",
-      eventId: "event-one",
+      eventId: "event-two",
     });
   });
 

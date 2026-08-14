@@ -26,8 +26,18 @@ const draft: RegistrationDeskEntryDraft = {
 };
 
 describe("Registration Desk entry actions", () => {
-  it("allows edits only for secured, open, unlocked live entries", () => {
+  it("allows edits only for secured, open, unlocked Live or Upcoming entries", () => {
     expect(registrationDeskEntryPermissions(liveEvent, true, false)).toEqual({
+      canEdit: true,
+      canScratch: true,
+    });
+    expect(
+      registrationDeskEntryPermissions(
+        { ...liveEvent, status: "Upcoming" },
+        true,
+        false,
+      ),
+    ).toEqual({
       canEdit: true,
       canScratch: true,
     });
@@ -38,6 +48,16 @@ describe("Registration Desk entry actions", () => {
         false,
       ).canEdit,
     ).toBe(false);
+    expect(
+      registrationDeskEntryPermissions(
+        { ...liveEvent, registrationOpen: false },
+        true,
+        false,
+      ),
+    ).toEqual({
+      canEdit: false,
+      canScratch: false,
+    });
     expect(registrationDeskEntryPermissions(liveEvent, false, false)).toEqual({
       canEdit: false,
       canScratch: false,

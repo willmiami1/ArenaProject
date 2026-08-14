@@ -374,8 +374,15 @@ export function prepareRegistrationDeskWaiver(
     throw new Error("Choose a valid competition and contestant, then accept the waiver.");
   }
   const event = workspace.events.find(({ id: eventId }) => eventId === request.eventId);
-  if (!event || event.status !== "Live") {
-    throw new Error("Waivers can be signed only for a live Registration Desk competition.");
+  if (
+    !event ||
+    (event.status !== "Live" && event.status !== "Upcoming") ||
+    event.registrationOpen !== true ||
+    event.drawLocked !== false
+  ) {
+    throw new Error(
+      "Waivers can be signed only for an open, unlocked Live or Upcoming Registration Desk competition.",
+    );
   }
   const contestant = workspace.contestants.find(
     ({ id: contestantId }) => contestantId === request.contestantId,

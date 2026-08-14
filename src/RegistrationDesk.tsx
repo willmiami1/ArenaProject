@@ -284,9 +284,9 @@ export function RegistrationDesk() {
   const entryUnavailableMessage = !event
     ? ""
     : !event.registrationOpen
-      ? "This live competition is visible, but registration is closed."
+      ? "This competition is visible, but registration is closed."
       : event.drawLocked
-        ? "This live competition is visible, but entries are blocked while the draw is locked."
+        ? "This competition is visible, but entries are blocked while the draw is locked."
         : "";
   const contestant = data?.contestants.find((item) => item.id === contestantId);
   const waiverContestant = data?.contestants.find(
@@ -803,7 +803,7 @@ export function RegistrationDesk() {
 
   const launchWaiver = (targetContestantId: string) => {
     if (!event || !data) {
-      setMessage("Choose a live competition before opening a waiver.");
+      setMessage("Choose a competition before opening a waiver.");
       return;
     }
     if (!data.contestants.some(({ id }) => id === targetContestantId)) {
@@ -823,7 +823,7 @@ export function RegistrationDesk() {
     signatureDataUrl: string;
   }) => {
     if (!event || !data || !waiverContestant) {
-      throw new Error("Choose a contestant and live competition.");
+      throw new Error("Choose a contestant and competition.");
     }
     setWaiverBusy(true);
     setWaiverError("");
@@ -873,7 +873,7 @@ export function RegistrationDesk() {
       <main className="registration-desk-main">
         <section className="registration-desk-events">
           <label>
-            Live competition
+            Competition
             <select value={eventId} onChange={(change) => {
               setEventId(change.target.value);
               setPinOpen(false);
@@ -924,7 +924,7 @@ export function RegistrationDesk() {
           )}
           {!data && <p>Loading registration desk…</p>}
           {data && !data.events.length && (
-            <p>No live competitions are currently available.</p>
+            <p>No open Live or Upcoming competitions are currently available.</p>
           )}
           {entryUnavailableMessage && <p>{entryUnavailableMessage}</p>}
           {data && !data.waiverDocument.available && (
@@ -981,7 +981,7 @@ export function RegistrationDesk() {
             )}
             {!event ? (
               <p className="registration-desk-roster-empty">
-                Choose a live competition to view its roster.
+                Choose a competition to view its roster.
               </p>
             ) : (
               <div className="registration-desk-roster-groups">
@@ -1048,7 +1048,7 @@ export function RegistrationDesk() {
                                         rosterEntry.generated
                                           ? "Generated draw teams must be scratched as a whole team."
                                           : editDisabled
-                                            ? "Editing requires an open, unlocked live competition in Wix."
+                                            ? "Editing requires an open, unlocked Live or Upcoming competition in Wix."
                                             : `Edit ${rosterEntry.name}'s ${rosterEntry.role.toLowerCase()} entry`
                                       }
                                       onClick={() => beginRosterEntryEdit(rosterEntry)}
@@ -1061,7 +1061,7 @@ export function RegistrationDesk() {
                                       disabled={scratchDisabled}
                                       title={
                                         scratchDisabled
-                                          ? "Deleting requires a live competition in Wix."
+                                          ? "Deleting requires an open, unlocked Live or Upcoming competition in Wix."
                                           : `Scratch ${rosterEntry.name}'s ${
                                               rosterEntry.recordType === "team"
                                                 ? "whole team"

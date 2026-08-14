@@ -6,6 +6,7 @@ import type {
   RegistrationDeskWaiverStatus,
 } from "./registrationDeskData";
 import type { RegistrationDeskRosterEntry } from "./registrationDeskRoster";
+import { registrationDeskIsVisible } from "./registrationWindow";
 
 const pngDataUrlPattern = /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/;
 
@@ -99,6 +100,11 @@ export function submitLocalRegistrationDeskWaiver(
   }
   const event = data.events.find(({ id }) => id === request.eventId);
   if (!event) throw new Error("Competition not found.");
+  if (!registrationDeskIsVisible(event)) {
+    throw new Error(
+      "Waivers can be signed only for an open, unlocked Live or Upcoming Registration Desk competition.",
+    );
+  }
   const contestant = data.contestants.find(
     ({ id }) => id === request.contestantId,
   );
