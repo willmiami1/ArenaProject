@@ -341,7 +341,10 @@ describe("quota-safe renewable Wix resource locks", () => {
     expect(backend).toMatch(/export const authenticateContestant = webMethod\(/);
     expect(payments).not.toMatch(/^import .*["']@wix\/data["'];?$/m);
     expect(payments).toMatch(
-      /conditionalLockApiPromise = import\("\.\/conditional-lock-data"\)/,
+      /conditionalLockApiPromise = import\("\.\/conditional-lock-data\.js"\)/,
+    );
+    expect(payments).not.toMatch(
+      /import\("\.\/conditional-lock-data"\)/,
     );
     expect(lockAdapter).toMatch(
       /^import \{ items \} from "@wix\/data";$/m,

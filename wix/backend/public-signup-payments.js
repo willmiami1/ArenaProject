@@ -68,7 +68,8 @@ let conditionalLockApiPromise;
 
 function loadConditionalLockApi() {
   if (!conditionalLockApiPromise) {
-    conditionalLockApiPromise = import("./conditional-lock-data")
+    // Wix lazy backend imports require the explicit file extension.
+    conditionalLockApiPromise = import("./conditional-lock-data.js")
       .then(({ createConditionalLockApi }) => createConditionalLockApi())
       .catch((error) => {
         console.error("Arena resource lock adapter is unavailable.", {
