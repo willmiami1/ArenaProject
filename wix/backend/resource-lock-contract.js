@@ -251,7 +251,7 @@ export function createResourceLockManager({
     const startedTicket = scope.fenceTicket;
     const cheapRead = typeof store.confirm === "function";
     let current = cheapRead
-      ? await store.confirm(lock.id)
+      ? await store.confirm(lock)
       : await store.get(lock.id);
     let authoritative = !cheapRead;
     if (

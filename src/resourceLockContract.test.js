@@ -327,9 +327,9 @@ describe("quota-safe renewable Wix resource locks", () => {
   it("serves fences from a cheap confirmation without losing the lease", async () => {
     const store = new MemoryLockStore();
     let confirmReads = 0;
-    store.confirm = async (id) => {
+    store.confirm = async (lock) => {
       confirmReads += 1;
-      const current = store.items.get(id);
+      const current = store.items.get(lock.id);
       return current ? { ...current, expiresAt: current.expiresAt - 40 } : null;
     };
     const manager = lockManager(store);
@@ -348,8 +348,8 @@ describe("quota-safe renewable Wix resource locks", () => {
 
   it("rechecks a cheap confirmation that looks expired before failing", async () => {
     const store = new MemoryLockStore();
-    store.confirm = async (id) => {
-      const current = store.items.get(id);
+    store.confirm = async (lock) => {
+      const current = store.items.get(lock.id);
       return current ? { ...current, expiresAt: 0 } : null;
     };
     const manager = lockManager(store);
@@ -365,8 +365,8 @@ describe("quota-safe renewable Wix resource locks", () => {
 
   it("never approves a displaced lock from a cheap confirmation", async () => {
     const store = new MemoryLockStore();
-    store.confirm = async (id) => {
-      const current = store.items.get(id);
+    store.confirm = async (lock) => {
+      const current = store.items.get(lock.id);
       return current ? { ...current } : null;
     };
     const manager = lockManager(store);
@@ -425,14 +425,50 @@ describe("quota-safe renewable Wix resource locks", () => {
     );
     expect(payments).toContain("LOCK_RECLAIM_PREFIX");
     expect(payments).toMatch(
-      /async function readStoredLockOwnership\(id\)[\s\S]*?readActiveReclaimClaims\(lock\.id\)/,
+      /async function readStoredLockOwnership\(lock\)[\s\S]*?current\.ownerToken === lock\.ownerToken[\s\S]*?current\.expiresAt > Date\.now\(\)[\s\S]*?return undefined;/,
     );
     expect(payments).toContain("confirm: readStoredLockOwnership,");
+    // The fence must cost a single read and must never reach the reclaim index.
+    const fence = payments
+      .slice(payments.indexOf("async function readStoredLockOwnership"))
+      .split("\nconst sameStoredLockOwner")[0];
+    expect(fence.match(/await /g)).toHaveLength(1);
+    expect(fence).not.toContain("readActiveReclaimClaims");
     expect(payments).toMatch(
       /heartbeatAfterRemoval\.expiresAt > current\.expiresAt[\s\S]*?installSentinelWhileClaimed\(removed, claim\)/,
     );
     expect(payments).not.toContain("attempt <= 20");
     expect(payments).not.toContain("await wait(250)");
+  });
+
+  it("reports where a workspace save spends its wall clock", () => {
+    const arenaData = readFileSync(
+      new URL("../wix/backend/arena-data.web.js", import.meta.url),
+      "utf8",
+    );
+    // Latency has been inferred from round-trip counts too many times. One real
+    // save must attribute its own time in the Wix site log.
+    expect(arenaData).toContain("function startSaveTiming()");
+    expect(arenaData).toContain('timing.report("saveArenaData")');
+    for (const phase of [
+      "prepare",
+      "lock",
+      "read",
+      "merge",
+      "sync",
+      "settings",
+      "revision",
+      "snapshot",
+    ]) {
+      expect(arenaData).toContain(`timing.lap("${phase}")`);
+    }
+    const save = arenaData.slice(
+      arenaData.indexOf("export const saveArenaData"),
+    );
+    // The report is emitted inside the save, after the final phase.
+    expect(save.indexOf('timing.lap("snapshot")')).toBeLessThan(
+      save.indexOf('timing.report("saveArenaData")'),
+    );
   });
 
   it("keeps every lock path on the built-in Wix Data module", () => {
