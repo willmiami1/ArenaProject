@@ -126,6 +126,21 @@ describe("direct Event saves", () => {
     expect(reconciled.revision).toBe(10);
   });
 
+  it("does not resurrect a competition deleted while its save was in flight", () => {
+    const submitted = event();
+    const original = { ...workspace(submitted), events: [], activeEventId: "" };
+    const reconciled = reconcileEventSaveConfirmation(original, submitted, {
+      event: submitted,
+      revision: 11,
+      staffRevision: 8,
+      onlineRevision: 3,
+      loadedAt: "2026-08-10T22:01:00.000Z",
+    });
+
+    expect(reconciled.events).toEqual([]);
+    expect(reconciled.revision).toBe(11);
+  });
+
   it("preserves activeRunId and activeRound during Event acknowledgement", () => {
     const submitted = event({ name: "CHANGED" });
     const current = workspace({

@@ -23,6 +23,7 @@ import {
   getPublicSignupPaymentStatus as readPublicSignupPaymentStatus,
   loadPublicSignupOptions,
   submitPublicSignupCash as submitPublicSignupCashRegistration,
+  withPublicSignupCompetitionLocks,
   withWorkspaceLocks,
 } from "./public-signup-payments";
 import {
@@ -504,26 +505,6 @@ async function readPublicScheduleEvents() {
   });
 }
 
-async function replaceAll(collectionId, records) {
-  let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
-  const ids = result.items.map((item) => item._id);
-  while (result.hasNext()) {
-    result = await result.next();
-    ids.push(...result.items.map((item) => item._id));
-  }
-  if (ids.length) await wixData.bulkRemove(collectionId, ids, OPTIONS);
-  if (records.length) {
-    await wixData.bulkInsert(
-      collectionId,
-      records.map((record) => ({
-        appId: record.id,
-        payload: JSON.stringify(record),
-      })),
-      OPTIONS,
-    );
-  }
-}
-
 async function readWorkspace({
   includeSpectators = true,
   consistentRead = false,
@@ -769,7 +750,10 @@ const mergeOnline = (incoming, latest) => {
   ];
 };
 
-async function savePublicScheduleSnapshot(workspaceOrEvents) {
+async function savePublicScheduleSnapshot(
+  workspaceOrEvents,
+  assertLockOwned = async () => undefined,
+) {
   const events = Array.isArray(workspaceOrEvents)
     ? workspaceOrEvents
     : workspaceOrEvents?.events;
@@ -783,6 +767,7 @@ async function savePublicScheduleSnapshot(workspaceOrEvents) {
         spectators: [],
         spectatorPredictions: [],
       });
+  await assertLockOwned();
   await wixData.save(
     SETTINGS_COLLECTION,
     {
@@ -1373,7 +1358,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     }
     await ensureSettingsCollection();
     await lockScope.assertOwned();
-    await savePublicScheduleSnapshot(data);
+    await savePublicScheduleSnapshot(data, lockScope.assertOwned);
     return {
       ...data,
       revision: Number(data.revision || 0) + 1,
@@ -1484,28 +1469,27 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     lockScope.assertOwned,
   );
   await lockScope.assertOwned();
-  await Promise.all([
-    wixData.save(
-      SETTINGS_COLLECTION,
-      {
-        _id: SETTINGS_ID,
-        activeEventId: data.activeEventId || "",
-        participantDatabaseVersion: data.participantDatabaseVersion || 1,
-        updatedAt: new Date(),
-      },
-      OPTIONS,
-    ),
-    wixData.save(
-      SETTINGS_COLLECTION,
-      {
-        _id: STAFF_REVISION_ID,
-        value: latest.staffRevision + 1,
-        updatedAt: new Date(),
-      },
-      OPTIONS,
-    ),
-    savePublicScheduleSnapshot(next),
-  ]);
+  await wixData.save(
+    SETTINGS_COLLECTION,
+    {
+      _id: SETTINGS_ID,
+      activeEventId: data.activeEventId || "",
+      participantDatabaseVersion: data.participantDatabaseVersion || 1,
+      updatedAt: new Date(),
+    },
+    OPTIONS,
+  );
+  await lockScope.assertOwned();
+  await wixData.save(
+    SETTINGS_COLLECTION,
+    {
+      _id: STAFF_REVISION_ID,
+      value: latest.staffRevision + 1,
+      updatedAt: new Date(),
+    },
+    OPTIONS,
+  );
+  await savePublicScheduleSnapshot(next, lockScope.assertOwned);
   return readWorkspace({ consistentRead: true });
   });
 });
@@ -1895,8 +1879,8 @@ export const publishPublicSchedule = webMethod(
     await ensureSettingsCollection();
     return withWorkspaceLocks(
       [WORKSPACE_MUTATION_LOCK_RESOURCE],
-      async () => {
-        await savePublicScheduleSnapshot(events);
+      async (lockScope) => {
+        await savePublicScheduleSnapshot(events, lockScope.assertOwned);
         return { publishedAt: new Date().toISOString(), count: events.length };
       },
     );
@@ -2572,9 +2556,14 @@ export const getPublicSignupPaymentStatus = webMethod(
     ),
 );
 
-async function insertUniqueArenaRecord(collectionId, record) {
+async function insertUniqueArenaRecord(
+  collectionId,
+  record,
+  assertLockOwned = async () => undefined,
+) {
   const storageId = arenaRecordStorageId(collectionId, record.id);
   try {
+    await assertLockOwned();
     await wixData.insert(
       collectionId,
       { _id: storageId, appId: record.id, payload: JSON.stringify(record) },
@@ -2582,6 +2571,7 @@ async function insertUniqueArenaRecord(collectionId, record) {
     );
     return true;
   } catch (error) {
+    if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
     const existing = await wixData
       .get(collectionId, storageId, OPTIONS)
       .catch(() => null);
@@ -2605,7 +2595,7 @@ async function createRegistrationDeskSignupRecords(request) {
   if (!validAppId(eventId)) {
     throw new Error("Invalid signup request.");
   }
-  return withRegistrationDeskEventLock(eventId, async () => {
+  return withRegistrationDeskEventLock(eventId, async (lockScope) => {
     const workspace = await readWorkspace({ consistentRead: true });
     const event = workspace.events.find((item) => item.id === eventId);
     if (!event) throw new Error("Competition not found.");
@@ -2636,7 +2626,13 @@ async function createRegistrationDeskSignupRecords(request) {
     const inserted = [];
     try {
       for (const item of records) {
-        if (await insertUniqueArenaRecord(item.collectionId, item.record)) {
+        if (
+          await insertUniqueArenaRecord(
+            item.collectionId,
+            item.record,
+            lockScope.assertOwned,
+          )
+        ) {
           inserted.push(item);
         }
       }
@@ -2669,7 +2665,7 @@ async function createRegistrationDeskSignupRecords(request) {
       submissionId: request.submissionId,
     });
     const freshWorkspace = await readWorkspace({ consistentRead: true });
-    await savePublicScheduleSnapshot(freshWorkspace);
+    await savePublicScheduleSnapshot(freshWorkspace, lockScope.assertOwned);
     return {
       submissionId: request.submissionId,
       competitionId: event.id,
@@ -2799,82 +2795,96 @@ export const submitSpectatorPrediction = webMethod(
     if (name.length < 2 || name.length > 80) {
       throw new Error("Enter your full name.");
     }
-    const workspace = await readWorkspace();
-    const event = workspace.events.find((item) => item.id === request.eventId);
-    const team = workspace.teams.find(
-      (item) => item.id === request.teamId && item.eventId === request.eventId,
-    );
-    assertSpectatorPredictionRunIsActive(event, team, workspace.teams);
-    const normalizedName = name.toLowerCase();
-    const existingSpectator = workspace.spectators.find(
-      (item) => String(item.name || "").trim().toLowerCase() === normalizedName,
-    );
-    const spectatorId = existingSpectator?.id || `spectator-${createHash("sha256")
-      .update(normalizedName)
-      .digest("hex")
-      .slice(0, 24)}`;
-    const spectator = existingSpectator || workspace.spectators.find(
-      (item) => item.id === spectatorId,
-    );
-    let nextSpectator = spectator || {
-      id: spectatorId,
-      name,
-      createdAt: new Date().toISOString(),
-    };
-    const predictionId = `prediction-${spectatorId}-${team.id}`;
-    const existing = workspace.spectatorPredictions.find(
-      (prediction) => prediction.id === predictionId,
-    );
-    let predictionInserted = false;
-    if (!existing) {
-      if (!spectator) {
-        const spectatorInserted = await insertUniqueArenaRecord(
-          COLLECTIONS.spectators,
-          nextSpectator,
+    return withPublicSignupCompetitionLocks(
+      [WORKSPACE_MUTATION_LOCK_RESOURCE, request.eventId],
+      async (lockScope) => {
+        const workspace = await readWorkspace({ consistentRead: true });
+        const event = workspace.events.find(
+          (item) => item.id === request.eventId,
         );
-        if (!spectatorInserted) {
-          const latestSpectators = await readAll(COLLECTIONS.spectators);
-          const persistedSpectator = latestSpectators.find(
-            (item) => item.id === spectatorId,
-          );
-          if (
-            !persistedSpectator ||
-            persistedSpectator.name.trim().toLowerCase() !== normalizedName
-          ) {
-            throw new Error("That spectator name could not be registered.");
+        const team = workspace.teams.find(
+          (item) =>
+            item.id === request.teamId && item.eventId === request.eventId,
+        );
+        assertSpectatorPredictionRunIsActive(event, team, workspace.teams);
+        const normalizedName = name.toLowerCase();
+        const existingSpectator = workspace.spectators.find(
+          (item) =>
+            String(item.name || "").trim().toLowerCase() === normalizedName,
+        );
+        const spectatorId =
+          existingSpectator?.id ||
+          `spectator-${createHash("sha256")
+            .update(normalizedName)
+            .digest("hex")
+            .slice(0, 24)}`;
+        const spectator =
+          existingSpectator ||
+          workspace.spectators.find((item) => item.id === spectatorId);
+        let nextSpectator = spectator || {
+          id: spectatorId,
+          name,
+          createdAt: new Date().toISOString(),
+        };
+        const predictionId = `prediction-${spectatorId}-${team.id}`;
+        const existing = workspace.spectatorPredictions.find(
+          (prediction) => prediction.id === predictionId,
+        );
+        let predictionInserted = false;
+        if (!existing) {
+          if (!spectator) {
+            const spectatorInserted = await insertUniqueArenaRecord(
+              COLLECTIONS.spectators,
+              nextSpectator,
+              lockScope.assertOwned,
+            );
+            if (!spectatorInserted) {
+              const latestSpectators = await readAll(COLLECTIONS.spectators);
+              const persistedSpectator = latestSpectators.find(
+                (item) => item.id === spectatorId,
+              );
+              if (
+                !persistedSpectator ||
+                persistedSpectator.name.trim().toLowerCase() !== normalizedName
+              ) {
+                throw new Error("That spectator name could not be registered.");
+              }
+              nextSpectator = persistedSpectator;
+            }
           }
-          nextSpectator = persistedSpectator;
+          predictionInserted = await insertUniqueArenaRecord(
+            COLLECTIONS.spectatorPredictions,
+            {
+              id: predictionId,
+              spectatorId,
+              eventId: event.id,
+              teamId: team.id,
+              round: Number(team.round || 1),
+              choice: request.choice,
+              submittedAt: new Date().toISOString(),
+            },
+            lockScope.assertOwned,
+          );
+          if (predictionInserted) {
+            await lockScope.assertOwned();
+            await wixData.save(
+              SETTINGS_COLLECTION,
+              {
+                _id: ONLINE_REVISION_ID,
+                value: workspace.onlineRevision + 1,
+                updatedAt: new Date(),
+              },
+              OPTIONS,
+            );
+          }
         }
-      }
-      predictionInserted = await insertUniqueArenaRecord(
-        COLLECTIONS.spectatorPredictions,
-        {
-          id: predictionId,
-          spectatorId,
-          eventId: event.id,
-          teamId: team.id,
-          round: Number(team.round || 1),
-          choice: request.choice,
-          submittedAt: new Date().toISOString(),
-        },
-      );
-      if (predictionInserted) {
-        await wixData.save(
-          SETTINGS_COLLECTION,
-          {
-            _id: ONLINE_REVISION_ID,
-            value: workspace.onlineRevision + 1,
-            updatedAt: new Date(),
-          },
-          OPTIONS,
-        );
-      }
-    }
-    const latest = await readWorkspace();
-    return {
-      spectatorName: nextSpectator.name,
-      existing: Boolean(existing) || !predictionInserted,
-      publicData: publicProjection(latest),
-    };
+        const latest = await readWorkspace({ consistentRead: true });
+        return {
+          spectatorName: nextSpectator.name,
+          existing: Boolean(existing) || !predictionInserted,
+          publicData: publicProjection(latest),
+        };
+      },
+    );
   },
 );

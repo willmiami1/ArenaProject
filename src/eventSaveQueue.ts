@@ -115,7 +115,7 @@ export function reconcileEventSaveConfirmation(
       ? data.events.map((event) =>
           event.id === submitted.id ? confirmedEvent : event,
         )
-      : [...data.events, confirmedEvent],
+      : data.events,
   };
 }
 

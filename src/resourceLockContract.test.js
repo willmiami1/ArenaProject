@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -312,18 +312,26 @@ describe("quota-safe renewable Wix resource locks", () => {
     expect(payments).toContain("mutationLockScope.assertOwned");
     expect(payments).toContain("paymentLockScope.assertOwned");
     expect(payments).toMatch(
-      /\.filter\(\)\s*\.eq\("paymentId", lock\.storedOwnerValue \|\| paymentId\)\s*\.gt\("expiresAt", new Date\(lock\.mustBeValidAt\)\)/,
+      /async insert\(lock\) \{[\s\S]*?wixData\.insert\(\s*PAYMENT_LOCKS_COLLECTION,\s*storedLockItem\(lock\)/,
     );
     expect(payments).toMatch(
-      /\.filter\(\)\s*\.eq\("paymentId", paymentId\)\s*\.le\("expiresAt", new Date\(lock\.expiresAt\)\)/,
+      /const current = await readStoredLock\(lock\.id\);[\s\S]*?current\.expiresAt <= lock\.mustBeValidAt[\s\S]*?await writeLockHeartbeat\(lock\)/,
     );
-    expect(payments).toMatch(/await lockApi\.update\([\s\S]*?condition,/);
-    expect(payments).toMatch(/await lockApi\.remove\([\s\S]*?condition,/);
+    expect(payments).toMatch(
+      /async function writeLockHeartbeat\(lock\)[\s\S]*?lockHeartbeatId\(lock\)[\s\S]*?wixData\.update\(/,
+    );
+    expect(payments).toMatch(
+      /current\.expiresAt > lock\.expiresAt[\s\S]*?wixData\.remove\([\s\S]*?restoreRacedLock\(removed\)/,
+    );
+    expect(payments).toContain("LOCK_RECLAIM_PREFIX");
+    expect(payments).toMatch(
+      /heartbeatAfterRemoval\.expiresAt > current\.expiresAt[\s\S]*?installSentinelWhileClaimed\(removed, claim\)/,
+    );
     expect(payments).not.toContain("attempt <= 20");
     expect(payments).not.toContain("await wait(250)");
   });
 
-  it("keeps login loadable without the optional conditional lock SDK", () => {
+  it("keeps every lock path on the built-in Wix Data module", () => {
     const payments = readFileSync(
       new URL("../wix/backend/public-signup-payments.js", import.meta.url),
       "utf8",
@@ -332,23 +340,24 @@ describe("quota-safe renewable Wix resource locks", () => {
       new URL("../wix/backend/arena-data.web.js", import.meta.url),
       "utf8",
     );
-    const lockAdapter = readFileSync(
-      new URL("../wix/backend/conditional-lock-data.js", import.meta.url),
-      "utf8",
-    );
 
     expect(backend).toMatch(/export const getAdminAccess = webMethod\(/);
     expect(backend).toMatch(/export const authenticateContestant = webMethod\(/);
-    expect(payments).not.toMatch(/^import .*["']@wix\/data["'];?$/m);
-    expect(payments).toMatch(
-      /conditionalLockApiPromise = import\("\.\/conditional-lock-data"\)/,
-    );
-    expect(lockAdapter).toMatch(
-      /^import \{ items \} from "@wix\/data";$/m,
-    );
+    expect(payments).toMatch(/^import wixData from "wix-data";$/m);
+    expect(payments).not.toMatch(/@wix\/data/);
+    expect(payments).not.toMatch(/conditional-lock-data/);
+    expect(payments).not.toMatch(/\bimport\(/);
+    expect(backend).not.toMatch(/@wix\/data/);
+    expect(backend).not.toMatch(/conditional-lock-data/);
+    expect(backend).not.toMatch(/\bimport\(/);
+    expect(
+      existsSync(
+        new URL("../wix/backend/conditional-lock-data.js", import.meta.url),
+      ),
+    ).toBe(false);
   });
 
-  it("fails protected mutations closed when the lock adapter is unavailable", () => {
+  it("claims locks with insert and never with save or upsert", () => {
     const payments = readFileSync(
       new URL("../wix/backend/public-signup-payments.js", import.meta.url),
       "utf8",
@@ -361,11 +370,16 @@ describe("quota-safe renewable Wix resource locks", () => {
     );
 
     expect(resourceLockBoundary).toMatch(
-      /await loadConditionalLockApi\(\);\s+return resourceLockManager\.run/,
+      /return resourceLockManager\.run\(resources, callback\)/,
     );
-    expect(payments).toContain(
-      'code: "RESOURCE_LOCK_ADAPTER_UNAVAILABLE"',
+    expect(payments).not.toContain("loadConditionalLockApi");
+    expect(payments).not.toContain("RESOURCE_LOCK_ADAPTER_UNAVAILABLE");
+    expect(payments).not.toContain("adapterReason");
+    expect(payments).not.toMatch(
+      /wixData\.(save|bulkSave)\(\s*PAYMENT_LOCKS_COLLECTION/,
     );
-    expect(payments).toContain('dependency: "@wix/data"');
+    expect(payments).toMatch(
+      /wixData\.insert\(\s*PAYMENT_LOCKS_COLLECTION,\s*storedLockItem\(lock\)/,
+    );
   });
 });

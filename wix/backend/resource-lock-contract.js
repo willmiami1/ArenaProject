@@ -125,6 +125,8 @@ export function createResourceLockManager({
     describeResource(resource, id);
 
   const emit = (event, details) => onDiagnostic({ event, ...details });
+  const isOwnedLock = (lock, ownerToken) =>
+    lock?.ownerToken === ownerToken && lock?.reclaiming !== true;
   const jitteredRetryDelay = (delayMs, maximumMs) =>
     Math.min(
       Math.max(
@@ -140,6 +142,7 @@ export function createResourceLockManager({
   async function removeExpiredLock(expected) {
     try {
       await store.remove(expected);
+      return true;
     } catch (error) {
       const current = await store.get(expected.id);
       if (
@@ -147,8 +150,9 @@ export function createResourceLockManager({
         current.ownerToken !== expected.ownerToken ||
         expiresAtTime(current) > expiresAtTime(expected)
       ) {
-        return;
+        return false;
       }
+      if (error?.code === "RESOURCE_LOCK_RECLAIM_BUSY") return false;
       throw error;
     }
   }
@@ -164,13 +168,14 @@ export function createResourceLockManager({
         const existing = await store.get(id);
         if (!existing) {
           pollOnly = false;
-        } else if (existing.ownerToken === scope.ownerToken) {
+        } else if (isOwnedLock(existing, scope.ownerToken)) {
           return existing;
         } else {
           lastHolder = existing;
-          if (expiresAtTime(existing) <= now()) {
-            await removeExpiredLock(existing);
-            pollOnly = false;
+          if (existing.reclaiming) {
+            pollOnly = true;
+          } else if (expiresAtTime(existing) <= now()) {
+            pollOnly = !(await removeExpiredLock(existing));
           }
         }
       } else {
@@ -186,7 +191,7 @@ export function createResourceLockManager({
             await sleep(settings.claimSettleMs);
           }
           const confirmed = await store.get(id);
-          if (confirmed?.ownerToken === scope.ownerToken) {
+          if (isOwnedLock(confirmed, scope.ownerToken)) {
             return confirmed;
           }
           lastHolder = confirmed;
@@ -198,10 +203,12 @@ export function createResourceLockManager({
         } catch (insertError) {
           const existing = await store.get(id);
           if (!existing) throw insertError;
-          if (existing.ownerToken === scope.ownerToken) return existing;
+          if (isOwnedLock(existing, scope.ownerToken)) return existing;
           lastHolder = existing;
-          if (expiresAtTime(existing) <= now()) {
-            await removeExpiredLock(existing);
+          if (existing.reclaiming) {
+            pollOnly = true;
+          } else if (expiresAtTime(existing) <= now()) {
+            pollOnly = !(await removeExpiredLock(existing));
           } else {
             pollOnly = true;
           }
@@ -240,7 +247,7 @@ export function createResourceLockManager({
 
   async function assertLockOwned(scope, lock) {
     const current = await store.get(lock.id);
-    if (current?.ownerToken !== scope.ownerToken) {
+    if (!isOwnedLock(current, scope.ownerToken)) {
       throw new ResourceLockOwnershipError(
         contextFor(lock.resource, lock.id),
       );
@@ -260,7 +267,7 @@ export function createResourceLockManager({
       await store.remove(lock);
     } catch (error) {
       const afterFailure = await store.get(lock.id);
-      if (!afterFailure || afterFailure.ownerToken !== scope.ownerToken) {
+      if (!isOwnedLock(afterFailure, scope.ownerToken)) {
         if (afterFailure) {
           emit("release-skipped-not-owner", {
             resource: contextFor(lock.resource, lock.id),
@@ -294,7 +301,7 @@ export function createResourceLockManager({
       } catch (error) {
         const current = await store.get(lock.id);
         if (
-          current?.ownerToken !== scope.ownerToken ||
+          !isOwnedLock(current, scope.ownerToken) ||
           expiresAtTime(current) <= now()
         ) {
           throw new ResourceLockOwnershipError(
@@ -304,7 +311,7 @@ export function createResourceLockManager({
         }
         throw error;
       }
-      if (renewed?.ownerToken !== scope.ownerToken) {
+      if (!isOwnedLock(renewed, scope.ownerToken)) {
         throw new ResourceLockOwnershipError(
           contextFor(lock.resource, lock.id),
           "renewal was displaced",
@@ -365,13 +372,14 @@ export function createResourceLockManager({
     await scope.operation;
   }
 
-  async function assertScopeOwned(scope) {
+  async function assertScopeOwned(scope, force = false) {
     if (scope.lostError) throw scope.lostError;
     await queueScopeOperation(scope, async () => {
       for (const lock of scope.locks.values()) {
         const checkedAt = now();
         const lastConfirmedAt = scope.confirmedAt.get(lock.resource) || 0;
         if (
+          force ||
           settings.ownershipCheckIntervalMs === 0 ||
           checkedAt - lastConfirmedAt >= settings.ownershipCheckIntervalMs ||
           expiresAtTime(lock) <= checkedAt
@@ -481,7 +489,7 @@ export function createResourceLockManager({
       scope.api = {
         run: (nestedResources, nestedCallback) =>
           runInScope(scope, nestedResources, nestedCallback),
-        assertOwned: () => assertScopeOwned(scope),
+        assertOwned: () => assertScopeOwned(scope, true),
       };
       return runInScope(scope, resources, callback, true);
     },
