@@ -146,11 +146,13 @@ export interface PublicSignupCompetition {
     maximum: number;
     full: boolean;
   }>;
-  // Positions this rider can enter a pick-and-draw draw alone in. Empty for
-  // every other competition type, and empty when the competition only draws for
-  // a position the rider cannot fill - which is the only case a partner is
-  // actually required.
+  // The positions this rider can be drawn in for a pick-and-draw. Empty for
+  // every other competition type. Online signup never offers a partner, so for
+  // a pick-and-draw these are the only positions on offer at all.
   drawRoles: Array<"Header" | "Heeler">;
+  // Always false and always empty: partners are picked at the event, never
+  // online. Kept on the contract so an older cached page cannot decide a
+  // partner is mandatory and block checkout on a picker that no longer exists.
   requiresPartner: boolean;
   partners: Array<
     Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap"> & {

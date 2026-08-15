@@ -177,16 +177,6 @@ const publicContestant = ({
   heelerHandicap,
 }) => ({ id, name, role, headerHandicap, heelerHandicap });
 
-const partnersForEvent = (workspace, event, contestant) =>
-  workspace.contestants
-    .map((partner) => ({
-      ...publicContestant(partner),
-      eligibleRoles: eligibleRoles(event, contestant).filter((role) =>
-        partnerIsEligible(event, contestant, partner, role),
-      ),
-    }))
-    .filter((partner) => partner.eligibleRoles.length > 0);
-
 // The positions a pick-and-draw competition actually draws for. Mirrors the
 // Registration Desk's assertPickDrawRole so an online draw entry cannot land in
 // a position the desk would reject.
@@ -197,9 +187,10 @@ const pickDrawRoles = (event) => {
   return ["Header", "Heeler"];
 };
 
-// Picking a partner is an option, not a requirement. With no partner the rider
-// enters the draw as a solo entry, exactly like the desk's "draws" entry type,
-// so the only extra constraint is that the competition draws for that position.
+// Picking a partner is a Registration Desk concern, not an online one. Online
+// signup enters the rider in the draw as a solo entry, exactly like the desk's
+// "draws" entry type, so the only constraint is that the competition draws for
+// a position this rider can fill.
 const soloDrawRoles = (event, contestant) =>
   event.competitionType === "pick-and-draw"
     ? eligibleRoles(event, contestant).filter((role) =>
@@ -254,10 +245,6 @@ export function buildPublicSignupOptions(
     .filter((event) => publicSignupEventIsOpen(event, now))
     .map((event) => {
       const roles = eligibleRoles(event, contestant);
-      const partners =
-        event.competitionType === "pick-and-draw"
-          ? partnersForEvent(workspace, event, contestant)
-          : [];
       const drawRoles = soloDrawRoles(event, contestant);
       return {
         id: event.id,
@@ -271,18 +258,24 @@ export function buildPublicSignupOptions(
         ).toISOString(),
         roles,
         drawRoles,
-        // A partner is only required when the rider cannot enter the draw alone,
-        // which happens when the competition draws for a position this rider
-        // cannot fill. Otherwise picking a partner is optional.
-        requiresPartner:
-          event.competitionType === "pick-and-draw" && drawRoles.length === 0,
-        partners,
+        // Online signup never offers a partner, for any competition type. A
+        // pick-and-draw rider registers and is entered in the draw; partners
+        // are picked at the event. Kept on the payload, always false, so an
+        // older cached page cannot decide a partner is mandatory and block
+        // checkout on a picker that no longer exists.
+        requiresPartner: false,
+        partners: [],
       };
     })
     .filter(
       (event) =>
         event.roles.length > 0 &&
-        (!event.requiresPartner || event.partners.length > 0),
+        // A pick-and-draw is only enterable online if the rider can take a
+        // position the draw actually fills. There is no partner to fall back
+        // on any more, so an event that draws only for a position this rider
+        // cannot fill is not offered at all.
+        (event.competitionType !== "pick-and-draw" ||
+          event.drawRoles.length > 0),
     )
     .sort((left, right) =>
       `${left.date}T${left.startTime}:${left.id}`.localeCompare(
@@ -554,10 +547,21 @@ export function normalizePublicSignupSelections(
     const partnerId = String(selection?.partnerId || "");
     const entryLimit = Number(event.entriesAllowed || 1);
 
+    // Online signup no longer offers a partner picker, so a partner on a new
+    // submission is a stale page or a forged payload either way: reject it.
+    // requireOpenRegistration is false only when re-normalizing an intent the
+    // rider has already paid for, and those are honored as the picked team
+    // they actually bought rather than stranded mid-checkout.
+    if (partnerId && requireOpenRegistration) {
+      fail(
+        "PARTNER_NOT_OFFERED",
+        `Partners are picked at the event. Register for ${event.name} and you are entered in the draw.`,
+      );
+    }
+
     if (!partnerId) {
-      // No partner chosen: the rider enters the draw as a solo entry, exactly
-      // like the Registration Desk's "draws" entry type. The pick is an option,
-      // not a requirement to participate.
+      // The rider enters the draw as a solo entry, exactly like the
+      // Registration Desk's "draws" entry type.
       if (!pickDrawRoles(event).includes(role)) {
         fail(
           "INVALID_ROLE",
@@ -573,6 +577,9 @@ export function normalizePublicSignupSelections(
       return { competitionId, role };
     }
 
+    // Only reachable when re-normalizing an already-paid intent created before
+    // the partner picker was removed. New submissions are rejected above, so
+    // this path drains in-flight checkouts and then goes dead.
     const partner = workspace.contestants.find((item) => item.id === partnerId);
     if (!partnerIsEligible(event, contestant, partner, role)) {
       fail("INVALID_PARTNER", `Choose an eligible partner for ${event.name}.`);
