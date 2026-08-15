@@ -471,6 +471,25 @@ describe("quota-safe renewable Wix resource locks", () => {
     );
   });
 
+  it("never fences twice before a write that fences itself", () => {
+    const arenaData = readFileSync(
+      new URL("../wix/backend/arena-data.web.js", import.meta.url),
+      "utf8",
+    );
+    // upsertArenaRecord, bumpRevision and savePublicScheduleSnapshot each
+    // re-prove ownership immediately before their own durable write. A
+    // caller-level fence just before delegating to them proves nothing that
+    // the helper's fence does not prove later and closer to the write, so it
+    // is pure Wix Data round-trip cost on every save surface.
+    const redundant =
+      /await lockScope\.assertOwned\(\);\s*\n\s*(?:const \w+ = )?await (?:bumpRevision|upsertArenaRecord|savePublicScheduleSnapshot)\(/;
+    expect(arenaData).not.toMatch(redundant);
+    // The fences that directly guard a write must survive.
+    expect(arenaData).toMatch(
+      /await lockScope\.assertOwned\(\);\s*\n\s*await wixData\.save\(/,
+    );
+  });
+
   it("keeps every lock path on the built-in Wix Data module", () => {
     const payments = readFileSync(
       new URL("../wix/backend/public-signup-payments.js", import.meta.url),

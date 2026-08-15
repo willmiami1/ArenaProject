@@ -1398,7 +1398,6 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       throw error;
     }
     await ensureSettingsCollection();
-    await lockScope.assertOwned();
     await savePublicScheduleSnapshot(data, lockScope.assertOwned);
     return {
       ...data,

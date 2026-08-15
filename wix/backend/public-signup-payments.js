@@ -1671,7 +1671,7 @@ async function finalizeCashSubmission(intent) {
       }
       if (insertedRecord) {
         await lockScope.assertOwned();
-        await advanceOnlineRevision();
+        await advanceOnlineRevision(lockScope.assertOwned);
       }
       await lockScope.assertOwned();
       const completedIntent = await updateWithRetry(
@@ -1859,24 +1859,26 @@ async function insertUniqueArenaRecord(collectionId, record) {
   }
 }
 
-async function advanceOnlineRevision() {
-  return withResourceLocks(
-    competitionLockResources([`revision-${ONLINE_REVISION_ID}`]),
-    async (lockScope) => {
-      const revision = await wixData
-        .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
-        .catch(() => null);
-      await lockScope.assertOwned();
-      await wixData.save(
-        SETTINGS_COLLECTION,
-        {
-          _id: ONLINE_REVISION_ID,
-          value: Number(revision?.value || 0) + 1,
-          updatedAt: new Date(),
-        },
-        OPTIONS,
-      );
+async function advanceOnlineRevision(assertLockOwned) {
+  if (typeof assertLockOwned !== "function") {
+    const error = new Error(
+      "Online revision updates require the held workspace mutation lock scope.",
+    );
+    error.code = "RESOURCE_LOCK_SCOPE_REQUIRED";
+    throw error;
+  }
+  const revision = await wixData
+    .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
+    .catch(() => null);
+  await assertLockOwned();
+  await wixData.save(
+    SETTINGS_COLLECTION,
+    {
+      _id: ONLINE_REVISION_ID,
+      value: Number(revision?.value || 0) + 1,
+      updatedAt: new Date(),
     },
+    OPTIONS,
   );
 }
 
@@ -1939,7 +1941,7 @@ async function finalizeSuccessfulPayment(
     await insertUniqueArenaRecord(COLLECTIONS.registrations, registration);
   }
   await assertLockOwned();
-  await advanceOnlineRevision();
+  await advanceOnlineRevision(assertLockOwned);
   await assertLockOwned();
   const successfulIntent = await updateWithRetry(
     PAYMENT_INTENTS_COLLECTION,
