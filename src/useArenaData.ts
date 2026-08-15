@@ -386,6 +386,13 @@ export function workspaceSaveNeedsFollowUp(
   return localDirty && current !== submitted;
 }
 
+export function shouldRearmWorkspaceSaveAfterBusySave(
+  localDirty: boolean,
+  hasEventSaveFailures: boolean,
+) {
+  return localDirty && !hasEventSaveFailures;
+}
+
 export function reconcileWorkspaceSaveConfirmation(
   submitted: ArenaData,
   confirmation: WorkspaceSaveConfirmation,
@@ -533,6 +540,7 @@ export function useArenaData() {
   const lastFailedSnapshot = useRef("");
   const pendingAuthoritativeRefreshRevision = useRef<number | null>(null);
   const saveRetryTimer = useRef(0);
+  const workspaceSaveTimer = useRef(0);
   const activeRunSaveQueue =
     useRef<LatestActiveRunSaveQueue<ActiveRunConfirmation> | null>(null);
   const dataRef = useRef(data);
@@ -1206,7 +1214,9 @@ export function useArenaData() {
 
     localDirty.current = true;
     setStatus("saving");
-    const timeout = window.setTimeout(async () => {
+    window.clearTimeout(workspaceSaveTimer.current);
+    workspaceSaveTimer.current = window.setTimeout(async () => {
+      workspaceSaveTimer.current = 0;
       if (
         saveInFlight.current ||
         activeRunSaveInFlight.current ||
@@ -1214,10 +1224,34 @@ export function useArenaData() {
         eventSaveInFlight.current ||
         registrationSaveInFlight.current
       ) {
+        if (
+          shouldRearmWorkspaceSaveAfterBusySave(
+            localDirty.current,
+            eventSaveFailures.current.hasFailures,
+          )
+        ) {
+          saveIdleWaiters.current.push(() => {
+            if (!localDirty.current || saveInFlight.current) return;
+            skipNextSave.current = false;
+            directMutationReconciliationSnapshot.current = "";
+            preserveDirtyOnSkippedSave.current = false;
+            setStatus("saving");
+            setData((current) => ({ ...current }));
+          });
+        }
+        return;
+      }
+      const submitted = dataRef.current;
+      if (
+        eventSaveFailures.current.hasFailures ||
+        (automaticRetryCount.current >= 3 &&
+          JSON.stringify(submitted) === lastFailedSnapshot.current)
+      ) {
+        localDirty.current = true;
+        setStatus("error");
         return;
       }
       saveInFlight.current = true;
-      const submitted = data;
       try {
         const saved = await requestWixData("save", submitted);
         if (!saved) throw new Error("Wix did not confirm the workspace save.");
@@ -1327,9 +1361,15 @@ export function useArenaData() {
         }
       }
     }, 500);
-
-    return () => window.clearTimeout(timeout);
   }, [data, ready, wixConnected]);
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(workspaceSaveTimer.current);
+      workspaceSaveTimer.current = 0;
+    },
+    [],
+  );
 
   useEffect(() => {
     const syncLocalWindow = (event: StorageEvent) => {
