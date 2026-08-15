@@ -268,6 +268,18 @@ async function readStoredLockRecord(id, includeReclaimClaims) {
 
 const readStoredLock = (id) => readStoredLockRecord(id, true);
 
+// Ownership fences run far more often than contention arbitration, so they read
+// the lock record and any reclaim claim without the torn-read sentinels or the
+// heartbeat lookup. Omitting the heartbeat can only understate the lease, and
+// the lock manager re-checks every negative result against readStoredLock.
+async function readStoredLockOwnership(id) {
+  const lock = decodeLockRecord(await readStoredItem(id));
+  if (!lock?.ownerToken) return lock;
+  const reclaimClaims = await readActiveReclaimClaims(lock.id);
+  if (reclaimClaims.length > 0) lock.reclaiming = true;
+  return lock;
+}
+
 const sameStoredLockOwner = (current, expected) =>
   Boolean(current) &&
   current.ownerToken === expected.ownerToken &&
@@ -513,6 +525,7 @@ const resourceLockStore = {
     );
   },
   get: readStoredLock,
+  confirm: readStoredLockOwnership,
   async update(lock) {
     const current = await readStoredLock(lock.id);
     if (

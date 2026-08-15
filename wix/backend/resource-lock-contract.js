@@ -246,7 +246,22 @@ export function createResourceLockManager({
   }
 
   async function assertLockOwned(scope, lock) {
-    const current = await store.get(lock.id);
+    // Read started once this ticket was issued, so every fence requested at or
+    // before it is satisfied by this confirmation.
+    const startedTicket = scope.fenceTicket;
+    const cheapRead = typeof store.confirm === "function";
+    let current = cheapRead
+      ? await store.confirm(lock.id)
+      : await store.get(lock.id);
+    let authoritative = !cheapRead;
+    if (
+      !authoritative &&
+      (!isOwnedLock(current, scope.ownerToken) ||
+        expiresAtTime(current) <= now())
+    ) {
+      current = await store.get(lock.id);
+      authoritative = true;
+    }
     if (!isOwnedLock(current, scope.ownerToken)) {
       throw new ResourceLockOwnershipError(
         contextFor(lock.resource, lock.id),
@@ -258,8 +273,16 @@ export function createResourceLockManager({
         "lease expired",
       );
     }
-    scope.locks.set(lock.resource, current);
+    // A cheap read may understate the lease because it skips the heartbeat. A
+    // lease only ever extends for the same owner, so keep the longer of the two.
+    scope.locks.set(
+      lock.resource,
+      authoritative || expiresAtTime(current) >= expiresAtTime(lock)
+        ? current
+        : { ...current, expiresAt: lock.expiresAt },
+    );
     scope.confirmedAt.set(lock.resource, now());
+    scope.confirmedTicket.set(lock.resource, startedTicket);
   }
 
   async function releaseLock(scope, lock) {
@@ -374,10 +397,15 @@ export function createResourceLockManager({
 
   async function assertScopeOwned(scope, force = false) {
     if (scope.lostError) throw scope.lostError;
+    scope.fenceTicket += 1;
+    const ticket = scope.fenceTicket;
     await queueScopeOperation(scope, async () => {
       for (const lock of scope.locks.values()) {
         const checkedAt = now();
         const lastConfirmedAt = scope.confirmedAt.get(lock.resource) || 0;
+        if ((scope.confirmedTicket.get(lock.resource) || 0) >= ticket) {
+          continue;
+        }
         if (
           force ||
           settings.ownershipCheckIntervalMs === 0 ||
@@ -407,6 +435,7 @@ export function createResourceLockManager({
       } finally {
         scope.locks.delete(lock.resource);
         scope.confirmedAt.delete(lock.resource);
+        scope.confirmedTicket.delete(lock.resource);
       }
     }
     if (firstError) throw firstError;
@@ -477,6 +506,8 @@ export function createResourceLockManager({
         ownerToken: createOwnerToken(),
         locks: new Map(),
         confirmedAt: new Map(),
+        confirmedTicket: new Map(),
+        fenceTicket: 0,
         operation: Promise.resolve(),
         renewal: null,
         renewalFailed: false,

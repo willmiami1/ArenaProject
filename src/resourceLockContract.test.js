@@ -288,6 +288,106 @@ describe("quota-safe renewable Wix resource locks", () => {
     expect(order).toEqual(["workspace", "signup"]);
   });
 
+  it("shares one confirmation across concurrent ownership fences", async () => {
+    const store = new MemoryLockStore();
+    const manager = lockManager(store);
+    let fenceReads = 0;
+
+    await manager.run(["competition:workspace"], async (scope) => {
+      store.requests.get = 0;
+      await Promise.all(Array.from({ length: 7 }, () => scope.assertOwned()));
+      fenceReads = store.requests.get;
+    });
+
+    expect(fenceReads).toBe(1);
+  });
+
+  it("still detects displacement on a fence issued after an earlier one", async () => {
+    const store = new MemoryLockStore();
+    const manager = lockManager(store);
+    let mutated = false;
+
+    await expect(
+      manager.run(["competition:event-1"], async (scope) => {
+        await scope.assertOwned();
+        const id = "lock:competition:event-1";
+        store.items.set(id, {
+          id,
+          resource: "competition:event-1",
+          ownerToken: "successor",
+          expiresAt: Date.now() + 1000,
+        });
+        await scope.assertOwned();
+        mutated = true;
+      }),
+    ).rejects.toBeInstanceOf(ResourceLockOwnershipError);
+    expect(mutated).toBe(false);
+  });
+
+  it("serves fences from a cheap confirmation without losing the lease", async () => {
+    const store = new MemoryLockStore();
+    let confirmReads = 0;
+    store.confirm = async (id) => {
+      confirmReads += 1;
+      const current = store.items.get(id);
+      return current ? { ...current, expiresAt: current.expiresAt - 40 } : null;
+    };
+    const manager = lockManager(store);
+
+    await manager.run(["competition:workspace"], async (scope) => {
+      confirmReads = 0;
+      store.requests.get = 0;
+      await scope.assertOwned();
+      expect(confirmReads).toBe(1);
+      expect(store.requests.get).toBe(0);
+      await scope.assertOwned();
+    });
+
+    expect(store.items.size).toBe(0);
+  });
+
+  it("rechecks a cheap confirmation that looks expired before failing", async () => {
+    const store = new MemoryLockStore();
+    store.confirm = async (id) => {
+      const current = store.items.get(id);
+      return current ? { ...current, expiresAt: 0 } : null;
+    };
+    const manager = lockManager(store);
+    let mutated = false;
+
+    await manager.run(["competition:workspace"], async (scope) => {
+      await scope.assertOwned();
+      mutated = true;
+    });
+
+    expect(mutated).toBe(true);
+  });
+
+  it("never approves a displaced lock from a cheap confirmation", async () => {
+    const store = new MemoryLockStore();
+    store.confirm = async (id) => {
+      const current = store.items.get(id);
+      return current ? { ...current } : null;
+    };
+    const manager = lockManager(store);
+    let mutated = false;
+
+    await expect(
+      manager.run(["competition:event-1"], async (scope) => {
+        const id = "lock:competition:event-1";
+        store.items.set(id, {
+          id,
+          resource: "competition:event-1",
+          ownerToken: "successor",
+          expiresAt: Date.now() + 1000,
+        });
+        await scope.assertOwned();
+        mutated = true;
+      }),
+    ).rejects.toBeInstanceOf(ResourceLockOwnershipError);
+    expect(mutated).toBe(false);
+  });
+
   it("wires every mirrored mutation flow to the shared barrier", () => {
     const payments = readFileSync(
       new URL("../wix/backend/public-signup-payments.js", import.meta.url),
@@ -324,6 +424,10 @@ describe("quota-safe renewable Wix resource locks", () => {
       /current\.expiresAt > lock\.expiresAt[\s\S]*?wixData\.remove\([\s\S]*?restoreRacedLock\(removed\)/,
     );
     expect(payments).toContain("LOCK_RECLAIM_PREFIX");
+    expect(payments).toMatch(
+      /async function readStoredLockOwnership\(id\)[\s\S]*?readActiveReclaimClaims\(lock\.id\)/,
+    );
+    expect(payments).toContain("confirm: readStoredLockOwnership,");
     expect(payments).toMatch(
       /heartbeatAfterRemoval\.expiresAt > current\.expiresAt[\s\S]*?installSentinelWhileClaimed\(removed, claim\)/,
     );
