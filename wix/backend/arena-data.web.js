@@ -1352,14 +1352,43 @@ export const loadContestantSignedWaiver = webMethod(
 const withFullWorkspaceLocks = (callback) =>
   withWorkspaceLocks([WORKSPACE_MUTATION_LOCK_RESOURCE], callback);
 
+// Per-phase wall-clock timings for a workspace save, written to the Wix site
+// log so a single real save shows which phase owns the latency instead of it
+// being inferred from round-trip counts.
+function startSaveTiming() {
+  const started = Date.now();
+  let mark = started;
+  const laps = [];
+  return {
+    lap(name) {
+      const at = Date.now();
+      laps.push(`${name}=${at - mark}ms`);
+      mark = at;
+    },
+    report(label) {
+      const line = `Arena save timing. ${label} total=${Date.now() - started}ms ${laps.join(" ")}`;
+      try {
+        console.error(line);
+      } catch {
+        // Logging must never fail a save.
+      }
+      return line;
+    },
+  };
+}
+
 export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
+  const timing = startSaveTiming();
   await requireArenaAdmin();
   await ensureWorkspaceCollections();
   await ensureRiderAccountCollections();
+  timing.lap("prepare");
   return withFullWorkspaceLocks(async (lockScope) => {
+  timing.lap("lock");
   let latest;
   try {
     latest = await readWorkspace({ consistentRead: true });
+    timing.lap("read");
   } catch (error) {
     if (
       error?.code !== "WDE0025" &&
@@ -1422,6 +1451,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     spectatorPredictions: latest.spectatorPredictions,
   };
   await assertWorkspacePreservesPublicSignupReservations(next);
+  timing.lap("merge");
   const protectedIds = (records) => protectedOnlineAppIds(records, loadedAt);
 
   await Promise.all([
@@ -1468,6 +1498,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
       lockScope.assertOwned,
     ),
   ]);
+  timing.lap("sync");
   await removeOrphanedContestantCredentials(
     next.contestants || [],
     lockScope.assertOwned,
@@ -1483,6 +1514,7 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     },
     OPTIONS,
   );
+  timing.lap("settings");
   await lockScope.assertOwned();
   await wixData.save(
     SETTINGS_COLLECTION,
@@ -1493,7 +1525,10 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     },
     OPTIONS,
   );
+  timing.lap("revision");
   await savePublicScheduleSnapshot(next, lockScope.assertOwned);
+  timing.lap("snapshot");
+  timing.report("saveArenaData");
   return readWorkspace({ consistentRead: true });
   });
 });

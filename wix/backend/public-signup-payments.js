@@ -268,16 +268,21 @@ async function readStoredLockRecord(id, includeReclaimClaims) {
 
 const readStoredLock = (id) => readStoredLockRecord(id, true);
 
-// Ownership fences run far more often than contention arbitration, so they read
-// the lock record and any reclaim claim without the torn-read sentinels or the
-// heartbeat lookup. Omitting the heartbeat can only understate the lease, and
-// the lock manager re-checks every negative result against readStoredLock.
-async function readStoredLockOwnership(id) {
-  const lock = decodeLockRecord(await readStoredItem(id));
-  if (!lock?.ownerToken) return lock;
-  const reclaimClaims = await readActiveReclaimClaims(lock.id);
-  if (reclaimClaims.length > 0) lock.reclaiming = true;
-  return lock;
+// Ownership fences run far more often than contention arbitration. A lock
+// record that still names this owner with an unexpired lease cannot be the
+// subject of a reclaim claim, because claims only ever arbitrate a lock that
+// already looked expired. That case needs a single read. Anything less certain
+// returns undefined so the lock manager falls back to the authoritative read.
+async function readStoredLockOwnership(lock) {
+  const current = decodeLockRecord(await readStoredItem(lock.id));
+  if (
+    current?.ownerToken &&
+    current.ownerToken === lock.ownerToken &&
+    current.expiresAt > Date.now()
+  ) {
+    return current;
+  }
+  return undefined;
 }
 
 const sameStoredLockOwner = (current, expected) =>
