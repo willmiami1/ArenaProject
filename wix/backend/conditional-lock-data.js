@@ -1,7 +1,10 @@
-import { items } from "@wix/data";
 import { elevate } from "wix-auth";
 
-export function createConditionalLockApi() {
+// Defer the CommonJS SDK load so unrelated login methods can still initialize.
+const loadWixDataModule = () => require("@wix/data");
+
+export function createConditionalLockApi(loadModule = loadWixDataModule) {
+  const { items } = loadModule();
   if (
     typeof items?.filter !== "function" ||
     typeof items?.update !== "function" ||

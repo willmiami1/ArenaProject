@@ -37,6 +37,7 @@ import {
   competitionLockResources,
   createResourceLockManager,
 } from "./resource-lock-contract";
+import { createConditionalLockApi } from "./conditional-lock-data.js";
 
 const OPTIONS = { suppressAuth: true, consistentRead: true };
 const COLLECTIONS = {
@@ -66,21 +67,44 @@ const ACTIVE_PAYMENT_STATUSES = new Set([
 const getSecretValue = elevate(secrets.getSecretValue);
 let conditionalLockApiPromise;
 
+function conditionalLockAdapterReason(error) {
+  const code = String(error?.code || "");
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    code === "MODULE_NOT_FOUND" ||
+    /cannot find module|module not found/i.test(message)
+  ) {
+    return "PACKAGE_NOT_FOUND";
+  }
+  if (
+    error instanceof ReferenceError &&
+    /\brequire\b.*not defined/i.test(message)
+  ) {
+    return "COMMONJS_LOADER_UNAVAILABLE";
+  }
+  if (/exports are incomplete/i.test(message)) {
+    return "SDK_EXPORTS_INCOMPLETE";
+  }
+  return "INITIALIZATION_FAILED";
+}
+
 function loadConditionalLockApi() {
   if (!conditionalLockApiPromise) {
-    // Wix lazy backend imports require the explicit file extension.
-    conditionalLockApiPromise = import("./conditional-lock-data.js")
-      .then(({ createConditionalLockApi }) => createConditionalLockApi())
+    conditionalLockApiPromise = Promise.resolve()
+      .then(() => createConditionalLockApi())
       .catch((error) => {
+        const adapterReason = conditionalLockAdapterReason(error);
         console.error("Arena resource lock adapter is unavailable.", {
           code: "RESOURCE_LOCK_ADAPTER_UNAVAILABLE",
           dependency: "@wix/data",
+          reason: adapterReason,
           message: error instanceof Error ? error.message : String(error),
         });
         const failure = new Error(
-          "Protected arena updates are temporarily unavailable because the Wix Data lock adapter could not be initialized. Install @wix/data for this site and publish again.",
+          "Protected arena updates are temporarily unavailable because the Wix Data lock adapter could not be initialized. Your unsaved workspace remains on this device.",
         );
         failure.code = "RESOURCE_LOCK_ADAPTER_UNAVAILABLE";
+        failure.adapterReason = adapterReason;
         failure.cause = error;
         throw failure;
       });

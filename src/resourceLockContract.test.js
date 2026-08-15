@@ -341,14 +341,11 @@ describe("quota-safe renewable Wix resource locks", () => {
     expect(backend).toMatch(/export const authenticateContestant = webMethod\(/);
     expect(payments).not.toMatch(/^import .*["']@wix\/data["'];?$/m);
     expect(payments).toMatch(
-      /conditionalLockApiPromise = import\("\.\/conditional-lock-data\.js"\)/,
+      /^import \{ createConditionalLockApi \} from "\.\/conditional-lock-data\.js";$/m,
     );
-    expect(payments).not.toMatch(
-      /import\("\.\/conditional-lock-data"\)/,
-    );
-    expect(lockAdapter).toMatch(
-      /^import \{ items \} from "@wix\/data";$/m,
-    );
+    expect(payments).not.toMatch(/\bimport\(/);
+    expect(lockAdapter).not.toMatch(/^import .*["']@wix\/data["'];?$/m);
+    expect(lockAdapter).toMatch(/require\("@wix\/data"\)/);
   });
 
   it("fails protected mutations closed when the lock adapter is unavailable", () => {
@@ -370,5 +367,8 @@ describe("quota-safe renewable Wix resource locks", () => {
       'code: "RESOURCE_LOCK_ADAPTER_UNAVAILABLE"',
     );
     expect(payments).toContain('dependency: "@wix/data"');
+    expect(payments).toContain('"COMMONJS_LOADER_UNAVAILABLE"');
+    expect(payments).toContain('"SDK_EXPORTS_INCOMPLETE"');
+    expect(payments).not.toContain("Install @wix/data for this site");
   });
 });
