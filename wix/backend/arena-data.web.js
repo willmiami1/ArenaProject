@@ -1212,10 +1212,22 @@ async function ensureCredentialLockCollection() {
   );
 }
 
+function protectedOnlineAppIds(records, loadedAt) {
+  return new Set(
+    records
+      .filter(
+        (record) =>
+          record.source === "online" &&
+          Date.parse(record.submittedAt || "") > loadedAt,
+      )
+      .map((record) => record.id),
+  );
+}
+
 async function syncRecords(
   collectionId,
   records,
-  removableAppIds,
+  protectedAppIds,
   assertLockOwned = async () => undefined,
 ) {
   let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
@@ -1231,7 +1243,7 @@ async function syncRecords(
   const removeIds = currentItems
     .filter(
       (item) =>
-        removableAppIds.has(item.appId) && !incomingIds.has(item.appId),
+        !incomingIds.has(item.appId) && !protectedAppIds.has(item.appId),
     )
     .map((item) => item._id);
   if (removeIds.length) {
@@ -1410,57 +1422,49 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     spectatorPredictions: latest.spectatorPredictions,
   };
   await assertWorkspacePreservesPublicSignupReservations(next);
-  const removableIds = (records) =>
-    new Set(
-      records
-        .filter(
-          (record) =>
-            record.source !== "online" ||
-            Date.parse(record.submittedAt || "") <= loadedAt,
-        )
-        .map((record) => record.id),
-    );
+  const protectedIds = (records) => protectedOnlineAppIds(records, loadedAt);
+
   await Promise.all([
     syncRecords(
       COLLECTIONS.meets,
       next.meets || [],
-      removableIds(latest.meets),
+      protectedIds(latest.meets),
       lockScope.assertOwned,
     ),
     syncRecords(
       COLLECTIONS.events,
       next.events || [],
-      removableIds(latest.events),
+      protectedIds(latest.events),
       lockScope.assertOwned,
     ),
     syncRecords(
       COLLECTIONS.contestants,
       next.contestants || [],
-      removableIds(latest.contestants),
+      protectedIds(latest.contestants),
       lockScope.assertOwned,
     ),
     syncRecords(
       COLLECTIONS.teams,
       next.teams,
-      removableIds(latest.teams),
+      protectedIds(latest.teams),
       lockScope.assertOwned,
     ),
     syncRecords(
       COLLECTIONS.registrations,
       next.registrations,
-      removableIds(latest.registrations),
+      protectedIds(latest.registrations),
       lockScope.assertOwned,
     ),
     syncRecords(
       COLLECTIONS.spectators,
       next.spectators,
-      removableIds(latest.spectators),
+      protectedIds(latest.spectators),
       lockScope.assertOwned,
     ),
     syncRecords(
       COLLECTIONS.spectatorPredictions,
       next.spectatorPredictions,
-      removableIds(latest.spectatorPredictions),
+      protectedIds(latest.spectatorPredictions),
       lockScope.assertOwned,
     ),
   ]);
