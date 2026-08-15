@@ -198,6 +198,13 @@ describe("public cash signup Wix mirror", () => {
         },
       ],
       "cash-submission",
+      Date.now(),
+      // Online signup no longer offers a partner, so a picked team can only
+      // come from an intent created before the picker was removed.
+      // Re-normalizing with requireOpenRegistration false is exactly how those
+      // drain, and it is the only path that still produces a team record to
+      // assert cash metadata on.
+      false,
     );
     const fingerprint = sha256(
       publicSignupFingerprintPayload(

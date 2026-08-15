@@ -46,6 +46,7 @@ import {
   type PublicSignupCashConfirmation,
   type PublicSignupOptions,
   type PublicSignupPayment,
+  type PublicSignupCompetition,
   type PublicSignupSelection,
 } from "./wixBridge";
 import {
@@ -1279,16 +1280,18 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     }
   };
 
+  // Online signup never offers a partner. A pick-and-draw rider is entered in
+  // the draw, so the only positions on offer are the ones the draw fills.
+  const selectableRoles = (roping: PublicSignupCompetition) =>
+    roping.competitionType === "pick-and-draw" ? roping.drawRoles : roping.roles;
+
   const toggleCompetition = (competitionId: string) => {
     const roping = options?.competitions.find((item) => item.id === competitionId);
     if (!roping) return;
-    const openRoles = roping.roles.filter(
+    const openRoles = selectableRoles(roping).filter(
       (role) => !roping.roleCapacities?.find((capacity) => capacity.role === role)?.full,
     );
-    // Default to a position the draw actually fills so a rider who never opens
-    // the optional partner picker still has a valid solo draw entry.
-    const availableRole =
-      openRoles.find((role) => roping.drawRoles.includes(role)) ?? openRoles[0];
+    const availableRole = openRoles[0];
     if (!availableRole) {
       setMessage("This Round Robin is full.");
       return;
@@ -1332,20 +1335,15 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     ) {
       return;
     }
-    const partnerProblem = options.competitions.find((item) => {
+    // Defensive only: the radios never offer a position outside selectableRoles,
+    // and the backend hides a pick-and-draw the rider cannot draw a position in.
+    const unavailablePosition = options.competitions.find((item) => {
       const selection = selections[item.id];
-      if (!selection || selection.partnerId) return false;
-      if (item.requiresPartner) return true;
-      return (
-        item.competitionType === "pick-and-draw" &&
-        !item.drawRoles.includes(selection.role)
-      );
+      return selection && !selectableRoles(item).includes(selection.role);
     });
-    if (partnerProblem) {
+    if (unavailablePosition) {
       setMessage(
-        partnerProblem.requiresPartner
-          ? "Choose an eligible partner for every selected Pick & Draw."
-          : "Pick a partner, or choose a position this Pick & Draw draws for.",
+        `Choose a position ${unavailablePosition.name} draws for.`,
       );
       return;
     }
@@ -1482,18 +1480,18 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                         <div className="public-roping-options">
                           <fieldset>
                             <legend>Your position</legend>
-                            {roping.roles.map((role) => {
+                            {selectableRoles(roping).map((role) => {
                               const roleFull = roping.roleCapacities?.find((capacity) => capacity.role === role)?.full;
                               return (
                               <label className="public-radio" key={role}>
-                                <input type="radio" name={`role-${roping.id}`} disabled={roleFull || cashSubmissionAttempted} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role, partnerId: undefined })} />
+                                <input type="radio" name={`role-${roping.id}`} disabled={roleFull || cashSubmissionAttempted} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role })} />
                                 {role}{roleFull ? " - FULL" : ""}
                               </label>
                               );
                             })}
                           </fieldset>
-                          {(roping.requiresPartner || (roping.competitionType === "pick-and-draw" && roping.partners.length > 0)) && (
-                            <label>Picked partner{roping.requiresPartner ? "" : " (optional)"}<select required={roping.requiresPartner} disabled={cashSubmissionAttempted} value={selection.partnerId ?? ""} onChange={(event) => updateSelection(roping.id, { partnerId: event.target.value || undefined })}><option value="">{roping.requiresPartner ? "Choose an eligible partner" : "No partner - enter the draw"}</option>{roping.partners.filter((partner) => partner.eligibleRoles.includes(selection.role)).map((partner) => <option value={partner.id} key={partner.id}>{partner.name}</option>)}</select>{!roping.requiresPartner && !selection.partnerId && <small className="public-partner-note">Picking a partner is optional. With no partner you enter the draw as a single.</small>}</label>
+                          {roping.competitionType === "pick-and-draw" && (
+                            <p className="public-payment-note">You are entered in the draw. Partners are picked at the event.</p>
                           )}
                         </div>
                       )}

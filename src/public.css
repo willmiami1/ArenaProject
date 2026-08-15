@@ -203,7 +203,6 @@
 .public-roping-toggle b { color: var(--public-tan); font-size: 17px; }
 .public-roping-options { display: grid; grid-template-columns: minmax(220px,.8fr) minmax(240px,1.2fr); gap: 15px; padding: 0 18px 18px 51px; }
 .public-roping-options fieldset { margin: 0; }
-.public-partner-note { display: block; margin-top: 6px; color: var(--public-muted); font-size: 11px; }
 .public-cart-total { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 18px; color: #17130f; background: var(--public-tan); }
 .public-cart-total span { font-size: 12px; font-weight: 800; text-transform: uppercase; }
 .public-cart-total strong { font-family: "Manrope",sans-serif; font-size: 24px; }

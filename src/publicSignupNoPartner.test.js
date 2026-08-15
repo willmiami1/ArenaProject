@@ -7,9 +7,9 @@ import {
   normalizePublicSignupSelections,
 } from "../wix/backend/public-signup-contract.js";
 
-// Picking a partner for a pick-and-draw competition is an option, not a
-// requirement. With no partner the rider enters the draw as a solo entry,
-// exactly like the Registration Desk's "draws" entry type.
+// Online signup does not offer a partner picker at all. A rider registering
+// for a pick-and-draw enters the draw as a solo entry, exactly like the
+// Registration Desk's "draws" entry type. Partners are picked at the event.
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const publicSite = source("./PublicSite.tsx");
@@ -99,9 +99,19 @@ const errorCode = (run) => {
 };
 const options = (space, rider) =>
   buildPublicSignupOptions(space, rider, "token", "2099-08-01T00:00:00.000Z", now);
+// requireOpenRegistration false: re-normalizing an intent already paid for.
+const drain = (space, rider, selections) =>
+  normalizePublicSignupSelections(
+    space,
+    rider,
+    selections,
+    intent.submissionId,
+    now,
+    false,
+  );
 
-describe("optional pick-and-draw partners in the shared backend contract", () => {
-  it("enters the draw as a solo entry when no partner is chosen", () => {
+describe("pick-and-draw partners are not offered by the shared backend contract", () => {
+  it("enters the draw as a solo entry", () => {
     const events = [event("pick-1")];
     const selections = normalize(workspace(events), contestant, [
       { competitionId: "pick-1", role: "Header" },
@@ -153,9 +163,21 @@ describe("optional pick-and-draw partners in the shared backend contract", () =>
     expect(Object.keys(soloDraw).sort()).toEqual(Object.keys(slideEntry).sort());
   });
 
-  it("still creates the picked team unchanged when a partner is chosen", () => {
+  it("rejects a submitted partner outright", () => {
+    expect(
+      errorCode(() =>
+        normalize(workspace([event("pick-1")]), contestant, [
+          { competitionId: "pick-1", role: "Header", partnerId: partner.id },
+        ]),
+      ),
+    ).toBe("PARTNER_NOT_OFFERED");
+  });
+
+  it("still fulfills an already-paid partnered intent as its picked team", () => {
+    // Rejecting these would take the money and strand the entry, so they drain
+    // as the team that was actually bought.
     const events = [event("pick-1")];
-    const selections = normalize(workspace(events), contestant, [
+    const selections = drain(workspace(events), contestant, [
       { competitionId: "pick-1", role: "Header", partnerId: partner.id },
     ]);
     expect(selections[0].partnerId).toBe(partner.id);
@@ -178,7 +200,17 @@ describe("optional pick-and-draw partners in the shared backend contract", () =>
     ).toBe(true);
   });
 
-  it("rejects a solo entry in a position the competition does not draw for", () => {
+  it("offers no partners even when eligible partners exist", () => {
+    // contestant and partner are a valid pairing for this event, so the old
+    // payload listed each as a pick for the other.
+    const offered = options(workspace([event("pick-1")]), contestant)
+      .competitions[0];
+    expect(offered.partners).toEqual([]);
+    expect(offered.requiresPartner).toBe(false);
+    expect(offered.drawRoles).toEqual(["Header", "Heeler"]);
+  });
+
+  it("rejects an entry in a position the competition does not draw for", () => {
     const events = [event("pick-1", "pick-and-draw", { pickDrawRole: "header" })];
     expect(
       errorCode(() =>
@@ -187,32 +219,26 @@ describe("optional pick-and-draw partners in the shared backend contract", () =>
         ]),
       ),
     ).toBe("INVALID_ROLE");
-
-    // The same rider may still take that position with a partner, because a
-    // picked team fills both ends regardless of the drawn position.
-    const picked = normalize(workspace(events), contestant, [
-      { competitionId: "pick-1", role: "Heeler", partnerId: partner.id },
-    ]);
-    expect(picked[0].partnerId).toBe(partner.id);
   });
 
-  it("requires a partner only when the rider cannot enter the draw alone", () => {
-    const both = options(workspace([event("pick-1")]), contestant)
-      .competitions[0];
-    expect(both.requiresPartner).toBe(false);
-    expect(both.drawRoles).toEqual(["Header", "Heeler"]);
-
-    const heelerDraw = options(
-      workspace([event("pick-1", "pick-and-draw", { pickDrawRole: "heeler" })]),
-      headerOnlyRider,
-    ).competitions[0];
-    expect(heelerDraw.requiresPartner).toBe(true);
-    expect(heelerDraw.drawRoles).toEqual([]);
+  it("never marks a competition as requiring a partner", () => {
+    const offered = options(
+      workspace([event("pick-1"), event("slide-1", "slide")]),
+      contestant,
+    ).competitions;
+    expect(offered).toHaveLength(2);
+    expect(
+      offered.every(
+        (competition) =>
+          competition.requiresPartner === false &&
+          competition.partners.length === 0,
+      ),
+    ).toBe(true);
   });
 
-  it("still offers a pick-and-draw event that has no eligible partners", () => {
+  it("still offers a pick-and-draw event that has no other riders", () => {
     // Before solo entry existed this event was filtered out entirely, because a
-    // partner was mandatory and none was available.
+    // partner was mandatory and none was available. Now it is the only way in.
     const lonely = {
       events: [event("pick-1")],
       contestants: [contestant],
@@ -225,7 +251,7 @@ describe("optional pick-and-draw partners in the shared backend contract", () =>
     expect(offered[0].requiresPartner).toBe(false);
   });
 
-  it("does not offer the event to a rider who can neither draw alone nor pick", () => {
+  it("does not offer the event to a rider who cannot fill a drawn position", () => {
     const lonely = {
       events: [event("pick-1", "pick-and-draw", { pickDrawRole: "heeler" })],
       contestants: [headerOnlyRider],
@@ -263,7 +289,7 @@ describe("optional pick-and-draw partners in the shared backend contract", () =>
     ).toBe(true);
   });
 
-  it("counts a partner's existing solo draw entries against a picked team", () => {
+  it("counts a partner's existing solo draw entries against a draining team", () => {
     const withSolo = workspace(
       [event("pick-1", "pick-and-draw", { entriesAllowed: 1 })],
       {
@@ -282,7 +308,7 @@ describe("optional pick-and-draw partners in the shared backend contract", () =>
     );
     expect(
       errorCode(() =>
-        normalize(withSolo, contestant, [
+        drain(withSolo, contestant, [
           { competitionId: "pick-1", role: "Header", partnerId: partner.id },
         ]),
       ),
@@ -314,46 +340,46 @@ describe("optional pick-and-draw partners in the shared backend contract", () =>
   });
 });
 
-describe("the public signup page treats the partner picker as optional", () => {
+describe("the public signup page has no partner picker at all", () => {
   it("carries drawRoles through the bridge contract", () => {
     expect(bridge).toContain('drawRoles: Array<"Header" | "Heeler">;');
   });
 
-  it("renders the partner picker whenever a pick-and-draw offers partners", () => {
-    expect(signupPage).toContain(
-      'roping.competitionType === "pick-and-draw" && roping.partners.length > 0',
-    );
-    // required is bound to the requirement, not to the picker being rendered.
-    expect(signupPage).toContain("required={roping.requiresPartner}");
-    expect(signupPage).toContain("No partner - enter the draw");
-    expect(signupPage).not.toContain("{roping.requiresPartner && (");
+  it("renders no partner picker, no matter what the payload carries", () => {
+    expect(signupPage).not.toContain("Picked partner");
+    expect(signupPage).not.toContain("Choose an eligible partner");
+    expect(signupPage).not.toContain("No partner - enter the draw");
+    expect(signupPage).not.toContain("public-partner-note");
+    // Nothing reads the partners list or the requirement flag any more.
+    expect(signupPage).not.toContain("roping.partners");
+    expect(signupPage).not.toContain("roping.requiresPartner");
+    expect(signupPage).not.toContain("item.requiresPartner");
   });
 
-  it("only blocks checkout when a partner is genuinely required", () => {
-    expect(signupPage).toContain("if (item.requiresPartner) return true;");
+  it("never sets a partnerId on a selection", () => {
+    expect(signupPage).not.toContain("partnerId:");
+    expect(signupPage).not.toContain("selection.partnerId");
+  });
+
+  it("offers only positions the draw fills for a pick-and-draw", () => {
     expect(signupPage).toContain(
-      "!item.drawRoles.includes(selection.role)",
+      'roping.competitionType === "pick-and-draw" ? roping.drawRoles : roping.roles',
     );
+    expect(signupPage).toContain("{selectableRoles(roping).map((role) => {");
     expect(signupPage).toContain(
-      "Pick a partner, or choose a position this Pick & Draw draws for.",
+      "selectableRoles(roping).filter(",
     );
   });
 
-  it("defaults a selected pick-and-draw to a position the draw fills", () => {
+  it("tells the rider partners are picked at the event", () => {
     expect(signupPage).toContain(
-      "openRoles.find((role) => roping.drawRoles.includes(role))",
+      "You are entered in the draw. Partners are picked at the event.",
     );
   });
 
-  it("omits partnerId from the submitted selection when no partner is chosen", () => {
-    // updateSelection stores undefined for the empty option, and
-    // normalizePublicSignupSelections drops the key entirely, so the request
-    // carries no partnerId at all.
-    expect(signupPage).toContain(
-      "partnerId: event.target.value || undefined",
-    );
+  it("submits a selection carrying only the competition and position", () => {
     const selections = normalize(workspace([event("pick-1")]), contestant, [
-      { competitionId: "pick-1", role: "Header", partnerId: undefined },
+      { competitionId: "pick-1", role: "Header" },
     ]);
     expect(Object.keys(selections[0]).sort()).toEqual([
       "competitionId",
