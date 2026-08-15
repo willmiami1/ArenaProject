@@ -187,6 +187,62 @@ const partnersForEvent = (workspace, event, contestant) =>
     }))
     .filter((partner) => partner.eligibleRoles.length > 0);
 
+// The positions a pick-and-draw competition actually draws for. Mirrors the
+// Registration Desk's assertPickDrawRole so an online draw entry cannot land in
+// a position the desk would reject.
+const pickDrawRoles = (event) => {
+  const configured = String(event.pickDrawRole || "both").toLowerCase();
+  if (configured === "header") return ["Header"];
+  if (configured === "heeler") return ["Heeler"];
+  return ["Header", "Heeler"];
+};
+
+// Picking a partner is an option, not a requirement. With no partner the rider
+// enters the draw as a solo entry, exactly like the desk's "draws" entry type,
+// so the only extra constraint is that the competition draws for that position.
+const soloDrawRoles = (event, contestant) =>
+  event.competitionType === "pick-and-draw"
+    ? eligibleRoles(event, contestant).filter((role) =>
+        pickDrawRoles(event).includes(role),
+      )
+    : [];
+
+// One rider's entries in a pick-and-draw competition, counting picked teams and
+// solo draw entries together against the shared entriesAllowed limit. Mirrors
+// the desk's activeStandaloneEntryTotal + teamCountByRider accounting, including
+// the !sourceTeamId discriminator that keeps a picked team's own registration
+// rows from being counted twice.
+const pickAndDrawEntryCount = (
+  workspace,
+  eventId,
+  contestantId,
+  submissionId,
+) => {
+  const teamCount = workspace.teams.filter(
+    (team) =>
+      team.eventId === eventId &&
+      team.submissionId !== submissionId &&
+      team.round === 1 &&
+      !team.generated &&
+      !team.scratched &&
+      activeTeamIncludes(team, contestantId),
+  ).length;
+  const standaloneEntries = workspace.registrations
+    .filter(
+      (registration) =>
+        registration.eventId === eventId &&
+        registration.contestantId === contestantId &&
+        !registration.sourceTeamId &&
+        registration.submissionId !== submissionId &&
+        registration.status !== "scratched",
+    )
+    .reduce((total, registration) => {
+      const entries = Number(registration.entries);
+      return total + (Number.isFinite(entries) && entries > 0 ? entries : 0);
+    }, 0);
+  return teamCount + standaloneEntries;
+};
+
 export function buildPublicSignupOptions(
   workspace,
   contestant,
@@ -202,6 +258,7 @@ export function buildPublicSignupOptions(
         event.competitionType === "pick-and-draw"
           ? partnersForEvent(workspace, event, contestant)
           : [];
+      const drawRoles = soloDrawRoles(event, contestant);
       return {
         id: event.id,
         name: event.name,
@@ -213,7 +270,12 @@ export function buildPublicSignupOptions(
           registrationClosesAt(event),
         ).toISOString(),
         roles,
-        requiresPartner: event.competitionType === "pick-and-draw",
+        drawRoles,
+        // A partner is only required when the rider cannot enter the draw alone,
+        // which happens when the competition draws for a position this rider
+        // cannot fill. Otherwise picking a partner is optional.
+        requiresPartner:
+          event.competitionType === "pick-and-draw" && drawRoles.length === 0,
         partners,
       };
     })
@@ -382,9 +444,26 @@ export function assertWorkspaceSupportsActivePublicSignupReservations(
     );
     const entryLimit = Number(event.entriesAllowed || 1);
     for (const [participantId, reservedCount] of participantReservationCounts) {
+      // Solo draw entries are standalone registrations rather than teams, so
+      // they have to be counted here too or a reserved solo entry would slip
+      // past the limit a picked team is held to. !sourceTeamId keeps a picked
+      // team's own registration rows from being counted a second time.
+      const standaloneEntries = workspace.registrations
+        .filter(
+          (registration) =>
+            registration.eventId === competitionId &&
+            registration.contestantId === participantId &&
+            !registration.sourceTeamId &&
+            registration.status !== "scratched",
+        )
+        .reduce((total, registration) => {
+          const entries = Number(registration.entries);
+          return total + (Number.isFinite(entries) && entries > 0 ? entries : 0);
+        }, 0);
       if (
         activeTeams.filter((team) => activeTeamIncludes(team, participantId))
           .length +
+          standaloneEntries +
           reservedCount >
         entryLimit
       ) {
@@ -473,6 +552,27 @@ export function normalizePublicSignupSelections(
     }
 
     const partnerId = String(selection?.partnerId || "");
+    const entryLimit = Number(event.entriesAllowed || 1);
+
+    if (!partnerId) {
+      // No partner chosen: the rider enters the draw as a solo entry, exactly
+      // like the Registration Desk's "draws" entry type. The pick is an option,
+      // not a requirement to participate.
+      if (!pickDrawRoles(event).includes(role)) {
+        fail(
+          "INVALID_ROLE",
+          `Choose a draw position supported by ${event.name}.`,
+        );
+      }
+      if (
+        pickAndDrawEntryCount(workspace, event.id, contestant.id, submissionId) >=
+        entryLimit
+      ) {
+        fail("ENTRY_LIMIT", `Entry limit exceeded for ${event.name}.`);
+      }
+      return { competitionId, role };
+    }
+
     const partner = workspace.contestants.find((item) => item.id === partnerId);
     if (!partnerIsEligible(event, contestant, partner, role)) {
       fail("INVALID_PARTNER", `Choose an eligible partner for ${event.name}.`);
@@ -499,10 +599,10 @@ export function normalizePublicSignupSelections(
       );
     }
     if (
-      activeTeams.filter((team) => activeTeamIncludes(team, header.id)).length >=
-        Number(event.entriesAllowed || 1) ||
-      activeTeams.filter((team) => activeTeamIncludes(team, heeler.id)).length >=
-        Number(event.entriesAllowed || 1)
+      pickAndDrawEntryCount(workspace, event.id, header.id, submissionId) >=
+        entryLimit ||
+      pickAndDrawEntryCount(workspace, event.id, heeler.id, submissionId) >=
+        entryLimit
     ) {
       fail("ENTRY_LIMIT", `Entry limit exceeded for ${event.name}.`);
     }
@@ -639,7 +739,10 @@ export function buildPublicSignupRecords(
     const event = workspace.events.find(
       (item) => item.id === selection.competitionId,
     );
-    if (event.competitionType !== "pick-and-draw") {
+    // A pick-and-draw selection with no partner produces the same standalone
+    // registration row the desk's "draws" entry type produces, and no team, so
+    // draw generation treats it identically to a desk solo entry.
+    if (event.competitionType !== "pick-and-draw" || !selection.partnerId) {
       registrations.push({
         id: publicSignupRecordId("online-registration", intent, event.id),
         eventId: event.id,

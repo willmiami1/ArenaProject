@@ -146,6 +146,11 @@ export interface PublicSignupCompetition {
     maximum: number;
     full: boolean;
   }>;
+  // Positions this rider can enter a pick-and-draw draw alone in. Empty for
+  // every other competition type, and empty when the competition only draws for
+  // a position the rider cannot fill - which is the only case a partner is
+  // actually required.
+  drawRoles: Array<"Header" | "Heeler">;
   requiresPartner: boolean;
   partners: Array<
     Pick<Contestant, "id" | "name" | "role" | "headerHandicap" | "heelerHandicap"> & {
