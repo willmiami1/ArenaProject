@@ -37,9 +37,9 @@ import {
   competitionLockResources,
   createResourceLockManager,
 } from "./resource-lock-contract";
-import { createConditionalLockApi } from "./conditional-lock-data.js";
 
 const OPTIONS = { suppressAuth: true, consistentRead: true };
+const LOCK_OPTIONS = { ...OPTIONS, suppressHooks: true };
 const COLLECTIONS = {
   events: "ArenaCompetitions",
   contestants: "ArenaContestants",
@@ -65,52 +65,6 @@ const ACTIVE_PAYMENT_STATUSES = new Set([
   "settling",
 ]);
 const getSecretValue = elevate(secrets.getSecretValue);
-let conditionalLockApiPromise;
-
-function conditionalLockAdapterReason(error) {
-  const code = String(error?.code || "");
-  const message = error instanceof Error ? error.message : String(error);
-  if (
-    code === "MODULE_NOT_FOUND" ||
-    /cannot find module|module not found/i.test(message)
-  ) {
-    return "PACKAGE_NOT_FOUND";
-  }
-  if (
-    error instanceof ReferenceError &&
-    /\brequire\b.*not defined/i.test(message)
-  ) {
-    return "COMMONJS_LOADER_UNAVAILABLE";
-  }
-  if (/exports are incomplete/i.test(message)) {
-    return "SDK_EXPORTS_INCOMPLETE";
-  }
-  return "INITIALIZATION_FAILED";
-}
-
-function loadConditionalLockApi() {
-  if (!conditionalLockApiPromise) {
-    conditionalLockApiPromise = Promise.resolve()
-      .then(() => createConditionalLockApi())
-      .catch((error) => {
-        const adapterReason = conditionalLockAdapterReason(error);
-        console.error("Arena resource lock adapter is unavailable.", {
-          code: "RESOURCE_LOCK_ADAPTER_UNAVAILABLE",
-          dependency: "@wix/data",
-          reason: adapterReason,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        const failure = new Error(
-          "Protected arena updates are temporarily unavailable because the Wix Data lock adapter could not be initialized. Your unsaved workspace remains on this device.",
-        );
-        failure.code = "RESOURCE_LOCK_ADAPTER_UNAVAILABLE";
-        failure.adapterReason = adapterReason;
-        failure.cause = error;
-        throw failure;
-      });
-  }
-  return conditionalLockApiPromise;
-}
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const storageId = (namespace, value) =>
@@ -119,6 +73,10 @@ const storageId = (namespace, value) =>
 const publicError = (code, message) => new PublicSignupError(code, message);
 
 const LOCK_RECORD_PREFIX = "arena-resource-lock-v2:";
+const LOCK_HEARTBEAT_PREFIX = "arena-resource-lock-heartbeat-v1:";
+const LOCK_RECLAIM_PREFIX = "arena-resource-lock-reclaim-v1:";
+const LOCK_RECLAIM_GUARD_MS = 10000;
+const LOCK_RECLAIM_SETTLE_MS = 100;
 
 const encodeLockOwner = (resource, ownerToken) =>
   `${LOCK_RECORD_PREFIX}${JSON.stringify([resource, ownerToken])}`;
@@ -154,67 +112,451 @@ function decodeLockRecord(item) {
   };
 }
 
+function decodeLockHeartbeat(item) {
+  if (!item) return null;
+  const storedValue = String(item.paymentId || "");
+  if (!storedValue.startsWith(LOCK_HEARTBEAT_PREFIX)) return null;
+  try {
+    const decoded = JSON.parse(
+      storedValue.slice(LOCK_HEARTBEAT_PREFIX.length),
+    );
+    if (
+      Array.isArray(decoded) &&
+      typeof decoded[0] === "string" &&
+      typeof decoded[1] === "string" &&
+      typeof decoded[2] === "string"
+    ) {
+      return {
+        id: item._id,
+        lockId: decoded[0],
+        resource: decoded[1],
+        ownerToken: decoded[2],
+        expiresAt: new Date(item.expiresAt).getTime(),
+      };
+    }
+  } catch (error) {
+    console.error("Arena resource lock heartbeat could not be decoded.", {
+      lockId: String(item._id || "").slice(0, 12),
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return null;
+}
+
+function decodeReclaimClaim(item) {
+  if (!item) return null;
+  const storedValue = String(item.paymentId || "");
+  if (!storedValue.startsWith(LOCK_RECLAIM_PREFIX)) return null;
+  const fields = storedValue.slice(LOCK_RECLAIM_PREFIX.length).split(":");
+  if (
+    fields.length !== 5 ||
+    fields.some((field) => !field) ||
+    !Number.isFinite(Number(fields[2])) ||
+    !Number.isFinite(Number(fields[3]))
+  ) {
+    return null;
+  }
+  return {
+    id: item._id,
+    lockId: fields[0],
+    expectedOwnerToken: fields[1],
+    expectedExpiresAt: Number(fields[2]),
+    bucket: Number(fields[3]),
+    claimantToken: fields[4],
+    expiresAt: new Date(item.expiresAt).getTime(),
+    createdAt: new Date(item._createdDate || 0).getTime(),
+  };
+}
+
+const lockStoreConditionFailure = (operation) => {
+  const error = new Error(`Arena resource lock ${operation} ownership changed.`);
+  error.code = "RESOURCE_LOCK_STORE_CONDITION_FAILED";
+  return error;
+};
+
+const lockReclaimBusy = () => {
+  const error = new Error("Arena resource lock reclaim is already in progress.");
+  error.code = "RESOURCE_LOCK_RECLAIM_BUSY";
+  return error;
+};
+
+const storedLockItem = (lock) => ({
+  _id: lock.id,
+  paymentId:
+    lock.storedOwnerValue ||
+    encodeLockOwner(lock.resource, lock.ownerToken),
+  expiresAt: new Date(lock.expiresAt),
+});
+
+const lockHeartbeatId = (lock) =>
+  storageId(
+    "public-signup-resource-lock-heartbeat",
+    `${lock.id}:${lock.ownerToken}`,
+  );
+
+const storedLockHeartbeat = (lock) => ({
+  _id: lockHeartbeatId(lock),
+  paymentId: `${LOCK_HEARTBEAT_PREFIX}${JSON.stringify([
+    lock.id,
+    lock.resource,
+    lock.ownerToken,
+  ])}`,
+  expiresAt: new Date(lock.expiresAt),
+});
+
+async function readStoredItem(id) {
+  try {
+    return await wixData.get(PAYMENT_LOCKS_COLLECTION, id, LOCK_OPTIONS);
+  } catch (error) {
+    if (error?.code === "WDE0073") return null;
+    throw error;
+  }
+}
+
+const reclaimClaimPrefix = (lockId) =>
+  `${LOCK_RECLAIM_PREFIX}${lockId}:`;
+
+async function readActiveReclaimClaims(lockId) {
+  const result = await wixData
+    .query(PAYMENT_LOCKS_COLLECTION)
+    .startsWith("paymentId", reclaimClaimPrefix(lockId))
+    .gt("expiresAt", new Date())
+    .limit(100)
+    .find(OPTIONS);
+  return result.items
+    .map(decodeReclaimClaim)
+    .filter(
+      (claim) =>
+        claim?.lockId === lockId &&
+        Number.isFinite(claim.expiresAt) &&
+        claim.expiresAt > Date.now(),
+    )
+    .sort(
+      (left, right) =>
+        left.createdAt - right.createdAt || left.id.localeCompare(right.id),
+    );
+}
+
+async function readStoredLockRecord(id, includeReclaimClaims) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const lock = decodeLockRecord(await readStoredItem(id));
+    if (!lock?.ownerToken) return lock;
+    const heartbeat = decodeLockHeartbeat(
+      await readStoredItem(lockHeartbeatId(lock)),
+    );
+    const confirmed = decodeLockRecord(await readStoredItem(id));
+    if (!sameStoredLockOwner(confirmed, lock)) continue;
+    const reclaimClaims = includeReclaimClaims
+      ? await readActiveReclaimClaims(lock.id)
+      : [];
+    const finalSentinel = decodeLockRecord(await readStoredItem(id));
+    if (!sameStoredLockOwner(finalSentinel, lock)) continue;
+    if (
+      heartbeat?.lockId === lock.id &&
+      heartbeat.resource === lock.resource &&
+      heartbeat.ownerToken === lock.ownerToken &&
+      Number.isFinite(heartbeat.expiresAt)
+    ) {
+      lock.expiresAt = Math.max(lock.expiresAt, heartbeat.expiresAt);
+    }
+    if (reclaimClaims.length > 0) lock.reclaiming = true;
+    return lock;
+  }
+  const unstable = decodeLockRecord(await readStoredItem(id));
+  return unstable ? { ...unstable, reclaiming: true } : null;
+}
+
+const readStoredLock = (id) => readStoredLockRecord(id, true);
+
+const sameStoredLockOwner = (current, expected) =>
+  Boolean(current) &&
+  current.ownerToken === expected.ownerToken &&
+  current.resource === expected.resource &&
+  current.storedOwnerValue ===
+    (expected.storedOwnerValue ||
+      encodeLockOwner(expected.resource, expected.ownerToken));
+
+const sameLockHeartbeatOwner = (heartbeat, lock) =>
+  Boolean(heartbeat) &&
+  heartbeat.lockId === lock.id &&
+  heartbeat.resource === lock.resource &&
+  heartbeat.ownerToken === lock.ownerToken;
+
+async function writeLockHeartbeat(lock) {
+  const heartbeatItem = storedLockHeartbeat(lock);
+  const existing = await readStoredItem(heartbeatItem._id);
+  if (existing) {
+    if (!sameLockHeartbeatOwner(decodeLockHeartbeat(existing), lock)) {
+      throw lockStoreConditionFailure("renewal");
+    }
+    await wixData.update(
+      PAYMENT_LOCKS_COLLECTION,
+      heartbeatItem,
+      LOCK_OPTIONS,
+    );
+    return;
+  }
+  try {
+    await wixData.insert(
+      PAYMENT_LOCKS_COLLECTION,
+      heartbeatItem,
+      LOCK_OPTIONS,
+    );
+  } catch (error) {
+    const raced = decodeLockHeartbeat(
+      await readStoredItem(heartbeatItem._id),
+    );
+    if (!sameLockHeartbeatOwner(raced, lock)) throw error;
+    await wixData.update(
+      PAYMENT_LOCKS_COLLECTION,
+      heartbeatItem,
+      LOCK_OPTIONS,
+    );
+  }
+}
+
+async function removeLockHeartbeat(lock) {
+  const heartbeatId = lockHeartbeatId(lock);
+  const heartbeat = decodeLockHeartbeat(await readStoredItem(heartbeatId));
+  if (!sameLockHeartbeatOwner(heartbeat, lock)) return;
+  try {
+    await wixData.remove(
+      PAYMENT_LOCKS_COLLECTION,
+      heartbeatId,
+      LOCK_OPTIONS,
+    );
+  } catch (error) {
+    if (await readStoredItem(heartbeatId)) throw error;
+  }
+}
+
+async function removeOrphanedLockHeartbeat(lock) {
+  const sentinel = decodeLockRecord(await readStoredItem(lock.id));
+  if (sameStoredLockOwner(sentinel, lock)) return;
+  await removeLockHeartbeat(lock);
+}
+
+const storedReclaimClaim = (lock, claimantToken, claimedAt) => {
+  const bucket = Math.floor(claimedAt / LOCK_RECLAIM_GUARD_MS);
+  return {
+    _id: storageId(
+      "public-signup-resource-lock-reclaim",
+      `${lock.id}:${lock.ownerToken}:${lock.expiresAt}:${bucket}`,
+    ),
+    paymentId: `${reclaimClaimPrefix(lock.id)}${lock.ownerToken}:${lock.expiresAt}:${bucket}:${claimantToken}`,
+    expiresAt: new Date(claimedAt + LOCK_RECLAIM_GUARD_MS),
+  };
+};
+
+async function acquireReclaimClaim(lock) {
+  const claimantToken = randomBytes(16).toString("hex");
+  const candidate = storedReclaimClaim(lock, claimantToken, Date.now());
+  try {
+    await wixData.insert(
+      PAYMENT_LOCKS_COLLECTION,
+      candidate,
+      LOCK_OPTIONS,
+    );
+  } catch (error) {
+    if (!(await readStoredItem(candidate._id))) throw error;
+  }
+  await wait(LOCK_RECLAIM_SETTLE_MS);
+  const winner = (await readActiveReclaimClaims(lock.id))[0];
+  if (
+    winner?.id !== candidate._id ||
+    winner.claimantToken !== claimantToken
+  ) {
+    const ownClaim = decodeReclaimClaim(
+      await readStoredItem(candidate._id),
+    );
+    if (ownClaim?.claimantToken === claimantToken) {
+      await removeReclaimClaim(ownClaim);
+    }
+    return null;
+  }
+  return winner;
+}
+
+async function assertReclaimClaimOwned(claim) {
+  const winner = (await readActiveReclaimClaims(claim.lockId))[0];
+  if (
+    winner?.id !== claim.id ||
+    winner.claimantToken !== claim.claimantToken
+  ) {
+    throw lockReclaimBusy();
+  }
+}
+
+async function restoreReclaimClaim(item) {
+  try {
+    await wixData.insert(
+      PAYMENT_LOCKS_COLLECTION,
+      {
+        _id: item._id,
+        paymentId: item.paymentId,
+        expiresAt: item.expiresAt,
+      },
+      LOCK_OPTIONS,
+    );
+  } catch (error) {
+    if (await readStoredItem(item._id)) return;
+    throw error;
+  }
+}
+
+async function removeReclaimClaim(claim) {
+  const existing = await readStoredItem(claim.id);
+  const decoded = decodeReclaimClaim(existing);
+  if (decoded?.claimantToken !== claim.claimantToken) return;
+  const removed = await wixData.remove(
+    PAYMENT_LOCKS_COLLECTION,
+    claim.id,
+    LOCK_OPTIONS,
+  );
+  if (decodeReclaimClaim(removed)?.claimantToken !== claim.claimantToken) {
+    await restoreReclaimClaim(removed);
+    throw lockReclaimBusy();
+  }
+}
+
+async function installSentinelWhileClaimed(target, claim) {
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    await assertReclaimClaimOwned(claim);
+    const existing = decodeLockRecord(await readStoredItem(target.id));
+    if (sameStoredLockOwner(existing, target)) return existing;
+    if (existing) {
+      const removed = decodeLockRecord(
+        await wixData.remove(
+          PAYMENT_LOCKS_COLLECTION,
+          target.id,
+          LOCK_OPTIONS,
+        ),
+      );
+      if (removed) await removeLockHeartbeat(removed);
+    }
+    await assertReclaimClaimOwned(claim);
+    try {
+      return decodeLockRecord(
+        await wixData.insert(
+          PAYMENT_LOCKS_COLLECTION,
+          storedLockItem(target),
+          LOCK_OPTIONS,
+        ),
+      );
+    } catch (error) {
+      if (!(await readStoredItem(target.id))) throw error;
+    }
+  }
+  throw lockReclaimBusy();
+}
+
+async function restoreRacedLock(removed) {
+  try {
+    await wixData.insert(
+      PAYMENT_LOCKS_COLLECTION,
+      storedLockItem(removed),
+      LOCK_OPTIONS,
+    );
+  } catch (error) {
+    if (await readStoredLock(removed.id)) return;
+    throw error;
+  }
+}
+
+async function removeExpiredLockWithClaim(lock, current) {
+  const claim = await acquireReclaimClaim(lock);
+  if (!claim) throw lockReclaimBusy();
+  try {
+    const guardedCurrent = await readStoredLockRecord(lock.id, false);
+    if (
+      !sameStoredLockOwner(guardedCurrent, lock) ||
+      guardedCurrent.expiresAt > lock.expiresAt
+    ) {
+      throw lockStoreConditionFailure("removal");
+    }
+    await assertReclaimClaimOwned(claim);
+    const removed = decodeLockRecord(
+      await wixData.remove(PAYMENT_LOCKS_COLLECTION, lock.id, LOCK_OPTIONS),
+    );
+    if (!sameStoredLockOwner(removed, lock)) {
+      if (removed) await installSentinelWhileClaimed(removed, claim);
+      throw lockStoreConditionFailure("removal");
+    }
+    const heartbeatAfterRemoval = decodeLockHeartbeat(
+      await readStoredItem(lockHeartbeatId(lock)),
+    );
+    if (
+      sameLockHeartbeatOwner(heartbeatAfterRemoval, lock) &&
+      heartbeatAfterRemoval.expiresAt > current.expiresAt
+    ) {
+      await installSentinelWhileClaimed(removed, claim);
+      throw lockStoreConditionFailure("removal");
+    }
+    await removeLockHeartbeat(lock);
+    return { ...removed, expiresAt: guardedCurrent.expiresAt };
+  } finally {
+    await removeReclaimClaim(claim);
+  }
+}
+
+// Built-in wix-data avoids a site-package dependency. Deterministic inserts
+// claim atomically. Owner-specific heartbeats isolate renewals, while short-lived
+// reclaim claims block callback entry during remove/restore arbitration.
 const resourceLockStore = {
   async insert(lock) {
     return decodeLockRecord(
       await wixData.insert(
         PAYMENT_LOCKS_COLLECTION,
-        {
-          _id: lock.id,
-          paymentId: encodeLockOwner(lock.resource, lock.ownerToken),
-          expiresAt: new Date(lock.expiresAt),
-        },
-        OPTIONS,
+        storedLockItem(lock),
+        LOCK_OPTIONS,
       ),
     );
   },
-  async get(id) {
-    try {
-      return decodeLockRecord(
-        await wixData.get(PAYMENT_LOCKS_COLLECTION, id, OPTIONS),
-      );
-    } catch (error) {
-      if (error?.code === "WDE0073") return null;
-      throw error;
-    }
-  },
+  get: readStoredLock,
   async update(lock) {
-    const lockApi = await loadConditionalLockApi();
-    const paymentId = encodeLockOwner(lock.resource, lock.ownerToken);
-    const condition = lockApi.items
-      .filter()
-      .eq("paymentId", lock.storedOwnerValue || paymentId)
-      .gt("expiresAt", new Date(lock.mustBeValidAt));
-    return decodeLockRecord(
-      await lockApi.update(
-        PAYMENT_LOCKS_COLLECTION,
-        {
-          _id: lock.id,
-          paymentId,
-          expiresAt: new Date(lock.expiresAt),
-        },
-        {
-          suppressHooks: true,
-          condition,
-        },
-      ),
-    );
+    const current = await readStoredLock(lock.id);
+    if (
+      current?.reclaiming ||
+      !sameStoredLockOwner(current, lock) ||
+      current.expiresAt <= lock.mustBeValidAt
+    ) {
+      throw lockStoreConditionFailure("renewal");
+    }
+    await writeLockHeartbeat(lock);
+    const renewed = await readStoredLock(lock.id);
+    if (
+      !sameStoredLockOwner(renewed, lock) ||
+      renewed.expiresAt < lock.expiresAt
+    ) {
+      await removeOrphanedLockHeartbeat(lock);
+      throw lockStoreConditionFailure("renewal");
+    }
+    return renewed;
   },
   async remove(lock) {
-    const lockApi = await loadConditionalLockApi();
-    const paymentId =
-      lock.storedOwnerValue ||
-      encodeLockOwner(lock.resource, lock.ownerToken);
-    const condition = lockApi.items
-      .filter()
-      .eq("paymentId", paymentId)
-      .le("expiresAt", new Date(lock.expiresAt));
-    return decodeLockRecord(
-      await lockApi.remove(PAYMENT_LOCKS_COLLECTION, lock.id, {
-        suppressHooks: true,
-        condition,
-      }),
+    const current = await readStoredLock(lock.id);
+    if (current?.reclaiming) throw lockReclaimBusy();
+    if (
+      !sameStoredLockOwner(current, lock) ||
+      current.expiresAt > lock.expiresAt
+    ) {
+      throw lockStoreConditionFailure("removal");
+    }
+    if (current.expiresAt <= Date.now()) {
+      return removeExpiredLockWithClaim(lock, current);
+    }
+    const removed = decodeLockRecord(
+      await wixData.remove(PAYMENT_LOCKS_COLLECTION, lock.id, LOCK_OPTIONS),
     );
+    if (
+      !sameStoredLockOwner(removed, lock) ||
+      removed.expiresAt > lock.expiresAt
+    ) {
+      if (removed) await restoreRacedLock(removed);
+      throw lockStoreConditionFailure("removal");
+    }
+    await removeLockHeartbeat(lock);
+    return { ...removed, expiresAt: current.expiresAt };
   },
 };
 
@@ -392,12 +734,21 @@ async function readWorkspace() {
   return { events, contestants, teams, registrations };
 }
 
-async function updateWithRetry(collectionId, item, context) {
+const noLockFence = async () => undefined;
+
+async function updateWithRetry(
+  collectionId,
+  item,
+  context,
+  assertLockOwned = noLockFence,
+) {
   let lastError;
   for (let attempt = 1; attempt <= SECURITY_WRITE_ATTEMPTS; attempt += 1) {
     try {
+      await assertLockOwned();
       return await wixData.update(collectionId, item, OPTIONS);
     } catch (error) {
+      if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
       lastError = error;
       console.error("Public signup metadata update failed.", {
         context,
@@ -411,10 +762,8 @@ async function updateWithRetry(collectionId, item, context) {
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
-const noLockFence = async () => undefined;
 
 const withResourceLocks = async (resources, callback) => {
-  await loadConditionalLockApi();
   return resourceLockManager.run(resources, callback);
 };
 
@@ -575,7 +924,10 @@ async function hydrateReservationRoles(activeReservations) {
   });
 }
 
-async function activeEntryReservations(competitionId) {
+async function activeEntryReservations(
+  competitionId,
+  assertLockOwned = null,
+) {
   let existingResult;
   try {
     existingResult = await wixData
@@ -598,7 +950,8 @@ async function activeEntryReservations(competitionId) {
         new Date(reservation.expiresAt).getTime() <= Date.now(),
     )
     .map(({ _id }) => _id);
-  if (expiredIds.length) {
+  if (expiredIds.length && assertLockOwned) {
+    await assertLockOwned();
     await wixData.bulkRemove(
       ENTRY_RESERVATIONS_COLLECTION,
       expiredIds,
@@ -709,7 +1062,10 @@ async function reserveEntries(
         ? [contestant.id, partner.id].sort()
         : [contestant.id];
       const partnershipKey = partner ? `${header.id}:${heeler.id}` : "";
-      const activeReservations = await activeEntryReservations(competitionId);
+      const activeReservations = await activeEntryReservations(
+        competitionId,
+        assertLockOwned,
+      );
       if (
         activeReservations.some(
           (reservation) =>
@@ -809,6 +1165,7 @@ async function reserveEntries(
         );
         acquiredIds.push(id);
       } catch (error) {
+        if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
         const existing = await wixData
           .get(ENTRY_RESERVATIONS_COLLECTION, id, OPTIONS)
           .catch(() => null);
@@ -824,6 +1181,7 @@ async function reserveEntries(
     }
   } catch (error) {
     if (acquiredIds.length) {
+      await assertLockOwned();
       await wixData
         .bulkRemove(ENTRY_RESERVATIONS_COLLECTION, acquiredIds, OPTIONS)
         .catch(() => undefined);
@@ -832,13 +1190,17 @@ async function reserveEntries(
   }
 }
 
-async function releaseEntryReservations(intent) {
+async function releaseEntryReservations(
+  intent,
+  assertLockOwned = noLockFence,
+) {
   const result = await wixData
     .query(ENTRY_RESERVATIONS_COLLECTION)
     .eq("intentId", intent._id)
     .limit(1000)
     .find(OPTIONS);
   if (result.items.length) {
+    await assertLockOwned();
     await wixData.bulkRemove(
       ENTRY_RESERVATIONS_COLLECTION,
       result.items.map(({ _id }) => _id),
@@ -847,7 +1209,11 @@ async function releaseEntryReservations(intent) {
   }
 }
 
-async function renewEntryReservations(intent, minutes) {
+async function renewEntryReservations(
+  intent,
+  minutes,
+  assertLockOwned = noLockFence,
+) {
   const result = await wixData
     .query(ENTRY_RESERVATIONS_COLLECTION)
     .eq("intentId", intent._id)
@@ -861,6 +1227,7 @@ async function renewEntryReservations(intent, minutes) {
         expiresAt: new Date(Date.now() + minutes * 60 * 1000),
       },
       "renew-entry-reservation",
+      assertLockOwned,
     );
   }
 }
@@ -885,8 +1252,7 @@ async function expireStalePaymentCreatedIntentLocked(
   ) {
     return intent;
   }
-  await assertLockOwned();
-  await releaseEntryReservations(intent);
+  await releaseEntryReservations(intent, assertLockOwned);
   const expired = {
     ...intent,
     status: "expired",
@@ -897,6 +1263,7 @@ async function expireStalePaymentCreatedIntentLocked(
     PAYMENT_INTENTS_COLLECTION,
     expired,
     "expire-unstarted-payment",
+    assertLockOwned,
   );
 }
 
@@ -909,10 +1276,13 @@ async function expireStalePaymentCreatedIntent(intent, now = Date.now()) {
     if (!latest || latest.status !== "payment-created") {
       return latest || intent;
     }
-    return expireStalePaymentCreatedIntentLocked(
-      latest,
-      now,
-      lockScope.assertOwned,
+    return withPublicSignupMutationLock(
+      (mutationLockScope) =>
+        expireStalePaymentCreatedIntentLocked(
+          latest,
+          now,
+          mutationLockScope.assertOwned,
+        ),
     );
   });
 }
@@ -1024,6 +1394,7 @@ async function createPublicSignupPaymentLocked(request, session, lockScope) {
     await lockScope.assertOwned();
     await wixData.insert(PAYMENT_INTENTS_COLLECTION, reserved, OPTIONS);
   } catch (error) {
+    if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
     const concurrent = await wixData
       .get(PAYMENT_INTENTS_COLLECTION, id, OPTIONS)
       .catch(() => null);
@@ -1074,6 +1445,7 @@ async function createPublicSignupPaymentLocked(request, session, lockScope) {
       },
     );
   } catch (error) {
+    await lockScope.assertOwned();
     await wixData
       .remove(PAYMENT_INTENTS_COLLECTION, reserved._id, OPTIONS)
       .catch(() => undefined);
@@ -1100,7 +1472,14 @@ async function createPublicSignupPaymentLocked(request, session, lockScope) {
       ...(Object.keys(userInfo).length ? { userInfo } : {}),
     });
   } catch (error) {
-    await releaseEntryReservations(reserved).catch(() => undefined);
+    await withPublicSignupMutationLock(
+      (mutationLockScope) =>
+        releaseEntryReservations(
+          reserved,
+          mutationLockScope.assertOwned,
+        ),
+    );
+    await lockScope.assertOwned();
     await wixData
       .remove(PAYMENT_INTENTS_COLLECTION, reserved._id, OPTIONS)
       .catch((removeError) => {
@@ -1122,10 +1501,21 @@ async function createPublicSignupPaymentLocked(request, session, lockScope) {
     updatedAt: new Date(),
   };
   try {
-    await lockScope.assertOwned();
-    await updateWithRetry(PAYMENT_INTENTS_COLLECTION, ready, "store-payment-id");
+    await updateWithRetry(
+      PAYMENT_INTENTS_COLLECTION,
+      ready,
+      "store-payment-id",
+      lockScope.assertOwned,
+    );
   } catch (error) {
-    await releaseEntryReservations(reserved).catch(() => undefined);
+    await withPublicSignupMutationLock(
+      (mutationLockScope) =>
+        releaseEntryReservations(
+          reserved,
+          mutationLockScope.assertOwned,
+        ),
+    );
+    await lockScope.assertOwned();
     await wixData
       .remove(PAYMENT_INTENTS_COLLECTION, reserved._id, OPTIONS)
       .catch(() => undefined);
@@ -1233,6 +1623,7 @@ async function finalizeCashSubmission(intent) {
                 updatedAt: new Date(),
               },
               "start-cash-finalization",
+              lockScope.assertOwned,
             );
       const records = buildPublicSignupRecords(
         workspace,
@@ -1274,8 +1665,13 @@ async function finalizeCashSubmission(intent) {
           updatedAt: new Date(),
         },
         "finalize-cash-submission",
+        lockScope.assertOwned,
       );
-      await releaseEntryReservations(completedIntent).catch((error) => {
+      await releaseEntryReservations(
+        completedIntent,
+        lockScope.assertOwned,
+      ).catch((error) => {
+        if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
         console.error("Cash signup reservation cleanup failed.", {
           submissionId: completedIntent.submissionId,
           message: error instanceof Error ? error.message : String(error),
@@ -1372,6 +1768,7 @@ async function submitPublicSignupCashLocked(request, session, lockScope) {
     await lockScope.assertOwned();
     await wixData.insert(PAYMENT_INTENTS_COLLECTION, intent, OPTIONS);
   } catch (error) {
+    if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
     const concurrent = await wixData
       .get(PAYMENT_INTENTS_COLLECTION, id, OPTIONS)
       .catch(() => null);
@@ -1536,8 +1933,10 @@ async function finalizeSuccessfulPayment(
       updatedAt: new Date(),
     },
     "finalize-successful-payment",
+    assertLockOwned,
   );
-  await releaseEntryReservations(intent).catch((error) => {
+  await releaseEntryReservations(intent, assertLockOwned).catch((error) => {
+    if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
     console.error("Successful signup reservation cleanup failed.", {
       submissionId: intent.submissionId,
       message: error instanceof Error ? error.message : String(error),
@@ -1584,7 +1983,10 @@ async function sendOwnerTriggeredEmail(notification) {
   });
 }
 
-async function notifyOwnerForSuccessfulPayment(intent) {
+async function notifyOwnerForSuccessfulPayment(
+  intent,
+  assertLockOwned = noLockFence,
+) {
   const workspace = await readWorkspace();
   const contestant = workspace.contestants.find(
     (item) => item.id === intent.contestantId,
@@ -1622,9 +2024,11 @@ async function notifyOwnerForSuccessfulPayment(intent) {
     record,
     notification,
     send: sendOwnerTriggeredEmail,
-    persist: (updatedRecord, context) =>
-      wixData.save(OWNER_NOTIFICATIONS_COLLECTION, updatedRecord, OPTIONS).catch(
-        (error) => {
+    persist: async (updatedRecord, context) => {
+      await assertLockOwned();
+      return wixData
+        .save(OWNER_NOTIFICATIONS_COLLECTION, updatedRecord, OPTIONS)
+        .catch((error) => {
           console.error("Owner payment notification state write failed.", {
             paymentId: intent.paymentId,
             submissionId: intent.submissionId,
@@ -1632,13 +2036,16 @@ async function notifyOwnerForSuccessfulPayment(intent) {
             message: error instanceof Error ? error.message : String(error),
           });
           throw error;
-        },
-      ),
+        });
+    },
   });
 }
 
-async function notifyOwnerAfterSuccessfulPayment(intent) {
-  return notifyOwnerForSuccessfulPayment(intent).catch((error) => {
+async function notifyOwnerAfterSuccessfulPayment(
+  intent,
+  assertLockOwned = noLockFence,
+) {
+  return notifyOwnerForSuccessfulPayment(intent, assertLockOwned).catch((error) => {
     console.error("Paid public signup owner notification failed.", {
       paymentId: intent.paymentId,
       submissionId: intent.submissionId,
@@ -1654,16 +2061,26 @@ async function processPublicSignupPaymentUpdateLocked(event, paymentLockScope) {
   await ensurePublicSignupCollections();
   const storedIntent = await findPaymentIntent(paymentId);
   if (!storedIntent) return;
-  const intent = await expireStalePaymentCreatedIntentLocked(
-    storedIntent,
-    Date.now(),
-    paymentLockScope.assertOwned,
+  const intent = await withPublicSignupMutationLock(
+    (mutationLockScope) =>
+      expireStalePaymentCreatedIntentLocked(
+        storedIntent,
+        Date.now(),
+        mutationLockScope.assertOwned,
+      ),
   );
   if (intent.status === "successful") {
-    await paymentLockScope.assertOwned();
-    await releaseEntryReservations(intent).catch(() => undefined);
-    await paymentLockScope.assertOwned();
-    await notifyOwnerAfterSuccessfulPayment(intent);
+    await withPublicSignupMutationLock(
+      (mutationLockScope) =>
+        releaseEntryReservations(
+          intent,
+          mutationLockScope.assertOwned,
+        ),
+    );
+    await notifyOwnerAfterSuccessfulPayment(
+      intent,
+      paymentLockScope.assertOwned,
+    );
     return;
   }
 
@@ -1680,6 +2097,7 @@ async function processPublicSignupPaymentUpdateLocked(event, paymentLockScope) {
       PAYMENT_INTENTS_COLLECTION,
       { ...intent, status: "fulfillment-failed", updatedAt: new Date() },
       "payment-amount-mismatch",
+      paymentLockScope.assertOwned,
     );
     return;
   }
@@ -1701,6 +2119,7 @@ async function processPublicSignupPaymentUpdateLocked(event, paymentLockScope) {
           updatedAt: new Date(),
         },
         "expired-payment-completed",
+        paymentLockScope.assertOwned,
       );
     }
     return;
@@ -1713,25 +2132,32 @@ async function processPublicSignupPaymentUpdateLocked(event, paymentLockScope) {
     ) {
       return;
     }
-    await paymentLockScope.assertOwned();
-    await updateWithRetry(
-      PAYMENT_INTENTS_COLLECTION,
-      {
-        ...intent,
-        status: ["failed", "cancelled", "pending"].includes(status)
-          ? status
-          : "pending",
-        updatedAt: new Date(),
-      },
-      "payment-status-update",
-    );
-    if (status === "failed" || status === "cancelled") {
-      await paymentLockScope.assertOwned();
-      await releaseEntryReservations(intent);
-    } else if (status === "pending") {
-      await paymentLockScope.assertOwned();
-      await renewEntryReservations(intent, PENDING_RESERVATION_MINUTES);
-    }
+    await withPublicSignupMutationLock(async (mutationLockScope) => {
+      await updateWithRetry(
+        PAYMENT_INTENTS_COLLECTION,
+        {
+          ...intent,
+          status: ["failed", "cancelled", "pending"].includes(status)
+            ? status
+            : "pending",
+          updatedAt: new Date(),
+        },
+        "payment-status-update",
+        mutationLockScope.assertOwned,
+      );
+      if (status === "failed" || status === "cancelled") {
+        await releaseEntryReservations(
+          intent,
+          mutationLockScope.assertOwned,
+        );
+      } else if (status === "pending") {
+        await renewEntryReservations(
+          intent,
+          PENDING_RESERVATION_MINUTES,
+          mutationLockScope.assertOwned,
+        );
+      }
+    });
     return;
   }
 
@@ -1765,13 +2191,16 @@ async function processPublicSignupPaymentUpdateLocked(event, paymentLockScope) {
           updatedAt: new Date(),
         },
         "payment-fulfillment-failed",
+        paymentLockScope.assertOwned,
       );
     }
     return;
   }
 
-  await paymentLockScope.assertOwned();
-  await notifyOwnerAfterSuccessfulPayment(successfulIntent);
+  await notifyOwnerAfterSuccessfulPayment(
+    successfulIntent,
+    paymentLockScope.assertOwned,
+  );
 }
 
 export async function processPublicSignupPaymentUpdate(event) {

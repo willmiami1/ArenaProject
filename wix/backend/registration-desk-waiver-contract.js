@@ -274,6 +274,7 @@ export async function ensureRegistrationDeskWaiverStatusIndexRecord({
     await insertStatusRecord(expected);
     return expected;
   } catch (error) {
+    if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
     const collision = await readStatusRecord(expected);
     if (!collision) throw error;
     return resolveRegistrationDeskWaiverStatusRecord(
