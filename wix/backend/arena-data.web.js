@@ -1212,14 +1212,14 @@ async function ensureCredentialLockCollection() {
   );
 }
 
-function protectedOnlineAppIds(records, loadedAt) {
+function protectedOnlineAppIds(records, loadedAt, now = Date.now()) {
   return new Set(
     records
-      .filter(
-        (record) =>
-          record.source === "online" &&
-          Date.parse(record.submittedAt || "") > loadedAt,
-      )
+      .filter((record) => {
+        if (record.source !== "online") return false;
+        const submittedAt = Date.parse(record.submittedAt || "");
+        return submittedAt > loadedAt && submittedAt <= now;
+      })
       .map((record) => record.id),
   );
 }

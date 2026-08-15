@@ -6,6 +6,11 @@ const backendMirror = readFileSync(
   "utf8",
 );
 
+const protectionHelper = backendMirror.slice(
+  backendMirror.indexOf("function protectedOnlineAppIds("),
+  backendMirror.indexOf("async function syncRecords("),
+);
+
 describe("workspace record removal", () => {
   it("removes stored records the workspace no longer sends", () => {
     expect(backendMirror).toContain(
@@ -19,16 +24,16 @@ describe("workspace record removal", () => {
   });
 
   it("protects only online submissions newer than the workspace load", () => {
-    expect(backendMirror).toContain("function protectedOnlineAppIds(");
-    expect(backendMirror).toContain('record.source === "online" &&');
-    expect(backendMirror).toContain(
-      'Date.parse(record.submittedAt || "") > loadedAt,',
+    expect(protectionHelper).toContain(
+      'if (record.source !== "online") return false;',
+    );
+    expect(protectionHelper).toContain(
+      "return submittedAt > loadedAt && submittedAt <= now;",
     );
   });
 
-  it("does not let an unparseable timestamp block removal", () => {
-    expect(backendMirror).not.toContain(
-      'Date.parse(record.submittedAt || "") <= loadedAt',
-    );
+  it("does not let an unparseable or future-dated timestamp block removal", () => {
+    expect(protectionHelper).not.toContain("<= loadedAt");
+    expect(protectionHelper).not.toContain('submittedAt || "") > loadedAt,');
   });
 });
