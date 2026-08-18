@@ -128,6 +128,31 @@ export function aggregatePublicSpectatorLeaderboard(
   );
 }
 
+export function refreshedSpectatorLeaderboardState(
+  publicData: Pick<PublicArenaData, "competitions"> | null,
+  eventId: string,
+  round: number,
+  fallbackRows: PublicSpectatorLeaderboardRow[],
+  teamId?: string,
+): { rows: PublicSpectatorLeaderboardRow[]; picksClosed: boolean } {
+  const competition = publicData?.competitions.find(
+    (item) => item.id === eventId,
+  );
+  // Without a refreshed competition payload we keep the fallback rows, but a
+  // present competition is authoritative even when its scoreboard is empty
+  // (for example right after a manual Cowboys x Steer scoreboard reset).
+  if (!competition) {
+    return { rows: fallbackRows, picksClosed: false };
+  }
+  const rows = aggregatePublicSpectatorLeaderboard(
+    competition.spectatorLeaderboards.filter((row) => row.round <= round),
+  ).slice(0, 3);
+  const selectedRun = competition.predictionRuns.find(
+    (run) => run.id === teamId,
+  );
+  return { rows, picksClosed: Boolean(selectedRun && !selectedRun.open) };
+}
+
 export interface PublicPredictionRun {
   id: string;
   round: number;

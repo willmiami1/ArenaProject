@@ -61,6 +61,7 @@ import { RegistrationDesk } from "./RegistrationDesk";
 import {
   aggregatePublicSpectatorLeaderboard,
   parsePublicRoute,
+  refreshedSpectatorLeaderboardState,
   type PublicArenaData,
   type PublicSpectatorLeaderboardRow,
 } from "./publicData";
@@ -153,21 +154,6 @@ const LED_PUBLIC_DATA_REQUEST = "arena-led-public-data-request";
 const LED_PUBLIC_DATA_RESPONSE = "arena-led-public-data-response";
 const LED_WORKSPACE_DATA_REQUEST = "arena-led-workspace-data-request";
 const LED_WORKSPACE_DATA_RESPONSE = "arena-led-workspace-data-response";
-
-function spectatorRowsThroughRound(
-  publicData: Pick<PublicArenaData, "competitions"> | null,
-  eventId: string,
-  round: number,
-) {
-  const competition = publicData?.competitions.find(
-    (item) => item.id === eventId,
-  );
-  return aggregatePublicSpectatorLeaderboard(
-    (competition?.spectatorLeaderboards ?? []).filter(
-      (row) => row.round <= round,
-    ),
-  ).slice(0, 3);
-}
 
 function requestPublicArenaDataFromOpener() {
   const opener = window.opener;
@@ -1110,15 +1096,15 @@ function LedSpectatorTop({
       publicData: Pick<PublicArenaData, "competitions"> | null,
     ) => {
       if (cancelled) return;
-      const nextRows = spectatorRowsThroughRound(publicData, eventId, round);
-      setRows(nextRows.length ? nextRows : fallbackRows);
-      const competition = publicData?.competitions.find(
-        (item) => item.id === eventId,
+      const refreshed = refreshedSpectatorLeaderboardState(
+        publicData,
+        eventId,
+        round,
+        fallbackRows,
+        teamId,
       );
-      const selectedRun = competition?.predictionRuns.find(
-        (run) => run.id === teamId,
-      );
-      setRelayedPicksClosed(Boolean(selectedRun && !selectedRun.open));
+      setRows(refreshed.rows);
+      setRelayedPicksClosed(refreshed.picksClosed);
     };
     let refreshing = false;
     const refresh = () => {
