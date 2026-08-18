@@ -2984,12 +2984,15 @@ export const resetSpectatorScoreboard = webMethod(
           request.eventId,
           lockScope.assertOwned,
         );
-        if (cleared) {
-          await bumpRevision(ONLINE_REVISION_ID, {
+        await bumpRevision(
+          ONLINE_REVISION_ID,
+          {
             action: "resetSpectatorScoreboard",
             eventId: request.eventId,
-          });
-        }
+          },
+          true,
+          lockScope,
+        );
         return { cleared, resetAt: new Date().toISOString() };
       },
     );
