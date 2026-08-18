@@ -112,6 +112,7 @@ import {
   pickedTeamRidersMissingFromDraw,
   repeatedTeamPairKeys,
   reorderDraftDrawTeams,
+  reorderRunOrderTeams,
   slideTimeAdjustment,
   teamEligibleForCompetition,
   teamHandicapTotal,
@@ -915,6 +916,16 @@ function StaffApp() {
                   ...current,
                   teams: current.teams.map((team) =>
                     team.id === teamId ? { ...team, rolled } : team,
+                  ),
+                }))
+              }
+              onReorderTeams={(movingTeamId, targetTeamId) =>
+                setData((current) => ({
+                  ...current,
+                  teams: reorderRunOrderTeams(
+                    current.teams,
+                    movingTeamId,
+                    targetTeamId,
                   ),
                 }))
               }
@@ -3699,6 +3710,7 @@ function RunDesk({
   onSave,
   onAddRideIn,
   onRollTeam,
+  onReorderTeams,
   onSetPredictionCutoff,
   onResetScoreboard,
 }: {
@@ -3711,6 +3723,7 @@ function RunDesk({
   onSave: (teamId: string, update: Partial<Team>) => void;
   onAddRideIn: (team: Team) => void;
   onRollTeam: (teamId: string, rolled: boolean) => void;
+  onReorderTeams: (movingTeamId: string, targetTeamId: string) => void;
   onSetPredictionCutoff: (teamId: string, predictionClosesAt?: string) => void;
   onResetScoreboard: () => Promise<number>;
 }) {
@@ -3723,6 +3736,7 @@ function RunDesk({
   );
   const [showRideInForm, setShowRideInForm] = useState(false);
   const [rideInMessage, setRideInMessage] = useState("");
+  const [draggedQueueTeamId, setDraggedQueueTeamId] = useState("");
   const [scoreboardResetBusy, setScoreboardResetBusy] = useState(false);
   const [scoreboardResetMessage, setScoreboardResetMessage] = useState("");
   const [scoreboardResetError, setScoreboardResetError] = useState("");
@@ -4427,12 +4441,36 @@ function RunDesk({
         </section>
 
         <section className="panel run-queue">
-          <PanelHeading title={`Round ${activeRound} run order`} subtitle={`${eventTeams.filter((team) => team.status === "ready").length} teams remaining`} />
+          <PanelHeading title={`Round ${activeRound} run order`} subtitle={`${eventTeams.filter((team) => team.status === "ready").length} teams remaining${eventTeams.length > 1 ? " · Drag teams to reorder" : ""}`} />
           <div className="queue-scroll">
             {eventTeams.map((team) => (
-              <div className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""}`} key={team.id}>
+              <div
+                className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""} ${eventTeams.length > 1 ? "draggable-queue-row" : ""} ${draggedQueueTeamId === team.id ? "dragging" : ""}`}
+                key={team.id}
+                draggable={eventTeams.length > 1}
+                onDragStart={(dragEvent: DragEvent<HTMLDivElement>) => {
+                  if (eventTeams.length < 2) return;
+                  setDraggedQueueTeamId(team.id);
+                  dragEvent.dataTransfer.effectAllowed = "move";
+                  dragEvent.dataTransfer.setData("text/plain", team.id);
+                }}
+                onDragOver={(dragEvent) => {
+                  if (draggedQueueTeamId) {
+                    dragEvent.preventDefault();
+                    dragEvent.dataTransfer.dropEffect = "move";
+                  }
+                }}
+                onDrop={(dragEvent) => {
+                  dragEvent.preventDefault();
+                  if (draggedQueueTeamId && draggedQueueTeamId !== team.id) {
+                    onReorderTeams(draggedQueueTeamId, team.id);
+                  }
+                  setDraggedQueueTeamId("");
+                }}
+                onDragEnd={() => setDraggedQueueTeamId("")}
+              >
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
-                  <span className="draw-number">{team.originalTeamNumber ?? team.drawPosition}</span>
+                  <span className="draw-number">{eventTeams.length > 1 && <GripVertical className="draw-drag-handle" size={14} />}{team.originalTeamNumber ?? team.drawPosition}</span>
                   <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.competitionType === "slide" ? ` · R2 ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (

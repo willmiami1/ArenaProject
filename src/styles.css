@@ -335,6 +335,9 @@ main { grid-column: 2; min-width: 0; }
 .draggable-draw-row { cursor: grab; transition: opacity .15s ease, background-color .15s ease; }
 .draggable-draw-row:active { cursor: grabbing; }
 .draggable-draw-row.dragging { opacity: .45; background: #f6efe5; }
+.draggable-queue-row { cursor: grab; transition: opacity .15s ease; }
+.draggable-queue-row:active { cursor: grabbing; }
+.queue-row.dragging { opacity: .45; }
 .draw-number:has(.draw-drag-handle) { display: flex; align-items: center; gap: 3px; }
 .draw-drag-handle { flex: 0 0 auto; color: #9a806c; }
 .pair-mark { color: #a7aea9; font-family: Georgia, serif; font-style: italic; }
