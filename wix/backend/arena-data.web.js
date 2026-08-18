@@ -2926,3 +2926,72 @@ export const submitSpectatorPrediction = webMethod(
     );
   },
 );
+
+async function removeSpectatorPredictionRecords(eventId, assertLockOwned) {
+  let result;
+  try {
+    result = await wixData
+      .query(COLLECTIONS.spectatorPredictions)
+      .limit(1000)
+      .find({ ...OPTIONS, consistentRead: true });
+  } catch (error) {
+    if (error?.code === "WDE0025" || error?.code === "WDE0026") return 0;
+    throw error;
+  }
+  const items = [...result.items];
+  while (result.hasNext()) {
+    result = await result.next();
+    items.push(...result.items);
+  }
+  const removeIds = items
+    .filter((item) => {
+      try {
+        return JSON.parse(item.payload)?.eventId === eventId;
+      } catch {
+        return false;
+      }
+    })
+    .map((item) => item._id);
+  for (let index = 0; index < removeIds.length; index += 1000) {
+    await assertLockOwned();
+    await wixData.bulkRemove(
+      COLLECTIONS.spectatorPredictions,
+      removeIds.slice(index, index + 1000),
+      OPTIONS,
+    );
+  }
+  return removeIds.length;
+}
+
+export const resetSpectatorScoreboard = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireArenaAdmin();
+    if (!validAppId(request?.eventId)) {
+      throw new Error("Invalid scoreboard reset request.");
+    }
+    return withPublicSignupCompetitionLocks(
+      [WORKSPACE_MUTATION_LOCK_RESOURCE, request.eventId],
+      async (lockScope) => {
+        const workspace = await readWorkspace({ consistentRead: true });
+        const event = workspace.events.find(
+          (item) => item.id === request.eventId,
+        );
+        if (!event) {
+          throw new Error("That competition could not be found.");
+        }
+        const cleared = await removeSpectatorPredictionRecords(
+          request.eventId,
+          lockScope.assertOwned,
+        );
+        if (cleared) {
+          await bumpRevision(ONLINE_REVISION_ID, {
+            action: "resetSpectatorScoreboard",
+            eventId: request.eventId,
+          });
+        }
+        return { cleared, resetAt: new Date().toISOString() };
+      },
+    );
+  },
+);

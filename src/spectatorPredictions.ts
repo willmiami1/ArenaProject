@@ -95,6 +95,19 @@ export function spectatorLeaderboard(
   );
 }
 
+export function clearSpectatorScoreboard(
+  data: Pick<ArenaData, "spectatorPredictions">,
+  eventId: string,
+) {
+  const spectatorPredictions = data.spectatorPredictions.filter(
+    (prediction) => prediction.eventId !== eventId,
+  );
+  return {
+    spectatorPredictions,
+    cleared: data.spectatorPredictions.length - spectatorPredictions.length,
+  };
+}
+
 export function createSpectatorPrediction(
   data: ArenaData,
   request: {

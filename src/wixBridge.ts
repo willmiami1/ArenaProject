@@ -51,6 +51,7 @@ export type WixAction =
   | "getPublicSignupPaymentStatus"
   | "submitOnlineSignup"
   | "submitSpectatorPrediction"
+  | "resetSpectatorScoreboard"
   | "createContestantAccount"
   | "createRiderAccount"
   | "getAdminAccess"
@@ -350,6 +351,7 @@ export function sensitiveWixAction(action: WixAction) {
     action === "getPublicSignupPaymentStatus" ||
     action === "submitOnlineSignup" ||
     action === "submitSpectatorPrediction" ||
+    action === "resetSpectatorScoreboard" ||
     action === "createContestantAccount" ||
     action === "createRiderAccount" ||
     action === "getAdminAccess" ||
@@ -806,6 +808,22 @@ export function submitSpectatorPrediction(request: {
     existing: boolean;
     publicData: PublicArenaData;
   }>("submitSpectatorPrediction", request);
+}
+
+export interface SpectatorScoreboardResetConfirmation {
+  cleared: number;
+  resetAt: string;
+}
+
+export async function resetSpectatorScoreboard(eventId: string) {
+  const confirmation = await requestWix<SpectatorScoreboardResetConfirmation>(
+    "resetSpectatorScoreboard",
+    { eventId },
+  );
+  if (!confirmation) {
+    throw new Error("Wix did not confirm the scoreboard reset.");
+  }
+  return confirmation;
 }
 
 export function createContestantAccount(

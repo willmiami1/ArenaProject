@@ -84,6 +84,7 @@ import {
   loadContestantWaiverStatuses,
   loadPublicArenaData,
   logoutAdmin,
+  resetSpectatorScoreboard,
   setContestantPin,
   type ContestantSignedWaiverEvidence,
   type ContestantPortalData,
@@ -114,7 +115,7 @@ import {
   teamEligibleForCompetition,
   teamHandicapTotal,
 } from "./competition";
-import { spectatorLeaderboard } from "./spectatorPredictions";
+import { clearSpectatorScoreboard, spectatorLeaderboard } from "./spectatorPredictions";
 import { normalizeHorseNames } from "./contestantHorses";
 import { contestantRopingHistory } from "./contestantHistory";
 import {
@@ -939,6 +940,25 @@ function StaffApp() {
                   ),
                 }))
               }
+              onResetScoreboard={async () => {
+                if (!activeEvent) {
+                  throw new Error("Select a competition first.");
+                }
+                const confirmation = isWixEmbed()
+                  ? await resetSpectatorScoreboard(activeEvent.id)
+                  : null;
+                const cleared = confirmation
+                  ? confirmation.cleared
+                  : clearSpectatorScoreboard(data, activeEvent.id).cleared;
+                setData((current) => ({
+                  ...current,
+                  spectatorPredictions: clearSpectatorScoreboard(
+                    current,
+                    activeEvent.id,
+                  ).spectatorPredictions,
+                }));
+                return cleared;
+              }}
             />
           )}
           {view === "reports" && <ReportsModule data={data} />}
@@ -3694,6 +3714,7 @@ function RunDesk({
   onAddRideIn,
   onRollTeam,
   onSetPredictionCutoff,
+  onResetScoreboard,
 }: {
   event?: ArenaEvent;
   teams: Team[];
@@ -3705,6 +3726,7 @@ function RunDesk({
   onAddRideIn: (team: Team) => void;
   onRollTeam: (teamId: string, rolled: boolean) => void;
   onSetPredictionCutoff: (teamId: string, predictionClosesAt?: string) => void;
+  onResetScoreboard: () => Promise<number>;
 }) {
   const [selectedRound, setSelectedRound] = useState(
     () =>
@@ -3715,6 +3737,9 @@ function RunDesk({
   );
   const [showRideInForm, setShowRideInForm] = useState(false);
   const [rideInMessage, setRideInMessage] = useState("");
+  const [scoreboardResetBusy, setScoreboardResetBusy] = useState(false);
+  const [scoreboardResetMessage, setScoreboardResetMessage] = useState("");
+  const [scoreboardResetError, setScoreboardResetError] = useState("");
   const [activeRunSaveStatus, setActiveRunSaveStatus] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
@@ -3857,6 +3882,35 @@ function RunDesk({
     }
   };
   const isEditingResult = Boolean(selected && selected.status !== "ready");
+  const resetScoreboard = async () => {
+    if (!event || scoreboardResetBusy) return;
+    if (
+      !window.confirm(
+        `Reset the Cowboys × Steer scoreboard for ${event.name}? Every spectator pick and point for this roping will be permanently cleared.`,
+      )
+    ) {
+      return;
+    }
+    setScoreboardResetBusy(true);
+    setScoreboardResetMessage("");
+    setScoreboardResetError("");
+    try {
+      const cleared = await onResetScoreboard();
+      setScoreboardResetMessage(
+        cleared === 1
+          ? "Scoreboard reset. 1 spectator pick was cleared."
+          : `Scoreboard reset. ${cleared} spectator picks were cleared.`,
+      );
+    } catch (error) {
+      setScoreboardResetError(
+        error instanceof Error
+          ? error.message
+          : "The Cowboys × Steer scoreboard could not be reset.",
+      );
+    } finally {
+      setScoreboardResetBusy(false);
+    }
+  };
   const contestant = (id: string) =>
     contestants.find((item) => item.id === id);
   const rider = (id: string) => contestant(id)?.name ?? "Unknown";
@@ -4248,7 +4302,27 @@ function RunDesk({
             {activeRound === 1 && (
               <button className="secondary" onClick={() => setShowRideInForm((current) => !current)}><Plus size={16} /> Ride-in team</button>
             )}
+            <button
+              className="secondary scoreboard-reset-button"
+              disabled={scoreboardResetBusy}
+              onClick={() => void resetScoreboard()}
+            >
+              <RefreshCw size={16} />{" "}
+              {scoreboardResetBusy ? "Resetting scoreboard…" : "Reset Cowboys × Steer"}
+            </button>
           </div>
+        </div>
+      )}
+      {scoreboardResetMessage && (
+        <div className="notice success">
+          <span>{scoreboardResetMessage}</span>
+          <button onClick={() => setScoreboardResetMessage("")}><X size={16} /></button>
+        </div>
+      )}
+      {scoreboardResetError && (
+        <div className="notice error">
+          <span>Scoreboard was not reset. {scoreboardResetError}</span>
+          <button onClick={() => setScoreboardResetError("")}><X size={16} /></button>
         </div>
       )}
       {rideInMessage && <div className="notice"><span>{rideInMessage}</span><button onClick={() => setRideInMessage("")}><X size={16} /></button></div>}
