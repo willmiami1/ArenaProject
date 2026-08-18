@@ -516,6 +516,49 @@ export function reorderDraftDrawTeams(
   }));
 }
 
+export function reorderRunOrderTeams(
+  teams: Team[],
+  movingTeamId: string,
+  targetTeamId: string,
+) {
+  const movingTeam = teams.find((team) => team.id === movingTeamId);
+  const targetTeam = teams.find((team) => team.id === targetTeamId);
+  if (
+    !movingTeam ||
+    !targetTeam ||
+    movingTeam.id === targetTeam.id ||
+    movingTeam.eventId !== targetTeam.eventId ||
+    movingTeam.round !== targetTeam.round ||
+    movingTeam.scratched ||
+    targetTeam.scratched
+  ) {
+    return teams;
+  }
+  const roundTeams = teams
+    .filter(
+      (team) =>
+        team.eventId === movingTeam.eventId &&
+        team.round === movingTeam.round &&
+        !team.scratched,
+    )
+    .sort((a, b) => a.drawPosition - b.drawPosition);
+  const positions = roundTeams.map((team) => team.drawPosition);
+  const movingIndex = roundTeams.findIndex((team) => team.id === movingTeamId);
+  const targetIndex = roundTeams.findIndex((team) => team.id === targetTeamId);
+  const reordered = [...roundTeams];
+  const [moved] = reordered.splice(movingIndex, 1);
+  reordered.splice(targetIndex, 0, moved);
+  const nextPositions = new Map(
+    reordered.map((team, index) => [team.id, positions[index]]),
+  );
+  return teams.map((team) => {
+    const drawPosition = nextPositions.get(team.id);
+    return drawPosition === undefined || drawPosition === team.drawPosition
+      ? team
+      : { ...team, drawPosition };
+  });
+}
+
 export function repeatedTeamPairKeys(teams: Team[]) {
   const pairCounts = teams
     .filter((team) => team.round === 1 && !team.scratched)
