@@ -13,6 +13,7 @@ import {
   saveArenaData,
   setContestantPin,
   submitSpectatorPrediction,
+  resetSpectatorScoreboard,
   createContestantAccount,
   createRiderAccount,
   getAdminAccess as getAdminAccessFromBackend,
@@ -161,6 +162,8 @@ $w.onReady(() => {
         );
       } else if (message.action === "submitSpectatorPrediction") {
         data = await submitSpectatorPrediction(message.data);
+      } else if (message.action === "resetSpectatorScoreboard") {
+        data = await resetSpectatorScoreboard(message.data);
       } else if (message.action === "createContestantAccount") {
         data = await createContestantAccount(message.data);
       } else if (message.action === "createRiderAccount") {

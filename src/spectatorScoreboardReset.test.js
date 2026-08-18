@@ -1,0 +1,68 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { clearSpectatorScoreboard } from "./spectatorPredictions";
+import { sensitiveWixAction } from "./wixBridge";
+
+const prediction = (id, eventId, overrides = {}) => ({
+  id,
+  spectatorId: `spectator-${id}`,
+  eventId,
+  teamId: `team-${id}`,
+  round: 1,
+  choice: "cowboys",
+  submittedAt: "2026-08-18T12:00:00.000Z",
+  ...overrides,
+});
+
+describe("Cowboys × Steer scoreboard reset", () => {
+  it("clears every pick for the roping across all rounds and keeps other events", () => {
+    const predictions = [
+      prediction("a", "event-1", { round: 1 }),
+      prediction("b", "event-1", { round: 2, choice: "steer" }),
+      prediction("c", "event-2"),
+    ];
+    const result = clearSpectatorScoreboard(
+      { spectatorPredictions: predictions },
+      "event-1",
+    );
+    expect(result.cleared).toBe(2);
+    expect(result.spectatorPredictions).toEqual([predictions[2]]);
+  });
+
+  it("reports zero cleared picks when the roping has no scoreboard data", () => {
+    const predictions = [prediction("a", "event-2")];
+    const result = clearSpectatorScoreboard(
+      { spectatorPredictions: predictions },
+      "event-1",
+    );
+    expect(result.cleared).toBe(0);
+    expect(result.spectatorPredictions).toEqual(predictions);
+  });
+
+  it("treats the scoreboard reset as a sensitive Wix action", () => {
+    expect(sensitiveWixAction("resetSpectatorScoreboard")).toBe(true);
+  });
+
+  it("wires the reset through the Wix backend and page relay", () => {
+    const backend = readFileSync(
+      new URL("../wix/backend/arena-data.web.js", import.meta.url),
+      "utf8",
+    );
+    expect(backend).toContain("export const resetSpectatorScoreboard = webMethod(");
+    expect(backend).toMatch(
+      /resetSpectatorScoreboard = webMethod\(\s*Permissions\.SiteMember,\s*async \(request\) => \{\s*await requireArenaAdmin\(\);/,
+    );
+    expect(backend).toContain(
+      "[WORKSPACE_MUTATION_LOCK_RESOURCE, request.eventId],",
+    );
+
+    const pageCode = readFileSync(
+      new URL("../wix/page-code.js", import.meta.url),
+      "utf8",
+    );
+    expect(pageCode).toContain('message.action === "resetSpectatorScoreboard"');
+    expect(pageCode).toContain(
+      "data = await resetSpectatorScoreboard(message.data);",
+    );
+  });
+});
