@@ -8,17 +8,19 @@ import { elevate } from "wix-auth";
 import {
   assertSpectatorPredictionRunIsActive,
   publicPredictionRunProjection,
-  publicRegisteredRiders,
-  publicRoundRobinRoleCapacities,
+  publicRegisteredRidersProjection,
 } from "./public-prediction-projection";
 import {
   PublicSignupError,
+  assertRoundRobinRoleCapacity,
   failedCredentialMetadata,
+  roundRobinRoleCapacityProjection,
   successfulCredentialMetadata,
 } from "./public-signup-contract";
 import {
   WORKSPACE_MUTATION_LOCK_RESOURCE,
   assertWorkspacePreservesPublicSignupReservations,
+  countActivePublicSignupRoleReservations,
   createPublicSignupPayment as createPublicSignupPaymentIntent,
   getPublicSignupPaymentStatus as readPublicSignupPaymentStatus,
   loadPublicSignupOptions,
@@ -27,25 +29,48 @@ import {
   withWorkspaceLocks,
 } from "./public-signup-payments";
 import {
-  prepareRegistrationDeskSignup,
-  registrationDeskSignupIsRetry,
-  supportedRegistrationDeskEntryTypes,
-} from "./registration-desk-signup-contract";
+  prepareRegistrationSave,
+  registrationSaveAcknowledgement,
+  scratchRegistrationDeskEntryRecord,
+  updateRegistrationDeskEntryRecord,
+} from "./registration-desk-entry-contract";
 import {
   assertRegistrationDeskOpen,
   registrationDeskRosterScope,
 } from "./registration-desk-event-contract";
 import {
+  prepareRegistrationDeskSignup,
+  registrationDeskSignupIsRetry,
+  supportedRegistrationDeskEntryTypes,
+} from "./registration-desk-signup-contract";
+import {
+  CURRENT_REGISTRATION_DESK_WAIVER,
   REGISTRATION_DESK_WAIVER_ERROR_CODES,
   RegistrationDeskWaiverError,
+  contestantSignedWaiverEvidenceProjection,
+  contestantWaiverStatusesProjection,
+  createRegistrationDeskWaiverRecord,
   ensureRegistrationDeskWaiverStatusIndexRecord,
+  latestContestantWaiverStatusRecord,
   loadContestantWaiverStatusesFromIndex,
   migrateRegistrationDeskWaiverStatusIndex,
-  normalizeRegistrationDeskWaiverDocument,
-  prepareRegistrationDeskWaiver,
+  prepareRegistrationDeskWaiverSubmission,
+  registrationDeskWaiverDocumentProjection,
+  registrationDeskWaiverParticipants,
   registrationDeskWaiverRecordId,
   resolveRegistrationDeskWaiverRetry,
 } from "./registration-desk-waiver-contract";
+import { durableSaveAcknowledgement } from "./arena-save-contract";
+import { setActiveRunEvent } from "./active-run-contract";
+import {
+  contestantSaveAcknowledgement,
+  prepareContestantSave,
+} from "./contestant-save-contract";
+import {
+  assertEventSaveRevision,
+  eventSaveAcknowledgement,
+  prepareEventSave,
+} from "./event-save-contract";
 
 const COLLECTIONS = {
   meets: "ArenaMeets",
@@ -81,7 +106,10 @@ const SETTINGS_ID = "arena-command-settings";
 const STAFF_REVISION_ID = "arena-command-staff-revision";
 const ONLINE_REVISION_ID = "arena-command-online-revision";
 const PUBLIC_SCHEDULE_ID = "arena-command-public-schedule";
-const WAIVER_DOCUMENT_SETTINGS_ID = "arena-registration-desk-waiver-document";
+const PUBLIC_SCHEDULE_CHUNK_PREFIX = `${PUBLIC_SCHEDULE_ID}-chunk-`;
+const PUBLIC_SCHEDULE_MANIFEST_VERSION = "chunked-public-schedule-v1";
+const MAX_PUBLIC_SCHEDULE_CHUNK_SIZE = 180000;
+const WORKSPACE_MUTATION_LOCK_ID = WORKSPACE_MUTATION_LOCK_RESOURCE;
 const OPTIONS = { suppressAuth: true };
 const CONSISTENT_READ_OPTIONS = { ...OPTIONS, consistentRead: true };
 const PIN_PEPPER_SECRET = "ArenaContestantPinPepper";
@@ -116,6 +144,7 @@ const assertOnlineRegistrationOpen = (event, now = Date.now()) => {
     throw new Error("Online registration closes one hour before the competition starts.");
   }
 };
+
 async function resolveAdminAccess() {
   let member;
   try {
@@ -313,19 +342,19 @@ const arenaRecordStorageId = (collectionId, recordId) =>
 
 async function readOptionalItem(collectionId, itemId, options = OPTIONS) {
   try {
+    if (options.consistentRead) {
+      const result = await wixData
+        .query(collectionId)
+        .eq("_id", itemId)
+        .limit(1)
+        .find(options);
+      return result.items[0] || null;
+    }
     return await wixData.get(collectionId, itemId, options);
   } catch (error) {
     if (error?.code === "WDE0025" || error?.code === "WDE0026") return null;
     throw error;
   }
-}
-
-async function readRegistrationDeskWaiverDocument() {
-  const record = await readOptionalItem(
-    SETTINGS_COLLECTION,
-    WAIVER_DOCUMENT_SETTINGS_ID,
-  );
-  return normalizeRegistrationDeskWaiverDocument(record);
 }
 
 const publicContestantAccountResult = (workspace, event, contestant) => {
@@ -423,23 +452,43 @@ async function findMatchingContestantAccount({
   return null;
 }
 
-async function bumpRevision(revisionId, context) {
+async function bumpRevision(
+  revisionId,
+  context,
+  required = false,
+  lockScope = null,
+) {
+  const assertLockOwned = lockScope?.assertOwned;
+  if (typeof assertLockOwned !== "function") {
+    const error = new Error(
+      "Arena revision updates require the held workspace mutation lock scope.",
+    );
+    error.code = "RESOURCE_LOCK_SCOPE_REQUIRED";
+    throw error;
+  }
   let lastError;
   for (let attempt = 1; attempt <= REVISION_WRITE_ATTEMPTS; attempt += 1) {
     try {
-      const current = await readOptionalItem(SETTINGS_COLLECTION, revisionId);
+      const current = await readOptionalItem(
+        SETTINGS_COLLECTION,
+        revisionId,
+        CONSISTENT_READ_OPTIONS,
+      );
+      const nextRevision = Number(current?.value || 0) + 1;
+      await assertLockOwned();
       await wixData.save(
         SETTINGS_COLLECTION,
         {
           ...(current || {}),
           _id: revisionId,
-          value: Number(current?.value || 0) + 1,
+          value: nextRevision,
           updatedAt: new Date(),
         },
         OPTIONS,
       );
-      return;
+      return nextRevision;
     } catch (error) {
+      if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
       lastError = error;
       if (attempt < REVISION_WRITE_ATTEMPTS) {
         await new Promise((resolve) => setTimeout(resolve, attempt * 50));
@@ -454,35 +503,29 @@ async function bumpRevision(revisionId, context) {
     message:
       lastError instanceof Error ? lastError.message : String(lastError),
   });
+  if (required) throw lastError;
 }
 
-async function readAll(collectionId, { consistentRead = false } = {}) {
-  let result = await wixData
-    .query(collectionId)
-    .limit(1000)
-    .find({ ...OPTIONS, consistentRead });
+async function readAllStorageItems(collectionId, options = OPTIONS) {
+  let result = await wixData.query(collectionId).limit(1000).find(options);
   const items = [...result.items];
   while (result.hasNext()) {
     result = await result.next();
     items.push(...result.items);
   }
-  return items.map((item) => JSON.parse(item.payload));
+  return items;
 }
 
-async function readOptionalAll(collectionId, options) {
-  try {
-    return await readAll(collectionId, options);
-  } catch (error) {
-    if (error?.code === "WDE0025" || error?.code === "WDE0026") return [];
-    throw error;
-  }
+async function readAll(collectionId, options = OPTIONS) {
+  const items = await readAllStorageItems(collectionId, options);
+  return items.map((item) => JSON.parse(item.payload));
 }
 
 async function readPublicScheduleEvents() {
   let result = await wixData
     .query(COLLECTIONS.events)
     .limit(1000)
-    .find(OPTIONS);
+    .find(CONSISTENT_READ_OPTIONS);
   const items = [...result.items];
   while (result.hasNext()) {
     result = await result.next();
@@ -505,36 +548,70 @@ async function readPublicScheduleEvents() {
   });
 }
 
-async function readWorkspace({
+const parseStorageItems = (items) =>
+  items.map((item) => JSON.parse(item.payload));
+
+async function readOptionalAllStorageItems(collectionId, options = OPTIONS) {
+  try {
+    return await readAllStorageItems(collectionId, options);
+  } catch (error) {
+    if (
+      error?.code === "WDE0025" ||
+      error?.code === "WDE0026" ||
+      error?.code === "WD_SCHEMA_DOES_NOT_EXIST"
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function readWorkspaceWithStorageItems({
   includeSpectators = true,
   consistentRead = false,
 } = {}) {
-  const readOptions = { ...OPTIONS, consistentRead };
-  const [settings, staffRevision, onlineRevision] = await Promise.all([
-    wixData
-      .get(SETTINGS_COLLECTION, SETTINGS_ID, readOptions)
-      .catch(() => null),
-    wixData
-      .get(SETTINGS_COLLECTION, STAFF_REVISION_ID, readOptions)
-      .catch(() => null),
-    wixData
-      .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, readOptions)
-      .catch(() => null),
-  ]);
-  const [meets, events, contestants, teams, registrations, spectators, spectatorPredictions] = await Promise.all([
-    readAll(COLLECTIONS.meets, { consistentRead }),
-    readAll(COLLECTIONS.events, { consistentRead }),
-    readAll(COLLECTIONS.contestants, { consistentRead }),
-    readAll(COLLECTIONS.teams, { consistentRead }),
-    readAll(COLLECTIONS.registrations, { consistentRead }),
+  const readOptions = consistentRead ? CONSISTENT_READ_OPTIONS : OPTIONS;
+  const [
+    settings,
+    staffRevision,
+    onlineRevision,
+    meetItems,
+    eventItems,
+    contestantItems,
+    teamItems,
+    registrationItems,
+    spectatorItems,
+    spectatorPredictionItems,
+  ] = await Promise.all([
+    readOptionalItem(SETTINGS_COLLECTION, SETTINGS_ID, readOptions).catch(
+      () => null,
+    ),
+    readOptionalItem(
+      SETTINGS_COLLECTION,
+      STAFF_REVISION_ID,
+      readOptions,
+    ).catch(() => null),
+    readOptionalItem(
+      SETTINGS_COLLECTION,
+      ONLINE_REVISION_ID,
+      readOptions,
+    ).catch(() => null),
+    readAllStorageItems(COLLECTIONS.meets, readOptions),
+    readAllStorageItems(COLLECTIONS.events, readOptions),
+    readAllStorageItems(COLLECTIONS.contestants, readOptions),
+    readAllStorageItems(COLLECTIONS.teams, readOptions),
+    readAllStorageItems(COLLECTIONS.registrations, readOptions),
     includeSpectators
-      ? readOptionalAll(COLLECTIONS.spectators, { consistentRead })
-      : Promise.resolve([]),
+      ? readOptionalAllStorageItems(COLLECTIONS.spectators, readOptions)
+      : Promise.resolve(null),
     includeSpectators
-      ? readOptionalAll(COLLECTIONS.spectatorPredictions, { consistentRead })
-      : Promise.resolve([]),
+      ? readOptionalAllStorageItems(
+          COLLECTIONS.spectatorPredictions,
+          readOptions,
+        )
+      : Promise.resolve(null),
   ]);
-  return {
+  const workspace = {
     participantDatabaseVersion: settings?.participantDatabaseVersion || 1,
     revision:
       Number(staffRevision?.value || settings?.revision || 0) +
@@ -542,15 +619,66 @@ async function readWorkspace({
     staffRevision: Number(staffRevision?.value || settings?.revision || 0),
     onlineRevision: Number(onlineRevision?.value || 0),
     loadedAt: new Date().toISOString(),
-    meets,
-    events,
-    contestants,
-    teams,
-    registrations,
-    spectators,
-    spectatorPredictions,
+    meets: parseStorageItems(meetItems),
+    events: parseStorageItems(eventItems),
+    contestants: parseStorageItems(contestantItems),
+    teams: parseStorageItems(teamItems),
+    registrations: parseStorageItems(registrationItems),
+    spectators: spectatorItems === null ? [] : parseStorageItems(spectatorItems),
+    spectatorPredictions:
+      spectatorPredictionItems === null
+        ? []
+        : parseStorageItems(spectatorPredictionItems),
     activeEventId: settings?.activeEventId || "",
   };
+  return {
+    workspace,
+    storageItems: {
+      [COLLECTIONS.meets]: meetItems,
+      [COLLECTIONS.events]: eventItems,
+      [COLLECTIONS.contestants]: contestantItems,
+      [COLLECTIONS.teams]: teamItems,
+      [COLLECTIONS.registrations]: registrationItems,
+      [COLLECTIONS.spectators]: spectatorItems,
+      [COLLECTIONS.spectatorPredictions]: spectatorPredictionItems,
+    },
+  };
+}
+
+async function readWorkspace(options = {}) {
+  const { workspace } = await readWorkspaceWithStorageItems(options);
+  return workspace;
+}
+
+// Under the held workspace mutation barrier, the first consistent read plus
+// the records returned by the durable writes is exactly the committed state,
+// so follow-up snapshots and projections don't need a second full read.
+function workspaceAfterCommittedWrites(
+  workspace,
+  changes,
+  committedStaffRevision,
+) {
+  const staffRevision = Number(
+    committedStaffRevision ?? workspace.staffRevision,
+  );
+  const merged = {
+    ...workspace,
+    staffRevision,
+    revision: staffRevision + workspace.onlineRevision,
+    loadedAt: new Date().toISOString(),
+  };
+  for (const [collectionKey, records] of Object.entries(changes)) {
+    const persistedById = new Map(
+      records.map((record) => [record.id, record]),
+    );
+    const replaced = (workspace[collectionKey] || []).map((record) => {
+      const next = persistedById.get(record.id);
+      if (next) persistedById.delete(record.id);
+      return next || record;
+    });
+    merged[collectionKey] = [...replaced, ...persistedById.values()];
+  }
+  return merged;
 }
 
 const teamEntryKey = (team) =>
@@ -654,6 +782,7 @@ function publicProjection(workspace) {
       status: event.status,
       entryFee: event.entryFee,
       competitionType: event.competitionType,
+      ...roundRobinRoleCapacityProjection(event, workspace.registrations),
       competitionLabel: {
         "draw-pot": "Draw Pot",
         "pick-only": "Pick Only",
@@ -677,6 +806,12 @@ function publicProjection(workspace) {
         workspace.teams,
         contestantsById,
       ),
+      registeredRiders: publicRegisteredRidersProjection(
+        event.id,
+        workspace.registrations,
+        workspace.teams,
+        contestantsById,
+      ),
       entryCount:
         workspace.teams.filter(
           (team) =>
@@ -692,19 +827,6 @@ function publicProjection(workspace) {
               registration.status !== "scratched",
           )
           .reduce((sum, registration) => sum + Number(registration.entries || 0), 0),
-      registeredRiders: publicRegisteredRiders(
-        event.id,
-        workspace.registrations,
-        workspace.teams,
-        contestantsById,
-      ),
-      ...(() => {
-        const roleCapacities = publicRoundRobinRoleCapacities(
-          event,
-          workspace.registrations,
-        );
-        return roleCapacities.length ? { roleCapacities } : {};
-      })(),
       results: publishedResults(event, workspace.teams, workspace.contestants),
       spectatorLeaderboards: Array.from(
         { length: Math.max(Number(event.rounds || 1), 1) },
@@ -767,24 +889,83 @@ async function savePublicScheduleSnapshot(
         spectators: [],
         spectatorPredictions: [],
       });
+  const serializedSnapshot = JSON.stringify(snapshot);
+  const chunks = [];
+  for (
+    let offset = 0;
+    offset < serializedSnapshot.length;
+    offset += MAX_PUBLIC_SCHEDULE_CHUNK_SIZE
+  ) {
+    chunks.push(
+      serializedSnapshot.slice(offset, offset + MAX_PUBLIC_SCHEDULE_CHUNK_SIZE),
+    );
+  }
+  const now = new Date();
+  const previousManifestPromise = readOptionalItem(
+    SETTINGS_COLLECTION,
+    PUBLIC_SCHEDULE_ID,
+    CONSISTENT_READ_OPTIONS,
+  );
+  previousManifestPromise.catch(() => undefined);
+  await assertLockOwned();
+  await Promise.all(
+    chunks.map((chunk, index) =>
+      wixData.save(
+        SETTINGS_COLLECTION,
+        {
+          _id: `${PUBLIC_SCHEDULE_CHUNK_PREFIX}${index}`,
+          payload: chunk,
+          value: index,
+          updatedAt: now,
+        },
+        OPTIONS,
+      ),
+    ),
+  );
+  const previousManifest = await previousManifestPromise;
+  const previousChunkCount = Math.max(0, Number(previousManifest?.value || 0));
   await assertLockOwned();
   await wixData.save(
     SETTINGS_COLLECTION,
     {
+      ...(previousManifest || {}),
       _id: PUBLIC_SCHEDULE_ID,
-      payload: JSON.stringify(snapshot),
-      updatedAt: new Date(),
+      payload: JSON.stringify({ version: PUBLIC_SCHEDULE_MANIFEST_VERSION }),
+      value: chunks.length,
+      updatedAt: now,
     },
     OPTIONS,
   );
+  if (previousChunkCount > chunks.length) {
+    await assertLockOwned();
+    await Promise.all(
+      Array.from(
+        { length: previousChunkCount - chunks.length },
+        (_, index) => chunks.length + index,
+      ).map((index) =>
+        wixData
+          .remove(
+            SETTINGS_COLLECTION,
+            `${PUBLIC_SCHEDULE_CHUNK_PREFIX}${index}`,
+            OPTIONS,
+          )
+          .catch(() => undefined),
+      ),
+    );
+  }
 }
 
+const _verifiedCollections = new Set();
+
 async function ensureCollection(collectionId, displayName, fields) {
+  if (_verifiedCollections.has(collectionId)) return;
   try {
     await wixData.query(collectionId).limit(1).find(OPTIONS);
+    _verifiedCollections.add(collectionId);
   } catch (error) {
     if (
       error?.code !== "WDE0025" &&
+      error?.code !== "WDE0026" &&
       error?.code !== "WD_SCHEMA_DOES_NOT_EXIST"
     ) {
       throw error;
@@ -802,12 +983,14 @@ async function ensureCollection(collectionId, displayName, fields) {
         },
         fields,
       });
+      _verifiedCollections.add(collectionId);
     } catch (createError) {
       try {
         await wixData
           .query(collectionId)
           .limit(1)
           .find({ ...OPTIONS, consistentRead: true });
+        _verifiedCollections.add(collectionId);
       } catch {
         throw createError;
       }
@@ -830,14 +1013,40 @@ async function ensureSettingsCollection() {
 }
 
 async function ensureWorkspaceCollections() {
-  await ensureSettingsCollection();
-  for (const [key, collectionId] of Object.entries(COLLECTIONS)) {
-    await ensureCollection(
-      collectionId,
-      COLLECTION_DISPLAY_NAMES[key],
-      PAYLOAD_FIELDS,
-    );
-  }
+  await Promise.all([
+    ensureSettingsCollection(),
+    ...Object.entries(COLLECTIONS).map(([key, collectionId]) =>
+      ensureCollection(collectionId, COLLECTION_DISPLAY_NAMES[key], PAYLOAD_FIELDS),
+    ),
+  ]);
+}
+
+async function ensureRiderAccountCollections() {
+  await Promise.all([
+    ensureSettingsCollection(),
+    ensureCollection(COLLECTIONS.contestants, "Arena Contestants", PAYLOAD_FIELDS),
+    ensureCollection(CREDENTIALS_COLLECTION, "Arena Contestant Credentials", [
+      { key: "contestantId", displayName: "Contestant ID", type: "TEXT" },
+      { key: "emailNormalized", displayName: "Normalized Email", type: "TEXT" },
+      { key: "pinSalt", displayName: "PIN Salt", type: "TEXT" },
+      { key: "pinHash", displayName: "PIN Hash", type: "TEXT" },
+      { key: "failedAttempts", displayName: "Failed Attempts", type: "NUMBER" },
+      { key: "lockedUntil", displayName: "Locked Until", type: "DATETIME" },
+      { key: "updatedAt", displayName: "Updated At", type: "DATETIME" },
+    ]),
+    ensureCredentialLockCollection(),
+  ]);
+}
+
+async function ensureCredentialLockCollection() {
+  await ensureCollection(
+    CREDENTIAL_LOCKS_COLLECTION,
+    "Arena Contestant Credential Locks",
+    [
+      { key: "emailNormalized", displayName: "Normalized Email", type: "TEXT" },
+      { key: "expiresAt", displayName: "Expires At", type: "DATETIME" },
+    ],
+  );
 }
 
 async function ensureRegistrationDeskWaiverEvidenceCollection() {
@@ -885,333 +1094,6 @@ async function ensureRegistrationDeskWaiverCollections() {
   ]);
 }
 
-const waiverRecordConflict = () =>
-  new RegistrationDeskWaiverError(
-    REGISTRATION_DESK_WAIVER_ERROR_CODES.recordConflict,
-  );
-
-const parseRegistrationDeskWaiverStorageItem = (item) => {
-  try {
-    return typeof item?.payload === "string"
-      ? JSON.parse(item.payload)
-      : item?.payload;
-  } catch {
-    throw waiverRecordConflict();
-  }
-};
-
-async function findRegistrationDeskWaiverStatusStorageItem(evidenceAppId) {
-  const storageId = arenaRecordStorageId(
-    WAIVER_STATUS_INDEX_COLLECTION,
-    evidenceAppId,
-  );
-  const [storedById, storedByEvidenceId] = await Promise.all([
-    readOptionalItem(
-      WAIVER_STATUS_INDEX_COLLECTION,
-      storageId,
-      CONSISTENT_READ_OPTIONS,
-    ),
-    wixData
-      .query(WAIVER_STATUS_INDEX_COLLECTION)
-      .eq("evidenceAppId", evidenceAppId)
-      .limit(2)
-      .find(CONSISTENT_READ_OPTIONS),
-  ]);
-  const candidates = new Map(
-    [storedById, ...storedByEvidenceId.items]
-      .filter(Boolean)
-      .map((item) => [item._id, item]),
-  );
-  if (candidates.size > 1) throw waiverRecordConflict();
-  const stored = [...candidates.values()][0] || null;
-  if (
-    stored &&
-    (stored._id !== storageId || stored.evidenceAppId !== evidenceAppId)
-  ) {
-    throw waiverRecordConflict();
-  }
-  return stored;
-}
-
-async function ensureRegistrationDeskWaiverStatusForEvidence(
-  evidence,
-  waiverDocument,
-) {
-  return ensureRegistrationDeskWaiverStatusIndexRecord({
-    evidence,
-    waiverDocument,
-    readStatusRecord: ({ evidenceAppId }) =>
-      findRegistrationDeskWaiverStatusStorageItem(evidenceAppId),
-    insertStatusRecord: (status) =>
-      wixData.insert(
-        WAIVER_STATUS_INDEX_COLLECTION,
-        {
-          _id: arenaRecordStorageId(
-            WAIVER_STATUS_INDEX_COLLECTION,
-            status.evidenceAppId,
-          ),
-          ...status,
-          signedAt: new Date(status.signedAt),
-        },
-        OPTIONS,
-      ),
-  });
-}
-
-async function registrationDeskWaiverStatusMigrationIsComplete() {
-  const marker = await readOptionalItem(
-    SETTINGS_COLLECTION,
-    WAIVER_STATUS_INDEX_MIGRATION_ID,
-    CONSISTENT_READ_OPTIONS,
-  );
-  return marker?.value === 1;
-}
-
-async function migrateLegacyRegistrationDeskWaiverStatuses(waiverDocument) {
-  return withRegistrationDeskLocks(
-    [WAIVER_STATUS_INDEX_MIGRATION_ID],
-    async () => {
-      if (await registrationDeskWaiverStatusMigrationIsComplete()) return;
-
-      // Compatibility-only scan; the marker keeps evidence off normal loads.
-      await ensureRegistrationDeskWaiverEvidenceCollection();
-      let result = await wixData
-        .query(WAIVER_SIGNATURES_COLLECTION)
-        .limit(WAIVER_STATUS_MIGRATION_PAGE_SIZE)
-        .find(CONSISTENT_READ_OPTIONS);
-      while (true) {
-        const evidenceRecords = result.items.flatMap((item) => {
-          try {
-            return [parseRegistrationDeskWaiverStorageItem(item)];
-          } catch (error) {
-            if (error instanceof RegistrationDeskWaiverError) return [];
-            throw error;
-          }
-        });
-        await migrateRegistrationDeskWaiverStatusIndex({
-          evidenceRecords,
-          waiverDocument,
-          ensureStatusRecord: (evidence) =>
-            ensureRegistrationDeskWaiverStatusForEvidence(
-              evidence,
-              waiverDocument,
-            ),
-        });
-        if (!result.hasNext()) break;
-        result = await result.next();
-      }
-      await wixData.save(
-        SETTINGS_COLLECTION,
-        {
-          _id: WAIVER_STATUS_INDEX_MIGRATION_ID,
-          value: 1,
-          updatedAt: new Date(),
-        },
-        OPTIONS,
-      );
-    },
-  );
-}
-
-async function readRegistrationDeskWaiverStatusRecords(waiverVersion) {
-  let result = await wixData
-    .query(WAIVER_STATUS_INDEX_COLLECTION)
-    .eq("source", "registration-desk")
-    .eq("waiverVersion", waiverVersion)
-    .limit(1000)
-    .find(CONSISTENT_READ_OPTIONS);
-  const records = [...result.items];
-  while (result.hasNext()) {
-    result = await result.next();
-    records.push(...result.items);
-  }
-  return records;
-}
-
-async function loadRegistrationDeskWaiverStatusSnapshot(waiverDocument) {
-  if (
-    waiverDocument?.available !== true ||
-    !waiverDocument.title ||
-    !waiverDocument.version ||
-    !waiverDocument.text
-  ) {
-    return { waiverVersion: "", statuses: [] };
-  }
-  await ensureRegistrationDeskWaiverStatusIndexCollection();
-  return loadContestantWaiverStatusesFromIndex({
-    isMigrationComplete:
-      registrationDeskWaiverStatusMigrationIsComplete,
-    migrateLegacyEvidence: () =>
-      migrateLegacyRegistrationDeskWaiverStatuses(waiverDocument),
-    readStatusRecords: readRegistrationDeskWaiverStatusRecords,
-    waiverDocument,
-  });
-}
-
-const signedWaiverStatusIsPreferred = (candidate, current) => {
-  const candidateMs = Date.parse(candidate.signedAt || "");
-  const currentMs = Date.parse(current.signedAt || "");
-  if (candidateMs !== currentMs) return candidateMs > currentMs;
-  if (candidate.eventId !== current.eventId) {
-    return String(candidate.eventId) < String(current.eventId);
-  }
-  return String(candidate.evidenceAppId) < String(current.evidenceAppId);
-};
-
-async function readLatestContestantWaiverStatusRecord(
-  contestantId,
-  waiverVersion,
-) {
-  let result = await wixData
-    .query(WAIVER_STATUS_INDEX_COLLECTION)
-    .eq("source", "registration-desk")
-    .eq("waiverVersion", waiverVersion)
-    .eq("contestantId", contestantId)
-    .limit(1000)
-    .find(CONSISTENT_READ_OPTIONS);
-  const records = [...result.items];
-  while (result.hasNext()) {
-    result = await result.next();
-    records.push(...result.items);
-  }
-  let preferred = null;
-  for (const record of records) {
-    if (
-      !record ||
-      typeof record.signedAt !== "string" ||
-      !record.eventId ||
-      !record.evidenceAppId
-    ) {
-      continue;
-    }
-    if (!preferred || signedWaiverStatusIsPreferred(record, preferred)) {
-      preferred = record;
-    }
-  }
-  return preferred;
-}
-
-function signedWaiverEvidenceProjection(evidence, waiverDocument) {
-  const document = normalizeRegistrationDeskWaiverDocument(waiverDocument);
-  if (!document.available) return null;
-  if (
-    !evidence ||
-    evidence.source !== "registration-desk" ||
-    evidence.accepted !== true ||
-    evidence.waiverVersion !== document.version ||
-    evidence.waiverTitle !== document.title ||
-    evidence.waiverText !== document.text
-  ) {
-    return null;
-  }
-  const signedAtMs = Date.parse(evidence.signedAt || "");
-  if (!Number.isFinite(signedAtMs)) return null;
-  return {
-    id: evidence.id,
-    contestantId: evidence.contestantId,
-    contestantName: evidence.contestantName,
-    signerName: evidence.signerName,
-    eventId: evidence.eventId,
-    signedAt: new Date(signedAtMs).toISOString(),
-    waiverVersion: evidence.waiverVersion,
-    waiverTitle: evidence.waiverTitle,
-    waiverText: evidence.waiverText,
-    signatureDataUrl: evidence.signatureDataUrl,
-  };
-}
-
-async function findRegistrationDeskWaiverStorageItem(recordId) {
-  const storageId = arenaRecordStorageId(
-    WAIVER_SIGNATURES_COLLECTION,
-    recordId,
-  );
-  const [storedById, storedByAppId] = await Promise.all([
-    readOptionalItem(
-      WAIVER_SIGNATURES_COLLECTION,
-      storageId,
-      CONSISTENT_READ_OPTIONS,
-    ),
-    wixData
-      .query(WAIVER_SIGNATURES_COLLECTION)
-      .eq("appId", recordId)
-      .limit(2)
-      .find(CONSISTENT_READ_OPTIONS),
-  ]);
-  const candidates = new Map(
-    [storedById, ...storedByAppId.items]
-      .filter(Boolean)
-      .map((item) => [item._id, item]),
-  );
-  if (candidates.size > 1) throw waiverRecordConflict();
-  const stored = [...candidates.values()][0] || null;
-  if (
-    stored &&
-    (stored._id !== storageId || stored.appId !== recordId)
-  ) {
-    throw waiverRecordConflict();
-  }
-  return stored;
-}
-
-async function insertImmutableRegistrationDeskWaiver(record, prepared) {
-  const storageId = arenaRecordStorageId(
-    WAIVER_SIGNATURES_COLLECTION,
-    record.id,
-  );
-  try {
-    await wixData.insert(
-      WAIVER_SIGNATURES_COLLECTION,
-      {
-        _id: storageId,
-        appId: record.id,
-        payload: JSON.stringify(record),
-      },
-      OPTIONS,
-    );
-    return record;
-  } catch (error) {
-    const collision = await findRegistrationDeskWaiverStorageItem(record.id);
-    if (!collision) throw error;
-    const persisted = parseRegistrationDeskWaiverStorageItem(collision);
-    resolveRegistrationDeskWaiverRetry(persisted, prepared);
-    return persisted;
-  }
-}
-
-async function ensureRiderAccountCollections() {
-  await ensureSettingsCollection();
-  await ensureCollection(
-    COLLECTIONS.contestants,
-    "Arena Contestants",
-    PAYLOAD_FIELDS,
-  );
-  await ensureCollection(
-    CREDENTIALS_COLLECTION,
-    "Arena Contestant Credentials",
-    [
-      { key: "contestantId", displayName: "Contestant ID", type: "TEXT" },
-      { key: "emailNormalized", displayName: "Normalized Email", type: "TEXT" },
-      { key: "pinSalt", displayName: "PIN Salt", type: "TEXT" },
-      { key: "pinHash", displayName: "PIN Hash", type: "TEXT" },
-      { key: "failedAttempts", displayName: "Failed Attempts", type: "NUMBER" },
-      { key: "lockedUntil", displayName: "Locked Until", type: "DATETIME" },
-      { key: "updatedAt", displayName: "Updated At", type: "DATETIME" },
-    ],
-  );
-  await ensureCredentialLockCollection();
-}
-
-async function ensureCredentialLockCollection() {
-  await ensureCollection(
-    CREDENTIAL_LOCKS_COLLECTION,
-    "Arena Contestant Credential Locks",
-    [
-      { key: "emailNormalized", displayName: "Normalized Email", type: "TEXT" },
-      { key: "expiresAt", displayName: "Expires At", type: "DATETIME" },
-    ],
-  );
-}
-
 function protectedOnlineAppIds(records, loadedAt, now = Date.now()) {
   return new Set(
     records
@@ -1229,12 +1111,18 @@ async function syncRecords(
   records,
   protectedAppIds,
   assertLockOwned = async () => undefined,
+  preloadedItems = null,
 ) {
-  let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
-  const currentItems = [...result.items];
-  while (result.hasNext()) {
-    result = await result.next();
-    currentItems.push(...result.items);
+  let currentItems;
+  if (Array.isArray(preloadedItems)) {
+    currentItems = preloadedItems;
+  } else {
+    let result = await wixData.query(collectionId).limit(1000).find(OPTIONS);
+    currentItems = [...result.items];
+    while (result.hasNext()) {
+      result = await result.next();
+      currentItems.push(...result.items);
+    }
   }
   const currentByAppId = new Map(
     currentItems.map((item) => [item.appId, item]),
@@ -1293,14 +1181,12 @@ async function removeOrphanedContestantCredentials(
   }
 }
 
-export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
+export const loadArenaData = webMethod(Permissions.SiteMember, async (options) => {
   await requireArenaAdmin();
-  await ensureWorkspaceCollections();
-  await ensureRiderAccountCollections();
   try {
-    const workspace = await readWorkspace();
-    await removeOrphanedContestantCredentials(workspace.contestants);
-    return workspace;
+    return await readWorkspace({
+      consistentRead: options?.consistentRead === true,
+    });
   } catch (error) {
     if (
       error?.code === "WDE0025" ||
@@ -1312,45 +1198,6 @@ export const loadArenaData = webMethod(Permissions.SiteMember, async () => {
     throw error;
   }
 });
-
-export const loadContestantWaiverStatuses = webMethod(
-  Permissions.SiteMember,
-  async () => {
-    await requireArenaAdmin();
-    const waiverDocument = await readRegistrationDeskWaiverDocument();
-    return loadRegistrationDeskWaiverStatusSnapshot(waiverDocument);
-  },
-);
-
-export const loadContestantSignedWaiver = webMethod(
-  Permissions.SiteMember,
-  async (request) => {
-    await requireRegistrationDesk();
-    if (!validAppId(request?.contestantId)) {
-      throw new Error("Choose a valid contestant to view the signed waiver.");
-    }
-    const waiverDocument = await readRegistrationDeskWaiverDocument();
-    if (!waiverDocument?.available || !waiverDocument.version) {
-      return null;
-    }
-    await ensureRegistrationDeskWaiverCollections();
-    await loadRegistrationDeskWaiverStatusSnapshot(waiverDocument);
-    const statusRecord = await readLatestContestantWaiverStatusRecord(
-      request.contestantId,
-      waiverDocument.version,
-    );
-    if (!statusRecord?.evidenceAppId) return null;
-    const evidenceItem = await findRegistrationDeskWaiverStorageItem(
-      statusRecord.evidenceAppId,
-    );
-    if (!evidenceItem) return null;
-    const evidence = parseRegistrationDeskWaiverStorageItem(evidenceItem);
-    return signedWaiverEvidenceProjection(evidence, waiverDocument);
-  },
-);
-
-const withFullWorkspaceLocks = (callback) =>
-  withWorkspaceLocks([WORKSPACE_MUTATION_LOCK_RESOURCE], callback);
 
 // Per-phase wall-clock timings for a workspace save, written to the Wix site
 // log so a single real save shows which phase owns the latency instead of it
@@ -1377,36 +1224,10 @@ function startSaveTiming() {
   };
 }
 
-export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
-  const timing = startSaveTiming();
-  await requireArenaAdmin();
-  await ensureWorkspaceCollections();
-  await ensureRiderAccountCollections();
-  timing.lap("prepare");
-  return withFullWorkspaceLocks(async (lockScope) => {
-  timing.lap("lock");
-  let latest;
-  try {
-    latest = await readWorkspace({ consistentRead: true });
-    timing.lap("read");
-  } catch (error) {
-    if (
-      error?.code !== "WDE0025" &&
-      error?.code !== "WDE0026" &&
-      error?.code !== "WD_SCHEMA_DOES_NOT_EXIST"
-    ) {
-      throw error;
-    }
-    await ensureSettingsCollection();
-    await savePublicScheduleSnapshot(data, lockScope.assertOwned);
-    return {
-      ...data,
-      revision: Number(data.revision || 0) + 1,
-      staffRevision: Number(data.staffRevision || data.revision || 0) + 1,
-      onlineRevision: Number(data.onlineRevision || 0),
-      loadedAt: new Date().toISOString(),
-    };
-  }
+async function saveArenaDataLocked(data, lockScope, timing = startSaveTiming()) {
+  const { workspace: latest, storageItems } =
+    await readWorkspaceWithStorageItems({ consistentRead: true });
+  timing.lap("read");
   const submittedStaffRevision = Number(
     data.staffRevision ?? data.revision ?? 0,
   );
@@ -1453,55 +1274,70 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
   timing.lap("merge");
   const protectedIds = (records) => protectedOnlineAppIds(records, loadedAt);
 
+  const nextContestantIds = new Set(
+    (next.contestants || []).map((contestant) => contestant.id),
+  );
+  const contestantsRemoved = latest.contestants.some(
+    (contestant) => !nextContestantIds.has(contestant.id),
+  );
   await Promise.all([
     syncRecords(
       COLLECTIONS.meets,
       next.meets || [],
       protectedIds(latest.meets),
       lockScope.assertOwned,
+      storageItems[COLLECTIONS.meets],
     ),
     syncRecords(
       COLLECTIONS.events,
       next.events || [],
       protectedIds(latest.events),
       lockScope.assertOwned,
+      storageItems[COLLECTIONS.events],
     ),
     syncRecords(
       COLLECTIONS.contestants,
       next.contestants || [],
       protectedIds(latest.contestants),
       lockScope.assertOwned,
+      storageItems[COLLECTIONS.contestants],
     ),
     syncRecords(
       COLLECTIONS.teams,
       next.teams,
       protectedIds(latest.teams),
       lockScope.assertOwned,
+      storageItems[COLLECTIONS.teams],
     ),
     syncRecords(
       COLLECTIONS.registrations,
       next.registrations,
       protectedIds(latest.registrations),
       lockScope.assertOwned,
+      storageItems[COLLECTIONS.registrations],
     ),
     syncRecords(
       COLLECTIONS.spectators,
       next.spectators,
       protectedIds(latest.spectators),
       lockScope.assertOwned,
+      storageItems[COLLECTIONS.spectators],
     ),
     syncRecords(
       COLLECTIONS.spectatorPredictions,
       next.spectatorPredictions,
       protectedIds(latest.spectatorPredictions),
       lockScope.assertOwned,
+      storageItems[COLLECTIONS.spectatorPredictions],
     ),
   ]);
   timing.lap("sync");
-  await removeOrphanedContestantCredentials(
-    next.contestants || [],
-    lockScope.assertOwned,
-  );
+  if (contestantsRemoved) {
+    await removeOrphanedContestantCredentials(
+      next.contestants || [],
+      lockScope.assertOwned,
+    );
+  }
   await lockScope.assertOwned();
   await wixData.save(
     SETTINGS_COLLECTION,
@@ -1514,31 +1350,315 @@ export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
     OPTIONS,
   );
   timing.lap("settings");
-  await lockScope.assertOwned();
-  await wixData.save(
-    SETTINGS_COLLECTION,
+  const committedStaffRevision = await bumpRevision(
+    STAFF_REVISION_ID,
     {
-      _id: STAFF_REVISION_ID,
-      value: latest.staffRevision + 1,
-      updatedAt: new Date(),
+      action: "saveArenaData",
     },
-    OPTIONS,
+    true,
+    lockScope,
   );
   timing.lap("revision");
   await savePublicScheduleSnapshot(next, lockScope.assertOwned);
   timing.lap("snapshot");
   timing.report("saveArenaData");
-  return readWorkspace({ consistentRead: true });
-  });
+  return durableSaveAcknowledgement(latest, committedStaffRevision);
+}
+
+async function debugSaveArenaDataLocked(
+  data,
+  lockScope,
+  timing = startSaveTiming(),
+) {
+  let latest;
+  let storageItems;
+  try {
+    ({ workspace: latest, storageItems } = await readWorkspaceWithStorageItems(
+      { consistentRead: true },
+    ));
+    timing.lap("read");
+  } catch (error) {
+    return {
+      ok: false,
+      phase: "readWorkspace",
+      code: error?.code || "",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const submittedStaffRevision = Number(data.staffRevision ?? data.revision ?? 0);
+  if (submittedStaffRevision !== latest.staffRevision) {
+    return {
+      ok: false,
+      phase: "staffRevisionCheck",
+      code: "",
+      message:
+        "Arena data changed in another staff session. Reload before saving again.",
+    };
+  }
+
+  const loadedAt = Date.parse(data.loadedAt || "");
+  const onlineChanged =
+    Number(data.onlineRevision || 0) !== latest.onlineRevision ||
+    [...latest.contestants, ...latest.teams, ...latest.registrations].some(
+      (record) =>
+        record.source === "online" &&
+        Date.parse(record.submittedAt || "") > loadedAt,
+    );
+  const latestContestantsById = new Map(
+    latest.contestants.map((contestant) => [contestant.id, contestant]),
+  );
+  const next = {
+    ...data,
+    contestants: (
+      onlineChanged
+        ? mergeOnline(data.contestants || [], latest.contestants)
+        : data.contestants || []
+    ).map((contestant) =>
+      normalizeContestantCasing(
+        mergeContestantPhoto(
+          contestant,
+          latestContestantsById.get(contestant.id),
+        ),
+      ),
+    ),
+    teams: onlineChanged ? mergeOnline(data.teams || [], latest.teams) : data.teams || [],
+    registrations: onlineChanged
+      ? mergeOnline(data.registrations || [], latest.registrations)
+      : data.registrations || [],
+    spectators: latest.spectators,
+    spectatorPredictions: latest.spectatorPredictions,
+  };
+  const protectedIds = (records) => protectedOnlineAppIds(records, loadedAt);
+
+  const nextContestantIds = new Set(
+    (next.contestants || []).map((contestant) => contestant.id),
+  );
+  const contestantsRemoved = latest.contestants.some(
+    (contestant) => !nextContestantIds.has(contestant.id),
+  );
+
+  try {
+    await assertWorkspacePreservesPublicSignupReservations(next);
+    timing.lap("merge");
+  } catch (error) {
+    return {
+      ok: false,
+      phase: "activeSignupReservations",
+      code: error?.code || "",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  try {
+    await Promise.all([
+      syncRecords(
+        COLLECTIONS.meets,
+        next.meets || [],
+        protectedIds(latest.meets),
+        lockScope.assertOwned,
+        storageItems[COLLECTIONS.meets],
+      ),
+      syncRecords(
+        COLLECTIONS.events,
+        next.events || [],
+        protectedIds(latest.events),
+        lockScope.assertOwned,
+        storageItems[COLLECTIONS.events],
+      ),
+      syncRecords(
+        COLLECTIONS.contestants,
+        next.contestants || [],
+        protectedIds(latest.contestants),
+        lockScope.assertOwned,
+        storageItems[COLLECTIONS.contestants],
+      ),
+      syncRecords(
+        COLLECTIONS.teams,
+        next.teams,
+        protectedIds(latest.teams),
+        lockScope.assertOwned,
+        storageItems[COLLECTIONS.teams],
+      ),
+      syncRecords(
+        COLLECTIONS.registrations,
+        next.registrations,
+        protectedIds(latest.registrations),
+        lockScope.assertOwned,
+        storageItems[COLLECTIONS.registrations],
+      ),
+      syncRecords(
+        COLLECTIONS.spectators,
+        next.spectators,
+        protectedIds(latest.spectators),
+        lockScope.assertOwned,
+        storageItems[COLLECTIONS.spectators],
+      ),
+      syncRecords(
+        COLLECTIONS.spectatorPredictions,
+        next.spectatorPredictions,
+        protectedIds(latest.spectatorPredictions),
+        lockScope.assertOwned,
+        storageItems[COLLECTIONS.spectatorPredictions],
+      ),
+    ]);
+    timing.lap("sync");
+  } catch (error) {
+    return {
+      ok: false,
+      phase: "syncRecords",
+      code: error?.code || "",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  if (contestantsRemoved) {
+    try {
+      await removeOrphanedContestantCredentials(
+        next.contestants || [],
+        lockScope.assertOwned,
+      );
+    } catch (error) {
+      return {
+        ok: false,
+        phase: "removeOrphanedContestantCredentials",
+        code: error?.code || "",
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  try {
+    await lockScope.assertOwned();
+    await wixData.save(
+      SETTINGS_COLLECTION,
+      {
+        _id: SETTINGS_ID,
+        activeEventId: data.activeEventId || "",
+        participantDatabaseVersion: data.participantDatabaseVersion || 1,
+        updatedAt: new Date(),
+      },
+      OPTIONS,
+    );
+    timing.lap("settings");
+    const committedStaffRevision = await bumpRevision(
+      STAFF_REVISION_ID,
+      {
+        action: "saveArenaData",
+      },
+      true,
+      lockScope,
+    );
+    timing.lap("revision");
+    await savePublicScheduleSnapshot(next, lockScope.assertOwned);
+    timing.lap("snapshot");
+    timing.report("debugSaveArenaData");
+    return {
+      ok: true,
+      result: durableSaveAcknowledgement(latest, committedStaffRevision),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      phase: "finalizeSave",
+      code: error?.code || "",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+const withFullWorkspaceLocks = (callback) =>
+  withWorkspaceLocks([WORKSPACE_MUTATION_LOCK_ID], callback);
+
+export const saveArenaData = webMethod(Permissions.SiteMember, async (data) => {
+  const timing = startSaveTiming();
+  try {
+    await requireArenaAdmin();
+  } catch (e) {
+    throw new Error(`DIAG:requireArenaAdmin: ${e?.message}`);
+  }
+  try {
+    await ensureWorkspaceCollections();
+  } catch (e) {
+    throw new Error(`DIAG:ensureWorkspaceCollections: ${e?.message}`);
+  }
+  try {
+    await ensureRiderAccountCollections();
+  } catch (e) {
+    throw new Error(`DIAG:ensureRiderAccountCollections: ${e?.message}`);
+  }
+  timing.lap("prepare");
+  try {
+    return await withFullWorkspaceLocks((lockScope) => {
+      timing.lap("lock");
+      return saveArenaDataLocked(data, lockScope, timing);
+    });
+  } catch (e) {
+    throw new Error(`DIAG:saveArenaDataLocked: ${e?.message}`);
+  }
 });
 
-async function registrationDeskProjection(workspace) {
+export const debugSaveArenaData = webMethod(
+  Permissions.SiteMember,
+  async (data) => {
+    const timing = startSaveTiming();
+    try {
+      await requireArenaAdmin();
+    } catch (error) {
+      return {
+        ok: false,
+        phase: "requireArenaAdmin",
+        code: error?.code || "",
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+    try {
+      await ensureWorkspaceCollections();
+    } catch (error) {
+      return {
+        ok: false,
+        phase: "ensureWorkspaceCollections",
+        code: error?.code || "",
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+    try {
+      await ensureRiderAccountCollections();
+    } catch (error) {
+      return {
+        ok: false,
+        phase: "ensureRiderAccountCollections",
+        code: error?.code || "",
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+    timing.lap("prepare");
+    try {
+      return await withFullWorkspaceLocks((lockScope) => {
+        timing.lap("lock");
+        return debugSaveArenaDataLocked(data, lockScope, timing);
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        phase: "withWorkspaceLocks",
+        code: error?.code || "",
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
+);
+
+function registrationDeskProjection(
+  workspace,
+  waiverStatus = contestantWaiverStatusesProjection([]),
+) {
   const { events, teams, registrations } =
     registrationDeskRosterScope(workspace);
-  const waiverDocument = await readRegistrationDeskWaiverDocument();
-  const waiverStatus =
-    await loadRegistrationDeskWaiverStatusSnapshot(waiverDocument);
   return {
+    waiverDocument: registrationDeskWaiverDocumentProjection(),
+    waiverStatus,
+    waiverSignatures: [],
     events: events.map(
       ({
         id,
@@ -1560,7 +1680,6 @@ async function registrationDeskProjection(workspace) {
         maxContestantHandicap,
         maxHeaders,
         maxHeelers,
-        supportedEntryTypes,
       }) => ({
         id,
         parentEventId,
@@ -1583,7 +1702,6 @@ async function registrationDeskProjection(workspace) {
         maxHeelers,
         supportedEntryTypes: supportedRegistrationDeskEntryTypes({
           competitionType,
-          supportedEntryTypes,
         }),
       }),
     ),
@@ -1621,17 +1739,918 @@ async function registrationDeskProjection(workspace) {
       ...registration,
       notes: "",
     })),
-    waiverDocument,
-    waiverStatus,
-    waiverSignatures: [],
   };
+}
+
+async function registrationDeskProjectionWithIndexedWaiverStatus(workspace) {
+  return registrationDeskProjection(
+    workspace,
+    await readRegistrationDeskWaiverStatusSnapshot(),
+  );
 }
 
 export const loadRegistrationDeskData = webMethod(
   Permissions.SiteMember,
   async () => {
     await requireRegistrationDesk();
-    return registrationDeskProjection(await readWorkspace());
+    const waiverStatus = await loadRegistrationDeskWaiverStatusSnapshot();
+    return registrationDeskProjection(await readWorkspace(), waiverStatus);
+  },
+);
+
+const waiverRecordConflict = () =>
+  new RegistrationDeskWaiverError(
+    REGISTRATION_DESK_WAIVER_ERROR_CODES.recordConflict,
+  );
+
+const parseRegistrationDeskWaiverStorageItem = (item) => {
+  try {
+    return typeof item.payload === "string"
+      ? JSON.parse(item.payload)
+      : item.payload;
+  } catch {
+    throw waiverRecordConflict();
+  }
+};
+
+async function findRegistrationDeskWaiverStatusStorageItem(evidenceAppId) {
+  const storageId = arenaRecordStorageId(
+    WAIVER_STATUS_INDEX_COLLECTION,
+    evidenceAppId,
+  );
+  const [storedById, storedByEvidenceId] = await Promise.all([
+    readOptionalItem(
+      WAIVER_STATUS_INDEX_COLLECTION,
+      storageId,
+      CONSISTENT_READ_OPTIONS,
+    ),
+    wixData
+      .query(WAIVER_STATUS_INDEX_COLLECTION)
+      .eq("evidenceAppId", evidenceAppId)
+      .limit(2)
+      .find(CONSISTENT_READ_OPTIONS),
+  ]);
+  const candidates = new Map(
+    [storedById, ...storedByEvidenceId.items]
+      .filter(Boolean)
+      .map((item) => [item._id, item]),
+  );
+  if (candidates.size > 1) throw waiverRecordConflict();
+  const stored = [...candidates.values()][0] || null;
+  if (
+    stored &&
+    (stored._id !== storageId || stored.evidenceAppId !== evidenceAppId)
+  ) {
+    throw waiverRecordConflict();
+  }
+  return stored;
+}
+
+async function ensureRegistrationDeskWaiverStatusForEvidence(
+  evidence,
+  assertLockOwned = async () => undefined,
+) {
+  return ensureRegistrationDeskWaiverStatusIndexRecord({
+    evidence,
+    document: CURRENT_REGISTRATION_DESK_WAIVER,
+    readStatusRecord: ({ evidenceAppId }) =>
+      findRegistrationDeskWaiverStatusStorageItem(evidenceAppId),
+    insertStatusRecord: async (status) => {
+      await assertLockOwned();
+      return wixData.insert(
+        WAIVER_STATUS_INDEX_COLLECTION,
+        {
+          _id: arenaRecordStorageId(
+            WAIVER_STATUS_INDEX_COLLECTION,
+            status.evidenceAppId,
+          ),
+          ...status,
+          signedAt: new Date(status.signedAt),
+        },
+        OPTIONS,
+      );
+    },
+  });
+}
+
+async function registrationDeskWaiverStatusMigrationIsComplete() {
+  const marker = await readOptionalItem(
+    SETTINGS_COLLECTION,
+    WAIVER_STATUS_INDEX_MIGRATION_ID,
+    CONSISTENT_READ_OPTIONS,
+  );
+  return marker?.value === 1;
+}
+
+async function migrateLegacyRegistrationDeskWaiverStatuses() {
+  return withWorkspaceLocks(
+    [WORKSPACE_MUTATION_LOCK_ID, WAIVER_STATUS_INDEX_MIGRATION_ID],
+    async (lockScope) => {
+      if (await registrationDeskWaiverStatusMigrationIsComplete()) return;
+
+      // Compatibility-only scan. The completion marker keeps this off the
+      // normal Rider Roster load path after all pre-index evidence is indexed.
+      await ensureRegistrationDeskWaiverEvidenceCollection();
+      let result = await wixData
+        .query(WAIVER_SIGNATURES_COLLECTION)
+        .limit(WAIVER_STATUS_MIGRATION_PAGE_SIZE)
+        .find(CONSISTENT_READ_OPTIONS);
+      while (true) {
+        const evidenceRecords = result.items.flatMap((item) => {
+          try {
+            return [parseRegistrationDeskWaiverStorageItem(item)];
+          } catch (error) {
+            if (error instanceof RegistrationDeskWaiverError) return [];
+            throw error;
+          }
+        });
+        await migrateRegistrationDeskWaiverStatusIndex({
+          evidenceRecords,
+          document: CURRENT_REGISTRATION_DESK_WAIVER,
+          ensureStatusRecord: (evidence) =>
+            ensureRegistrationDeskWaiverStatusForEvidence(
+              evidence,
+              lockScope.assertOwned,
+            ),
+        });
+        if (!result.hasNext()) break;
+        result = await result.next();
+      }
+      await lockScope.assertOwned();
+      await wixData.save(
+        SETTINGS_COLLECTION,
+        {
+          _id: WAIVER_STATUS_INDEX_MIGRATION_ID,
+          value: 1,
+          updatedAt: new Date(),
+        },
+        OPTIONS,
+      );
+    },
+  );
+}
+
+async function readRegistrationDeskWaiverStatusRecords() {
+  let result = await wixData
+    .query(WAIVER_STATUS_INDEX_COLLECTION)
+    .eq("source", "registration-desk")
+    .eq("waiverVersion", CURRENT_REGISTRATION_DESK_WAIVER.version)
+    .limit(1000)
+    .find(CONSISTENT_READ_OPTIONS);
+  const records = [...result.items];
+  while (result.hasNext()) {
+    result = await result.next();
+    records.push(...result.items);
+  }
+  return records;
+}
+
+async function ensureRegistrationDeskWaiverStatusMigration() {
+  await ensureRegistrationDeskWaiverStatusIndexCollection();
+  if (!(await registrationDeskWaiverStatusMigrationIsComplete())) {
+    await migrateLegacyRegistrationDeskWaiverStatuses();
+  }
+}
+
+async function readRegistrationDeskWaiverStatusSnapshot() {
+  return contestantWaiverStatusesProjection(
+    await readRegistrationDeskWaiverStatusRecords(),
+    CURRENT_REGISTRATION_DESK_WAIVER,
+  );
+}
+
+async function loadRegistrationDeskWaiverStatusSnapshot() {
+  await ensureRegistrationDeskWaiverStatusIndexCollection();
+  return loadContestantWaiverStatusesFromIndex({
+    isMigrationComplete:
+      registrationDeskWaiverStatusMigrationIsComplete,
+    migrateLegacyEvidence:
+      migrateLegacyRegistrationDeskWaiverStatuses,
+    readStatusRecords: readRegistrationDeskWaiverStatusRecords,
+    document: CURRENT_REGISTRATION_DESK_WAIVER,
+  });
+}
+
+export const loadContestantWaiverStatuses = webMethod(
+  Permissions.SiteMember,
+  async () => {
+    await requireArenaAdmin();
+    return loadRegistrationDeskWaiverStatusSnapshot();
+  },
+);
+
+async function readLatestContestantWaiverStatusRecord(contestantId) {
+  let result = await wixData
+    .query(WAIVER_STATUS_INDEX_COLLECTION)
+    .eq("source", "registration-desk")
+    .eq("waiverVersion", CURRENT_REGISTRATION_DESK_WAIVER.version)
+    .eq("contestantId", contestantId)
+    .limit(1000)
+    .find(CONSISTENT_READ_OPTIONS);
+  const records = [...result.items];
+  while (result.hasNext()) {
+    result = await result.next();
+    records.push(...result.items);
+  }
+  return latestContestantWaiverStatusRecord(
+    records,
+    contestantId,
+    CURRENT_REGISTRATION_DESK_WAIVER,
+  );
+}
+
+async function findRegistrationDeskWaiverStorageItem(recordId) {
+  const storageId = arenaRecordStorageId(
+    WAIVER_SIGNATURES_COLLECTION,
+    recordId,
+  );
+  const [storedById, storedByAppId] = await Promise.all([
+    readOptionalItem(
+      WAIVER_SIGNATURES_COLLECTION,
+      storageId,
+      CONSISTENT_READ_OPTIONS,
+    ),
+    wixData
+      .query(WAIVER_SIGNATURES_COLLECTION)
+      .eq("appId", recordId)
+      .limit(2)
+      .find(CONSISTENT_READ_OPTIONS),
+  ]);
+  const candidates = new Map(
+    [storedById, ...storedByAppId.items]
+      .filter(Boolean)
+      .map((item) => [item._id, item]),
+  );
+  if (candidates.size > 1) throw waiverRecordConflict();
+  const stored = [...candidates.values()][0] || null;
+  if (
+    stored &&
+    (stored._id !== storageId || stored.appId !== recordId)
+  ) {
+    throw waiverRecordConflict();
+  }
+  return stored;
+}
+
+export const loadContestantSignedWaiver = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireArenaAdmin();
+    if (!validAppId(request?.contestantId)) {
+      throw new Error("Choose a valid contestant to view the signed waiver.");
+    }
+    await ensureRegistrationDeskWaiverStatusIndexCollection();
+    const statusRecord = await readLatestContestantWaiverStatusRecord(
+      request.contestantId,
+    );
+    if (!statusRecord) return null;
+    let evidence;
+    try {
+      const evidenceItem = await findRegistrationDeskWaiverStorageItem(
+        statusRecord.evidenceAppId,
+      );
+      if (!evidenceItem) return null;
+      evidence = parseRegistrationDeskWaiverStorageItem(evidenceItem);
+    } catch (error) {
+      if (error instanceof RegistrationDeskWaiverError) return null;
+      throw error;
+    }
+    return contestantSignedWaiverEvidenceProjection(
+      evidence,
+      statusRecord,
+      CURRENT_REGISTRATION_DESK_WAIVER,
+    );
+  },
+);
+
+async function insertImmutableRegistrationDeskWaiver(
+  record,
+  submission,
+  assertLockOwned = async () => undefined,
+) {
+  const storageId = arenaRecordStorageId(
+    WAIVER_SIGNATURES_COLLECTION,
+    record.id,
+  );
+  try {
+    await assertLockOwned();
+    await wixData.insert(
+      WAIVER_SIGNATURES_COLLECTION,
+      {
+        _id: storageId,
+        appId: record.id,
+        payload: JSON.stringify(record),
+      },
+      OPTIONS,
+    );
+    return record;
+  } catch (error) {
+    if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
+    const collision = await findRegistrationDeskWaiverStorageItem(record.id);
+    if (!collision) throw error;
+    const persisted = parseRegistrationDeskWaiverStorageItem(collision);
+    resolveRegistrationDeskWaiverRetry(persisted, submission);
+    return persisted;
+  }
+}
+
+export const submitRegistrationDeskWaiver = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireRegistrationDesk();
+    const submission = prepareRegistrationDeskWaiverSubmission(
+      request,
+      CURRENT_REGISTRATION_DESK_WAIVER,
+    );
+    await ensureRegistrationDeskWaiverCollections();
+    await ensureRegistrationDeskWaiverStatusMigration();
+    const recordId = registrationDeskWaiverRecordId(
+      submission.eventId,
+      submission.contestantId,
+      submission.waiverDocument.version,
+    );
+    return withWorkspaceLocks(
+      [WORKSPACE_MUTATION_LOCK_ID, `registration-desk-waiver-${recordId}`],
+      async (lockScope) => {
+        const workspace = await readWorkspace({
+          includeSpectators: false,
+          consistentRead: true,
+        });
+        const { contestant } = registrationDeskWaiverParticipants(
+          workspace,
+          submission,
+        );
+
+        const existingItem =
+          await findRegistrationDeskWaiverStorageItem(recordId);
+        let persistedEvidence;
+        let signature;
+        if (existingItem) {
+          persistedEvidence =
+            parseRegistrationDeskWaiverStorageItem(existingItem);
+          signature = resolveRegistrationDeskWaiverRetry(
+            persistedEvidence,
+            submission,
+          );
+        } else {
+          const staffMember = await currentMember.getMember();
+          if (!staffMember) {
+            throw new Error(
+              "This action requires the Wix Registration Desk role.",
+            );
+          }
+          const record = createRegistrationDeskWaiverRecord({
+            submission,
+            contestantName: contestant.name,
+            signedAt: new Date(),
+            staffMember,
+          });
+          persistedEvidence = await insertImmutableRegistrationDeskWaiver(
+            record,
+            submission,
+            lockScope.assertOwned,
+          );
+          signature = resolveRegistrationDeskWaiverRetry(
+            persistedEvidence,
+            submission,
+          );
+        }
+        await ensureRegistrationDeskWaiverStatusForEvidence(
+          persistedEvidence,
+          lockScope.assertOwned,
+        );
+
+        const freshWorkspace = await readWorkspace({
+          includeSpectators: false,
+          consistentRead: true,
+        });
+        return {
+          signature,
+          data:
+            await registrationDeskProjectionWithIndexedWaiverStatus(
+              freshWorkspace,
+            ),
+        };
+      },
+    );
+  },
+);
+
+async function mutateArenaRecord(
+  collectionId,
+  appId,
+  mutation,
+  assertLockOwned = async () => undefined,
+) {
+  const storageId = arenaRecordStorageId(collectionId, appId);
+  const existing =
+    (await readOptionalItem(
+      collectionId,
+      storageId,
+      CONSISTENT_READ_OPTIONS,
+    )) ||
+    (
+      await wixData
+        .query(collectionId)
+        .eq("appId", appId)
+        .limit(1)
+        .find(CONSISTENT_READ_OPTIONS)
+    ).items[0];
+  if (!existing || existing.appId !== appId) {
+    throw new Error("Entry record not found.");
+  }
+  const current =
+    typeof existing.payload === "string"
+      ? JSON.parse(existing.payload)
+      : existing.payload;
+  if (!current || current.id !== appId) {
+    throw new Error("Entry record not found.");
+  }
+  const record = mutation(current);
+  if (!record || record.id !== appId) {
+    throw new Error("Entry record identity cannot be changed.");
+  }
+  await assertLockOwned();
+  await wixData.save(
+    collectionId,
+    {
+      ...existing,
+      appId: record.id,
+      payload: JSON.stringify(record),
+    },
+    OPTIONS,
+  );
+  return record;
+}
+
+async function saveArenaRecord(
+  collectionId,
+  record,
+  assertLockOwned = async () => undefined,
+) {
+  return mutateArenaRecord(
+    collectionId,
+    record.id,
+    (current) => ({
+      ...current,
+      ...record,
+    }),
+    assertLockOwned,
+  );
+}
+
+async function upsertArenaRecord(
+  collectionId,
+  record,
+  identityLabel = "Contestant record",
+  assertLockOwned = async () => undefined,
+) {
+  const storageId = arenaRecordStorageId(collectionId, record.id);
+  const existing =
+    (await readOptionalItem(
+      collectionId,
+      storageId,
+      CONSISTENT_READ_OPTIONS,
+    )) ||
+    (
+      await wixData
+        .query(collectionId)
+        .eq("appId", record.id)
+        .limit(1)
+        .find(CONSISTENT_READ_OPTIONS)
+    ).items[0];
+  if (existing && existing.appId !== record.id) {
+    throw new Error(`${identityLabel} identity cannot be changed.`);
+  }
+  await assertLockOwned();
+  const saved = await wixData.save(
+    collectionId,
+    {
+      ...(existing || { _id: storageId }),
+      appId: record.id,
+      payload: JSON.stringify(record),
+    },
+    OPTIONS,
+  );
+  const persisted =
+    typeof saved.payload === "string" ? JSON.parse(saved.payload) : saved.payload;
+  if (!persisted || persisted.id !== record.id) {
+    throw new Error(`${identityLabel} identity cannot be changed.`);
+  }
+  return persisted;
+}
+
+export const saveContestant = webMethod(
+  Permissions.SiteMember,
+  async (input) => {
+    await requireArenaAdmin();
+    const requested = prepareContestantSave(input, null);
+    await ensureRiderAccountCollections();
+    const timing = startSaveTiming();
+    timing.lap("prepare");
+    return withWorkspaceLocks(
+      [
+        WORKSPACE_MUTATION_LOCK_ID,
+        `contestant-${requested.id}`,
+        `contestant-email-${requested.email || "none"}`,
+      ],
+      async (lockScope) => {
+        timing.lap("lock");
+        const workspace = await readWorkspace({ consistentRead: true });
+        timing.lap("read");
+        const previous = workspace.contestants.find(
+          (contestant) => contestant.id === requested.id,
+        );
+        const contestant = prepareContestantSave(
+          input,
+          previous,
+          workspace.contestants,
+        );
+        const [contestantCredentials, duplicateCredentials] = await Promise.all([
+          wixData
+            .query(CREDENTIALS_COLLECTION)
+            .eq("contestantId", contestant.id)
+            .limit(1)
+            .find(CONSISTENT_READ_OPTIONS),
+          contestant.email
+            ? wixData
+                .query(CREDENTIALS_COLLECTION)
+                .eq("emailNormalized", contestant.email)
+                .limit(1)
+                .find(CONSISTENT_READ_OPTIONS)
+            : Promise.resolve({ items: [] }),
+        ]);
+        if (
+          duplicateCredentials.items.some(
+            (credential) => credential.contestantId !== contestant.id,
+          )
+        ) {
+          throw new Error(
+            "That email is already used by another contestant login.",
+          );
+        }
+        const credential = contestantCredentials.items[0];
+        if (credential && !contestant.email) {
+          throw new Error(
+            "Contestants with a login account must keep a valid email.",
+          );
+        }
+        if (
+          credential &&
+          normalizeEmail(credential.emailNormalized) !== contestant.email
+        ) {
+          throw new Error(
+            "Update the email and PIN together for contestants with a login account.",
+          );
+        }
+
+        const persisted = await upsertArenaRecord(
+          COLLECTIONS.contestants,
+          contestant,
+          "Contestant record",
+          lockScope.assertOwned,
+        );
+        timing.lap("write");
+        const committedStaffRevision = await bumpRevision(
+          STAFF_REVISION_ID,
+          {
+            action: "saveContestant",
+            contestantId: contestant.id,
+          },
+          true,
+          lockScope,
+        );
+        timing.lap("revision");
+        timing.report("saveContestant");
+        return contestantSaveAcknowledgement(
+          persisted,
+          committedStaffRevision,
+          workspace.onlineRevision,
+        );
+      },
+    );
+  },
+);
+
+export const saveEvent = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireArenaAdmin();
+    if (!validAppId(request?.event?.id)) {
+      throw new Error("Choose a valid competition.");
+    }
+    await ensureWorkspaceCollections();
+    const timing = startSaveTiming();
+    timing.lap("prepare");
+    return withWorkspaceLocks(
+      [WORKSPACE_MUTATION_LOCK_ID],
+      async (lockScope) => {
+        timing.lap("lock");
+        const workspace = await readWorkspace({ consistentRead: true });
+        timing.lap("read");
+        assertEventSaveRevision(request, workspace.staffRevision);
+        const previous = workspace.events.find(
+          (event) => event.id === request.event.id,
+        );
+        const event = prepareEventSave(request.event, previous);
+        await assertWorkspacePreservesPublicSignupReservations(
+          {
+            ...workspace,
+            events: previous
+              ? workspace.events.map((item) =>
+                  item.id === event.id ? event : item,
+                )
+              : [...workspace.events, event],
+          },
+          [event.id],
+        );
+        const persisted = await upsertArenaRecord(
+          COLLECTIONS.events,
+          event,
+          "Competition record",
+          lockScope.assertOwned,
+        );
+        timing.lap("write");
+        const committedStaffRevision = await bumpRevision(
+          STAFF_REVISION_ID,
+          {
+            action: "saveEvent",
+            eventId: event.id,
+          },
+          true,
+          lockScope,
+        );
+        const freshWorkspace = workspaceAfterCommittedWrites(
+          workspace,
+          { events: [persisted] },
+          committedStaffRevision,
+        );
+        timing.lap("revision");
+        await savePublicScheduleSnapshot(
+          freshWorkspace,
+          lockScope.assertOwned,
+        );
+        timing.lap("snapshot");
+        timing.report("saveEvent");
+        return eventSaveAcknowledgement(
+          persisted,
+          committedStaffRevision,
+          freshWorkspace.onlineRevision,
+          freshWorkspace.loadedAt,
+        );
+      },
+    );
+  },
+);
+
+export const saveRegistration = webMethod(
+  Permissions.SiteMember,
+  async (input) => {
+    await requireArenaAdmin();
+    if (!validAppId(input?.id) || !validAppId(input?.eventId)) {
+      throw new Error("Choose a valid registration and competition.");
+    }
+    return withWorkspaceLocks(
+      [WORKSPACE_MUTATION_LOCK_ID],
+      async (lockScope) => {
+        const timing = startSaveTiming();
+        timing.lap("lock");
+        const workspace = await readWorkspace({ consistentRead: true });
+        timing.lap("read");
+        const event = workspace.events.find(({ id }) => id === input.eventId);
+        const reservedRoleEntries =
+          event?.competitionType === "round-robin" &&
+          ["Header", "Heeler"].includes(input.role) &&
+          input.status === "entered"
+            ? await countActivePublicSignupRoleReservations(
+                event.id,
+                input.role,
+              )
+            : 0;
+        const registration = prepareRegistrationSave(
+          workspace,
+          input,
+          reservedRoleEntries,
+        );
+        const previous = workspace.registrations.find(
+          ({ id }) => id === registration.id,
+        );
+        await assertWorkspacePreservesPublicSignupReservations(
+          {
+            ...workspace,
+            registrations: previous
+              ? workspace.registrations.map((item) =>
+                  item.id === registration.id ? registration : item,
+                )
+              : [...workspace.registrations, registration],
+          },
+          [registration.eventId],
+        );
+        const persisted = await upsertArenaRecord(
+          COLLECTIONS.registrations,
+          registration,
+          "Registration record",
+          lockScope.assertOwned,
+        );
+        const committedStaffRevision = await bumpRevision(
+          STAFF_REVISION_ID,
+          {
+            action: "saveRegistration",
+            registrationId: registration.id,
+            eventId: registration.eventId,
+          },
+          true,
+          lockScope,
+        );
+        timing.lap("revision");
+        timing.report("saveRegistration");
+        return registrationSaveAcknowledgement(
+          persisted,
+          committedStaffRevision,
+          workspace.onlineRevision,
+        );
+      },
+    );
+  },
+);
+
+export const setActiveRun = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireArenaAdmin();
+    if (!validAppId(request?.eventId) || !validAppId(request?.teamId)) {
+      throw new Error("Choose a valid live competition and run.");
+    }
+    return withWorkspaceLocks(
+      [WORKSPACE_MUTATION_LOCK_ID],
+      async (lockScope) => {
+        const timing = startSaveTiming();
+        timing.lap("lock");
+        const workspace = await readWorkspace({ consistentRead: true });
+        timing.lap("read");
+        setActiveRunEvent(workspace, request);
+        await lockScope.assertOwned();
+        const persisted = await mutateArenaRecord(
+          COLLECTIONS.events,
+          request.eventId,
+          (latestEvent) =>
+            setActiveRunEvent(
+              {
+                ...workspace,
+                events: workspace.events.map((event) =>
+                  event.id === latestEvent.id ? latestEvent : event,
+                ),
+              },
+              request,
+            ),
+          lockScope.assertOwned,
+        );
+        const committedStaffRevision = await bumpRevision(
+          STAFF_REVISION_ID,
+          {
+            action: "setActiveRun",
+            eventId: request.eventId,
+            teamId: request.teamId,
+          },
+          true,
+          lockScope,
+        );
+        const freshWorkspace = workspaceAfterCommittedWrites(
+          workspace,
+          { events: [persisted] },
+          committedStaffRevision,
+        );
+        timing.lap("revision");
+        await savePublicScheduleSnapshot(
+          freshWorkspace,
+          lockScope.assertOwned,
+        );
+        timing.lap("snapshot");
+        timing.report("setActiveRun");
+        const activeEvent = freshWorkspace.events.find(
+          ({ id }) => id === request.eventId,
+        );
+        return {
+          eventId: activeEvent.id,
+          activeRunId: activeEvent.activeRunId,
+          activeRound: Number(activeEvent.activeRound),
+          revision: freshWorkspace.revision,
+          staffRevision: freshWorkspace.staffRevision,
+          onlineRevision: freshWorkspace.onlineRevision,
+          loadedAt: freshWorkspace.loadedAt,
+        };
+      },
+    );
+  },
+);
+
+async function mutateRegistrationDeskEntry(request, mutation) {
+  if (!validAppId(request?.eventId)) {
+    throw new Error("Specify a valid event, record type, and record.");
+  }
+  await ensureRegistrationDeskWaiverStatusMigration();
+  return withWorkspaceLocks(
+    [WORKSPACE_MUTATION_LOCK_ID],
+    async (lockScope) => {
+      const workspace = await readWorkspace({ consistentRead: true });
+      let reservedRoleEntries = 0;
+      if (
+        mutation === "update" &&
+        request.recordType === "registration" &&
+        request.patch?.role
+      ) {
+        reservedRoleEntries = await countActivePublicSignupRoleReservations(
+          request.eventId,
+          request.patch.role,
+        );
+      } else if (
+        mutation === "update" &&
+        request.recordType === "registration"
+      ) {
+        const current = workspace.registrations.find(
+          ({ id }) => id === request.recordId,
+        );
+        if (current?.role) {
+          reservedRoleEntries = await countActivePublicSignupRoleReservations(
+            request.eventId,
+            current.role,
+          );
+        }
+      }
+      const record =
+        mutation === "update"
+          ? updateRegistrationDeskEntryRecord(
+              workspace,
+              request,
+              reservedRoleEntries,
+            )
+          : scratchRegistrationDeskEntryRecord(workspace, request);
+      const collectionId =
+        request.recordType === "registration"
+          ? COLLECTIONS.registrations
+          : COLLECTIONS.teams;
+      const persisted = await saveArenaRecord(
+        collectionId,
+        record,
+        lockScope.assertOwned,
+      );
+      const committedStaffRevision = await bumpRevision(
+        STAFF_REVISION_ID,
+        {
+          action:
+            mutation === "update"
+              ? "updateRegistrationDeskEntry"
+              : "scratchRegistrationDeskEntry",
+          eventId: request.eventId,
+          recordType: request.recordType,
+          recordId: request.recordId,
+        },
+        true,
+        lockScope,
+      );
+      const freshWorkspace = workspaceAfterCommittedWrites(
+        workspace,
+        request.recordType === "registration"
+          ? { registrations: [persisted] }
+          : { teams: [persisted] },
+        committedStaffRevision,
+      );
+      await savePublicScheduleSnapshot(
+        freshWorkspace,
+        lockScope.assertOwned,
+      );
+      return {
+        eventId: request.eventId,
+        recordType: request.recordType,
+        recordId: request.recordId,
+        summary:
+          mutation === "update"
+            ? "Entry changes saved."
+            : request.recordType === "team"
+              ? "The whole team was scratched."
+              : "The registration was scratched.",
+        data:
+          await registrationDeskProjectionWithIndexedWaiverStatus(
+            freshWorkspace,
+          ),
+      };
+    },
+  );
+}
+
+export const updateRegistrationDeskEntry = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireRegistrationDesk();
+    return mutateRegistrationDeskEntry(request, "update");
+  },
+);
+
+export const scratchRegistrationDeskEntry = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireRegistrationDesk();
+    return mutateRegistrationDeskEntry(request, "scratch");
   },
 );
 
@@ -1639,8 +2658,6 @@ export const saveRegistrationDeskContestant = webMethod(
   Permissions.SiteMember,
   async (input) => {
     await requireRegistrationDesk();
-    return withFullWorkspaceLocks(async (lockScope) => {
-    const workspace = await readWorkspace({ consistentRead: true });
     const name = normalizeUppercaseText(input.name);
     const email = normalizeEmail(input.email);
     const phone = String(input.phone || "").trim();
@@ -1674,88 +2691,111 @@ export const saveRegistrationDeskContestant = webMethod(
     ) {
       throw new Error("Enter valid contestant profile information.");
     }
-    if (
-      email &&
-      workspace.contestants.some(
-        (contestant) =>
-          contestant.id !== id && normalizeEmail(contestant.email) === email,
-      )
-    ) {
-      throw new Error("Another contestant already uses that email.");
-    }
-    const [contestantCredential, duplicateCredential] = await Promise.all([
-      wixData
-        .query(CREDENTIALS_COLLECTION)
-        .eq("contestantId", id)
-        .limit(1)
-        .find(CONSISTENT_READ_OPTIONS),
-      email
-        ? wixData
+    await ensureRegistrationDeskWaiverStatusMigration();
+    return withWorkspaceLocks(
+      [
+        WORKSPACE_MUTATION_LOCK_ID,
+        `contestant-${id}`,
+        `contestant-email-${email || "none"}`,
+      ],
+      async (lockScope) => {
+        const workspace = await readWorkspace({ consistentRead: true });
+        if (
+          email &&
+          workspace.contestants.some(
+            (contestant) =>
+              contestant.id !== id &&
+              normalizeEmail(contestant.email) === email,
+          )
+        ) {
+          throw new Error("Another contestant already uses that email.");
+        }
+        const [contestantCredential, duplicateCredential] = await Promise.all([
+          wixData
             .query(CREDENTIALS_COLLECTION)
-            .eq("emailNormalized", email)
+            .eq("contestantId", id)
             .limit(1)
-            .find(CONSISTENT_READ_OPTIONS)
-        : Promise.resolve({ items: [] }),
-    ]);
-    if (
-      duplicateCredential.items.some(
-        (credential) => credential.contestantId !== id,
-      )
-    ) {
-      throw new Error("That email is already used by another contestant login.");
-    }
-    const existingCredential = contestantCredential.items[0];
-    if (
-      existingCredential &&
-      normalizeEmail(existingCredential.emailNormalized) !== email
-    ) {
-      throw new Error(
-        "Arena Admin must update the email and PIN for contestants with a login account.",
-      );
-    }
-    const previous = workspace.contestants.find(
-      (contestant) => contestant.id === id,
-    );
-    const contestant = {
-      id,
-      name,
-      role: input.role,
-      headerHandicap,
-      heelerHandicap,
-      photo: previous?.photo || "",
-      phone,
-      email,
-      hometown: normalizeUppercaseText(input.hometown),
-      horses,
-      membershipNumber: previous?.membershipNumber || "",
-      categoryNumber: previous?.categoryNumber || "",
-    };
-    const existing = await wixData
-      .query(COLLECTIONS.contestants)
-      .eq("appId", id)
-      .limit(1)
-      .find(CONSISTENT_READ_OPTIONS);
-    await lockScope.assertOwned();
-    await wixData.save(
-      COLLECTIONS.contestants,
-      {
-        ...(existing.items[0] || {}),
-        appId: id,
-        payload: JSON.stringify(contestant),
+            .find(CONSISTENT_READ_OPTIONS),
+          email
+            ? wixData
+                .query(CREDENTIALS_COLLECTION)
+                .eq("emailNormalized", email)
+                .limit(1)
+                .find(CONSISTENT_READ_OPTIONS)
+            : Promise.resolve({ items: [] }),
+        ]);
+        if (
+          duplicateCredential.items.some(
+            (credential) => credential.contestantId !== id,
+          )
+        ) {
+          throw new Error(
+            "That email is already used by another contestant login.",
+          );
+        }
+        const existingCredential = contestantCredential.items[0];
+        if (
+          existingCredential &&
+          normalizeEmail(existingCredential.emailNormalized) !== email
+        ) {
+          throw new Error(
+            "Arena Admin must update the email and PIN for contestants with a login account.",
+          );
+        }
+        const previous = workspace.contestants.find(
+          (contestant) => contestant.id === id,
+        );
+        const contestant = {
+          id,
+          name,
+          role: input.role,
+          headerHandicap,
+          heelerHandicap,
+          photo: previous?.photo || "",
+          phone,
+          email,
+          hometown: normalizeUppercaseText(input.hometown),
+          horses,
+          membershipNumber: previous?.membershipNumber || "",
+          categoryNumber: previous?.categoryNumber || "",
+        };
+        const existing = await wixData
+          .query(COLLECTIONS.contestants)
+          .eq("appId", id)
+          .limit(1)
+          .find(CONSISTENT_READ_OPTIONS);
+        await lockScope.assertOwned();
+        await wixData.save(
+          COLLECTIONS.contestants,
+          {
+            ...(existing.items[0] || {}),
+            appId: id,
+            payload: JSON.stringify(contestant),
+          },
+          OPTIONS,
+        );
+        const committedStaffRevision = await bumpRevision(
+          STAFF_REVISION_ID,
+          {
+            action: "saveRegistrationDeskContestant",
+            contestantId: id,
+          },
+          false,
+          lockScope,
+        );
+        return {
+          contestant,
+          data:
+            await registrationDeskProjectionWithIndexedWaiverStatus(
+              workspaceAfterCommittedWrites(
+                workspace,
+                { contestants: [contestant] },
+                committedStaffRevision,
+              ),
+            ),
+        };
       },
-      OPTIONS,
     );
-    await bumpRevision(STAFF_REVISION_ID, {
-      action: "saveRegistrationDeskContestant",
-      contestantId: id,
-    });
-    return {
-      contestant,
-      data: await registrationDeskProjection(
-        await readWorkspace({ consistentRead: true }),
-      ),
-    };
-    });
   },
 );
 
@@ -1763,7 +2803,6 @@ export const setRegistrationDeskContestantPin = webMethod(
   Permissions.SiteMember,
   async ({ contestantId, pin }) => {
     await requireRegistrationDesk();
-    return withFullWorkspaceLocks(async (lockScope) => {
     if (!validAppId(contestantId) || !validPin(pin)) {
       throw new Error("Choose a contestant and enter a four-digit PIN.");
     }
@@ -1777,69 +2816,100 @@ export const setRegistrationDeskContestantPin = webMethod(
         "Add a valid email to the contestant profile before setting a PIN.",
       );
     }
-    const [duplicateEmail, existingCredential] = await Promise.all([
-      wixData
-        .query(CREDENTIALS_COLLECTION)
-        .eq("emailNormalized", email)
-        .limit(1)
-        .find(CONSISTENT_READ_OPTIONS),
-      wixData
-        .query(CREDENTIALS_COLLECTION)
-        .eq("contestantId", contestantId)
-        .limit(1)
-        .find(CONSISTENT_READ_OPTIONS),
-    ]);
-    if (
-      duplicateEmail.items.some(
-        (credential) => credential.contestantId !== contestantId,
-      )
-    ) {
-      throw new Error("That email is already used by another contestant login.");
-    }
-    const pepper = await getSecret(PIN_PEPPER_SECRET);
-    const salt = randomBytes(16).toString("hex");
-    const nextCredential = successfulCredentialMetadata({
-      ...(existingCredential.items[0] || {}),
-      contestantId,
-      emailNormalized: email,
-      pinSalt: salt,
-      pinHash: pinHash(pin, salt, pepper),
-    });
-    await lockScope.assertOwned();
-    await wixData.save(
-      CREDENTIALS_COLLECTION,
-      nextCredential,
-      OPTIONS,
+    return withWorkspaceLocks(
+      [
+        WORKSPACE_MUTATION_LOCK_ID,
+        `contestant-${contestantId}`,
+        `contestant-email-${email}`,
+      ],
+      async (lockScope) => {
+        const latestWorkspace = await readWorkspace({ consistentRead: true });
+        const latestContestant = latestWorkspace.contestants.find(
+          (item) => item.id === contestantId,
+        );
+        if (normalizeEmail(latestContestant?.email) !== email) {
+          throw new Error(
+            "The contestant profile changed. Reload before setting the PIN.",
+          );
+        }
+        const [duplicateEmail, existingCredential] = await Promise.all([
+          wixData
+            .query(CREDENTIALS_COLLECTION)
+            .eq("emailNormalized", email)
+            .limit(1)
+            .find(CONSISTENT_READ_OPTIONS),
+          wixData
+            .query(CREDENTIALS_COLLECTION)
+            .eq("contestantId", contestantId)
+            .limit(1)
+            .find(CONSISTENT_READ_OPTIONS),
+        ]);
+        if (
+          duplicateEmail.items.some(
+            (credential) => credential.contestantId !== contestantId,
+          )
+        ) {
+          throw new Error(
+            "That email is already used by another contestant login.",
+          );
+        }
+        const pepper = await getSecret(PIN_PEPPER_SECRET);
+        const salt = randomBytes(16).toString("hex");
+        const nextCredential = successfulCredentialMetadata({
+          ...(existingCredential.items[0] || {}),
+          contestantId,
+          emailNormalized: email,
+          pinSalt: salt,
+          pinHash: pinHash(pin, salt, pepper),
+        });
+        await lockScope.assertOwned();
+        await wixData.save(
+          CREDENTIALS_COLLECTION,
+          nextCredential,
+          OPTIONS,
+        );
+        return { configured: true };
+      },
     );
-    return { configured: true };
-    });
   },
 );
 
 export const loadPublicArenaData = webMethod(Permissions.Anyone, async () =>
-  publicProjection(await readWorkspace({ includeSpectators: true })),
+  publicProjection(
+    await readWorkspace({ includeSpectators: true, consistentRead: true }),
+  ),
 );
 
 export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
   let events;
   try {
-    const snapshot = await wixData
-      .get(SETTINGS_COLLECTION, PUBLIC_SCHEDULE_ID, OPTIONS)
-      .catch(() => null);
-    events = snapshot?.payload ? JSON.parse(snapshot.payload) : null;
-    if (Array.isArray(events?.competitions)) {
-      const hasRegisteredRiders = events.competitions.every(
-        (competition) =>
-          Array.isArray(competition.registeredRiders?.headers) &&
-          Array.isArray(competition.registeredRiders?.heelers) &&
-          [
-            ...competition.registeredRiders.headers,
-            ...competition.registeredRiders.heelers,
-          ].every((rider) => Array.isArray(rider.horseNames)),
+    const snapshot = await readOptionalItem(
+      SETTINGS_COLLECTION,
+      PUBLIC_SCHEDULE_ID,
+      CONSISTENT_READ_OPTIONS,
+    );
+    const parsedSnapshot = snapshot?.payload ? JSON.parse(snapshot.payload) : null;
+    if (parsedSnapshot?.version === PUBLIC_SCHEDULE_MANIFEST_VERSION) {
+      const chunkCount = Math.max(0, Number(snapshot?.value || 0));
+      const chunkRecords = await Promise.all(
+        Array.from({ length: chunkCount }, (_, index) =>
+          readOptionalItem(
+            SETTINGS_COLLECTION,
+            `${PUBLIC_SCHEDULE_CHUNK_PREFIX}${index}`,
+            CONSISTENT_READ_OPTIONS,
+          ),
+        ),
       );
-      if (hasRegisteredRiders) return events;
-      return publicProjection(await readWorkspace({ includeSpectators: true }));
+      if (chunkRecords.some((record) => typeof record?.payload !== "string")) {
+        events = null;
+      } else {
+        const serialized = chunkRecords.map((record) => record.payload).join("");
+        events = serialized ? JSON.parse(serialized) : null;
+      }
+    } else {
+      events = parsedSnapshot;
     }
+    if (Array.isArray(events?.competitions)) return events;
     if (!Array.isArray(events)) events = await readPublicScheduleEvents();
   } catch (error) {
     return {
@@ -1898,7 +2968,6 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
     incentiveTeams: scheduleNumber(event.incentiveTeams, 1),
     incentiveAmountPerTeam: scheduleNumber(event.incentiveAmountPerTeam),
     entryCount: 0,
-    registeredRiders: { headers: [], heelers: [] },
     results: [],
     predictionRuns: [],
     spectatorLeaderboards: [],
@@ -1916,7 +2985,7 @@ export const publishPublicSchedule = webMethod(
     await requireArenaAdmin();
     await ensureSettingsCollection();
     return withWorkspaceLocks(
-      [WORKSPACE_MUTATION_LOCK_RESOURCE],
+      [WORKSPACE_MUTATION_LOCK_ID],
       async (lockScope) => {
         await savePublicScheduleSnapshot(events, lockScope.assertOwned);
         return { publishedAt: new Date().toISOString(), count: events.length };
@@ -1941,11 +3010,11 @@ export const setContestantPin = webMethod(
     }
     return withWorkspaceLocks(
       [
-        WORKSPACE_MUTATION_LOCK_RESOURCE,
+        WORKSPACE_MUTATION_LOCK_ID,
         `contestant-${contestantId}`,
         `contestant-email-${normalizedEmail}`,
       ],
-      async () => {
+      async (lockScope) => {
         const duplicateEmail = await wixData
           .query(CREDENTIALS_COLLECTION)
           .eq("emailNormalized", normalizedEmail)
@@ -1982,6 +3051,7 @@ export const setContestantPin = webMethod(
             previousContestant,
           ),
         );
+        await lockScope.assertOwned();
         await wixData.save(
           COLLECTIONS.contestants,
           {
@@ -1998,6 +3068,7 @@ export const setContestantPin = webMethod(
           pinSalt: salt,
           pinHash: pinHash(pin, salt, pepper),
         });
+        await lockScope.assertOwned();
         await wixData.save(CREDENTIALS_COLLECTION, nextCredential, OPTIONS);
         return { configured: true };
       },
@@ -2060,124 +3131,145 @@ export const createContestantAccount = webMethod(
       .slice(0, 32);
     return withPublicSignupCompetitionLocks(
       [
-        WORKSPACE_MUTATION_LOCK_RESOURCE,
+        WORKSPACE_MUTATION_LOCK_ID,
         `contestant-${contestantId}`,
         `contestant-email-${email}`,
       ],
-      async () => {
-    const workspace = await readWorkspace({ consistentRead: true });
-    const event = workspace.events.find(
-      (item) => item.id === request.competitionId,
-    );
-    if (!event) {
-      throw new Error("This competition is not accepting new accounts.");
-    }
-    const matchingAccount = await findMatchingContestantAccount({
-      credentialId,
-      contestantId,
-      email,
-      phone,
-      pin: request.pin,
-    });
-    if (matchingAccount) {
-      return publicContestantAccountResult(workspace, event, matchingAccount);
-    }
-    if (event.status !== "Upcoming") {
-      throw new Error("This competition is not accepting new accounts.");
-    }
-    assertOnlineRegistrationOpen(event);
-    const duplicateEmail = await wixData
-      .query(CREDENTIALS_COLLECTION)
-      .eq("emailNormalized", email)
-      .limit(1)
-      .find(CONSISTENT_READ_OPTIONS);
-    if (duplicateEmail.items.length) {
-      throw new Error("A contestant account already uses that email.");
-    }
-    if (
-      workspace.contestants.some(
-        (contestant) => normalizeEmail(contestant.email) === email,
-      )
-    ) {
-      throw new Error("A contestant account already uses that email.");
-    }
-    if (
-      workspace.contestants.some(
-        (contestant) =>
-          String(contestant.phone || "").replace(/\D/g, "") === phone,
-      )
-    ) {
-      throw new Error("A contestant account already uses that phone number.");
-    }
-    const contestant = {
-      id: contestantId,
-      name,
-      email,
-      phone,
-      hometown,
-      role,
-      headerHandicap,
-      heelerHandicap,
-      photo: "",
-      source: "online",
-      submittedAt: new Date().toISOString(),
-    };
-    const pepper = await getSecret(PIN_PEPPER_SECRET);
-    const salt = randomBytes(16).toString("hex");
-    try {
-      await wixData.insert(
-        CREDENTIALS_COLLECTION,
-        {
-          _id: credentialId,
+      async (lockScope) => {
+        const workspace = await readWorkspace({ consistentRead: true });
+        const event = workspace.events.find(
+          (item) => item.id === request.competitionId,
+        );
+        if (!event) {
+          throw new Error("This competition is not accepting new accounts.");
+        }
+        const matchingAccount = await findMatchingContestantAccount({
+          credentialId,
           contestantId,
-          emailNormalized: email,
-          pinSalt: salt,
-          pinHash: pinHash(request.pin, salt, pepper),
-          failedAttempts: 0,
-          updatedAt: new Date(),
-        },
-        OPTIONS,
-      );
-    } catch (error) {
-      const retryAccount = await findMatchingContestantAccount({
-        credentialId,
-        contestantId,
-        email,
-        phone,
-        pin: request.pin,
-      });
-      if (retryAccount) {
-        return publicContestantAccountResult(workspace, event, retryAccount);
-      }
-      const conflictingCredential = await readOptionalItem(
-        CREDENTIALS_COLLECTION,
-        credentialId,
-      );
-      if (conflictingCredential) {
-        throw new Error("A contestant account already uses that email.");
-      }
-      throw error;
-    }
-    try {
-      const inserted = await insertUniqueArenaRecord(
-        COLLECTIONS.contestants,
-        contestant,
-      );
-      if (!inserted) {
-        throw new Error("A contestant account already uses that phone number.");
-      }
-    } catch (error) {
-      await wixData
-        .remove(CREDENTIALS_COLLECTION, credentialId, OPTIONS)
-        .catch(() => null);
-      throw error;
-    }
-    await bumpRevision(ONLINE_REVISION_ID, {
-      action: "createContestantAccount",
-      contestantId,
-      competitionId: request.competitionId,
-    });
-    return publicContestantAccountResult(workspace, event, contestant);
+          email,
+          phone,
+          pin: request.pin,
+        });
+        if (matchingAccount) {
+          return publicContestantAccountResult(
+            workspace,
+            event,
+            matchingAccount,
+          );
+        }
+        if (event.status !== "Upcoming") {
+          throw new Error("This competition is not accepting new accounts.");
+        }
+        assertOnlineRegistrationOpen(event);
+        const duplicateEmail = await wixData
+          .query(CREDENTIALS_COLLECTION)
+          .eq("emailNormalized", email)
+          .limit(1)
+          .find(CONSISTENT_READ_OPTIONS);
+        if (duplicateEmail.items.length) {
+          throw new Error("A contestant account already uses that email.");
+        }
+        if (
+          workspace.contestants.some(
+            (contestant) => normalizeEmail(contestant.email) === email,
+          )
+        ) {
+          throw new Error("A contestant account already uses that email.");
+        }
+        if (
+          workspace.contestants.some(
+            (contestant) =>
+              String(contestant.phone || "").replace(/\D/g, "") === phone,
+          )
+        ) {
+          throw new Error(
+            "A contestant account already uses that phone number.",
+          );
+        }
+        const contestant = {
+          id: contestantId,
+          name,
+          email,
+          phone,
+          hometown,
+          role,
+          headerHandicap,
+          heelerHandicap,
+          photo: "",
+          source: "online",
+          submittedAt: new Date().toISOString(),
+        };
+        const pepper = await getSecret(PIN_PEPPER_SECRET);
+        const salt = randomBytes(16).toString("hex");
+        try {
+          await lockScope.assertOwned();
+          await wixData.insert(
+            CREDENTIALS_COLLECTION,
+            {
+              _id: credentialId,
+              contestantId,
+              emailNormalized: email,
+              pinSalt: salt,
+              pinHash: pinHash(request.pin, salt, pepper),
+              failedAttempts: 0,
+              updatedAt: new Date(),
+            },
+            OPTIONS,
+          );
+        } catch (error) {
+          if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
+          const retryAccount = await findMatchingContestantAccount({
+            credentialId,
+            contestantId,
+            email,
+            phone,
+            pin: request.pin,
+          });
+          if (retryAccount) {
+            return publicContestantAccountResult(
+              workspace,
+              event,
+              retryAccount,
+            );
+          }
+          const conflictingCredential = await readOptionalItem(
+            CREDENTIALS_COLLECTION,
+            credentialId,
+          );
+          if (conflictingCredential) {
+            throw new Error("A contestant account already uses that email.");
+          }
+          throw error;
+        }
+        try {
+          const inserted = await insertUniqueArenaRecord(
+            COLLECTIONS.contestants,
+            contestant,
+            lockScope.assertOwned,
+          );
+          if (!inserted) {
+            throw new Error(
+              "A contestant account already uses that phone number.",
+            );
+          }
+        } catch (error) {
+          await lockScope.assertOwned();
+          await wixData
+            .remove(CREDENTIALS_COLLECTION, credentialId, OPTIONS)
+            .catch(() => null);
+          throw error;
+        }
+        await bumpRevision(
+          ONLINE_REVISION_ID,
+          {
+            action: "createContestantAccount",
+            contestantId,
+            competitionId: request.competitionId,
+          },
+          false,
+          lockScope,
+        );
+        return publicContestantAccountResult(workspace, event, contestant);
       },
     );
   },
@@ -2234,90 +3326,95 @@ export const createRiderAccount = webMethod(
       .slice(0, 24)}`;
     return withPublicSignupCompetitionLocks(
       [
-        WORKSPACE_MUTATION_LOCK_RESOURCE,
+        WORKSPACE_MUTATION_LOCK_ID,
         `contestant-${contestantId}`,
         `contestant-email-${email}`,
       ],
-      async () => {
-    const [duplicateEmail, existingPhone] = await Promise.all([
-      wixData
-        .query(CREDENTIALS_COLLECTION)
-        .eq("emailNormalized", email)
-        .limit(1)
-        .find(CONSISTENT_READ_OPTIONS),
-      wixData
-        .query(COLLECTIONS.contestants)
-        .eq("appId", contestantId)
-        .limit(1)
-        .find(CONSISTENT_READ_OPTIONS),
-    ]);
-    if (duplicateEmail.items.length) {
-      throw new Error("A rider account already uses that email.");
-    }
-    if (existingPhone.items.length) {
-      throw new Error("A rider account already uses that phone number.");
-    }
-    const contestant = {
-      id: contestantId,
-      name,
-      email,
-      phone,
-      hometown,
-      role,
-      headerHandicap,
-      heelerHandicap,
-      photo: "",
-      horses: horseName ? [horseName] : [],
-      source: "online",
-      submittedAt: new Date().toISOString(),
-    };
-    const credentialId = createHash("sha256")
-      .update(`contestant-credential:${email}`)
-      .digest("hex")
-      .slice(0, 32);
-    const pepper = await getSecret(PIN_PEPPER_SECRET);
-    const salt = randomBytes(16).toString("hex");
-    const onlineRevision = await wixData
-      .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
-      .catch(() => null);
-    await wixData.save(
-      SETTINGS_COLLECTION,
-      {
-        _id: ONLINE_REVISION_ID,
-        value: Number(onlineRevision?.value || 0) + 1,
-        updatedAt: new Date(),
-      },
-      OPTIONS,
-    );
-    await wixData.insert(
-      CREDENTIALS_COLLECTION,
-      {
-        _id: credentialId,
-        contestantId,
-        emailNormalized: email,
-        pinSalt: salt,
-        pinHash: pinHash(request.pin, salt, pepper),
-        failedAttempts: 0,
-        updatedAt: new Date(),
-      },
-      OPTIONS,
-    );
-    try {
-      await wixData.insert(
-        COLLECTIONS.contestants,
-        {
-          appId: contestantId,
-          payload: JSON.stringify(contestant),
-        },
-        OPTIONS,
-      );
-    } catch (error) {
-      await wixData
-        .remove(CREDENTIALS_COLLECTION, credentialId, OPTIONS)
-        .catch(() => null);
-      throw error;
-    }
-    return { contestantId, name };
+      async (lockScope) => {
+        const [duplicateEmail, existingPhone] = await Promise.all([
+          wixData
+            .query(CREDENTIALS_COLLECTION)
+            .eq("emailNormalized", email)
+            .limit(1)
+            .find(CONSISTENT_READ_OPTIONS),
+          wixData
+            .query(COLLECTIONS.contestants)
+            .eq("appId", contestantId)
+            .limit(1)
+            .find(CONSISTENT_READ_OPTIONS),
+        ]);
+        if (duplicateEmail.items.length) {
+          throw new Error("A rider account already uses that email.");
+        }
+        if (existingPhone.items.length) {
+          throw new Error("A rider account already uses that phone number.");
+        }
+        const contestant = {
+          id: contestantId,
+          name,
+          email,
+          phone,
+          hometown,
+          role,
+          headerHandicap,
+          heelerHandicap,
+          photo: "",
+          horses: horseName ? [horseName] : [],
+          source: "online",
+          submittedAt: new Date().toISOString(),
+        };
+        const credentialId = createHash("sha256")
+          .update(`contestant-credential:${email}`)
+          .digest("hex")
+          .slice(0, 32);
+        const pepper = await getSecret(PIN_PEPPER_SECRET);
+        const salt = randomBytes(16).toString("hex");
+        const onlineRevision = await wixData
+          .get(SETTINGS_COLLECTION, ONLINE_REVISION_ID, OPTIONS)
+          .catch(() => null);
+        await lockScope.assertOwned();
+        await wixData.save(
+          SETTINGS_COLLECTION,
+          {
+            _id: ONLINE_REVISION_ID,
+            value: Number(onlineRevision?.value || 0) + 1,
+            updatedAt: new Date(),
+          },
+          OPTIONS,
+        );
+        await lockScope.assertOwned();
+        await wixData.insert(
+          CREDENTIALS_COLLECTION,
+          {
+            _id: credentialId,
+            contestantId,
+            emailNormalized: email,
+            pinSalt: salt,
+            pinHash: pinHash(request.pin, salt, pepper),
+            failedAttempts: 0,
+            updatedAt: new Date(),
+          },
+          OPTIONS,
+        );
+        try {
+          await lockScope.assertOwned();
+          await wixData.insert(
+            COLLECTIONS.contestants,
+            {
+              appId: contestantId,
+              payload: JSON.stringify(contestant),
+            },
+            OPTIONS,
+          );
+        } catch (error) {
+          if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
+          await lockScope.assertOwned();
+          await wixData
+            .remove(CREDENTIALS_COLLECTION, credentialId, OPTIONS)
+            .catch(() => null);
+          throw error;
+        }
+        return { contestantId, name };
       },
     );
   },
@@ -2368,6 +3465,182 @@ export const authenticateContestant = webMethod(
   },
 );
 
+export const updateContestantProfile = webMethod(
+  Permissions.Anyone,
+  async ({ email, pin, profile }) => {
+    const contestantId = await verifyContestantCredentials(email, pin);
+    const currentEmail = normalizeEmail(email);
+    const name = String(profile?.name || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
+    const nextEmail = normalizeEmail(profile?.email);
+    const phone = String(profile?.phone || "").replace(/\D/g, "");
+    const hometown = String(profile?.hometown || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
+    const role = String(profile?.role || "");
+    const newPin = profile?.newPin ? String(profile.newPin) : "";
+    if (name.length < 2 || name.length > 100) {
+      throw new Error("Enter your full name.");
+    }
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail) ||
+      nextEmail.length > 254
+    ) {
+      throw new Error("Enter a valid email address.");
+    }
+    if (phone.length < 10 || phone.length > 15) {
+      throw new Error("Enter a valid phone number.");
+    }
+    if (!["Header", "Heeler", "Both"].includes(role)) {
+      throw new Error("Choose your roping position.");
+    }
+    if (newPin && !validPin(newPin)) {
+      throw new Error("New PIN must be four digits.");
+    }
+    const lockIds = [
+      WORKSPACE_MUTATION_LOCK_ID,
+      `contestant-${contestantId}`,
+      `contestant-email-${currentEmail}`,
+    ];
+    if (nextEmail !== currentEmail) {
+      lockIds.push(`contestant-email-${nextEmail}`);
+    }
+    await withWorkspaceLocks(lockIds, async (lockScope) => {
+      const duplicateEmail = await wixData
+        .query(CREDENTIALS_COLLECTION)
+        .eq("emailNormalized", nextEmail)
+        .limit(1)
+        .find(CONSISTENT_READ_OPTIONS);
+      if (
+        duplicateEmail.items.length &&
+        duplicateEmail.items[0].contestantId !== contestantId
+      ) {
+        throw new Error("A contestant account already uses that email.");
+      }
+      const allContestants = await readAll(COLLECTIONS.contestants);
+      if (
+        allContestants.some(
+          (item) =>
+            item.id !== contestantId &&
+            normalizeEmail(item.email) === nextEmail,
+        )
+      ) {
+        throw new Error("A contestant account already uses that email.");
+      }
+      if (
+        allContestants.some(
+          (item) =>
+            item.id !== contestantId &&
+            String(item.phone || "").replace(/\D/g, "") === phone,
+        )
+      ) {
+        throw new Error(
+          "A contestant account already uses that phone number.",
+        );
+      }
+      const existingContestant = await wixData
+        .query(COLLECTIONS.contestants)
+        .eq("appId", contestantId)
+        .limit(1)
+        .find(CONSISTENT_READ_OPTIONS);
+      if (!existingContestant.items.length) {
+        throw new Error("Contestant profile is unavailable.");
+      }
+      const previousPayload = existingContestant.items[0]?.payload;
+      const previousContestant =
+        typeof previousPayload === "string"
+          ? JSON.parse(previousPayload)
+          : previousPayload || null;
+      const normalizedContestant = normalizeContestantCasing(
+        mergeContestantPhoto(
+          {
+            ...(previousContestant || {}),
+            id: contestantId,
+            name,
+            email: nextEmail,
+            phone,
+            hometown,
+            role,
+          },
+          previousContestant,
+        ),
+      );
+      await lockScope.assertOwned();
+      await wixData.save(
+        COLLECTIONS.contestants,
+        {
+          ...existingContestant.items[0],
+          appId: contestantId,
+          payload: JSON.stringify(normalizedContestant),
+        },
+        OPTIONS,
+      );
+      const existingCredential = await wixData
+        .query(CREDENTIALS_COLLECTION)
+        .eq("contestantId", contestantId)
+        .limit(1)
+        .find(CONSISTENT_READ_OPTIONS);
+      const credential = successfulCredentialMetadata({
+        ...(existingCredential.items[0] || {}),
+        contestantId,
+        emailNormalized: nextEmail,
+      });
+      if (newPin) {
+        const pepper = await getSecret(PIN_PEPPER_SECRET);
+        const salt = randomBytes(16).toString("hex");
+        credential.pinSalt = salt;
+        credential.pinHash = pinHash(newPin, salt, pepper);
+      }
+      await lockScope.assertOwned();
+      await wixData.save(CREDENTIALS_COLLECTION, credential, OPTIONS);
+      await bumpRevision(
+        ONLINE_REVISION_ID,
+        { action: "updateContestantProfile", contestantId },
+        false,
+        lockScope,
+      );
+    });
+    const [meets, events, contestants, teams, registrations] =
+      await Promise.all([
+        readAll(COLLECTIONS.meets),
+        readAll(COLLECTIONS.events),
+        readAll(COLLECTIONS.contestants),
+        readAll(COLLECTIONS.teams),
+        readAll(COLLECTIONS.registrations),
+      ]);
+    const contestant = contestants.find((item) => item.id === contestantId);
+    if (!contestant) throw new Error("Contestant profile is unavailable.");
+    const contestantTeams = teams.filter(
+      (team) =>
+        team.headerId === contestant.id || team.heelerId === contestant.id,
+    );
+    const contestantRegistrations = registrations.filter(
+      (registration) => registration.contestantId === contestant.id,
+    );
+    const eventIds = new Set([
+      ...contestantTeams.map((team) => team.eventId),
+      ...contestantRegistrations.map((registration) => registration.eventId),
+    ]);
+    const portalEvents = events.filter((event) => eventIds.has(event.id));
+    const meetIds = new Set(portalEvents.map((event) => event.parentEventId));
+    const partnerIds = new Set(
+      contestantTeams.flatMap((team) => [team.headerId, team.heelerId]),
+    );
+    return {
+      contestant,
+      contestants: contestants
+        .filter((item) => partnerIds.has(item.id))
+        .map((item) => ({ id: item.id, name: item.name })),
+      meets: meets.filter((meet) => meetIds.has(meet.id)),
+      events: portalEvents,
+      registrations: contestantRegistrations,
+      teams: contestantTeams,
+    };
+  },
+);
 async function persistCredentialSecurityMetadata(credential, context) {
   let lastError;
   for (let attempt = 1; attempt <= REVISION_WRITE_ATTEMPTS; attempt += 1) {
@@ -2594,10 +3867,55 @@ export const getPublicSignupPaymentStatus = webMethod(
     ),
 );
 
+async function insertUniqueRegistrationDeskRecord(
+  collectionId,
+  record,
+  assertLockOwned,
+) {
+  const storageId = arenaRecordStorageId(collectionId, record.id);
+  try {
+    await assertLockOwned();
+    await wixData.insert(
+      collectionId,
+      { _id: storageId, appId: record.id, payload: JSON.stringify(record) },
+      OPTIONS,
+    );
+    return true;
+  } catch (error) {
+    if (error?.code === "RESOURCE_LOCK_OWNERSHIP_LOST") throw error;
+    const existing = await readOptionalItem(
+      collectionId,
+      storageId,
+      CONSISTENT_READ_OPTIONS,
+    );
+    if (!existing) throw error;
+    let persisted;
+    try {
+      persisted =
+        typeof existing.payload === "string"
+          ? JSON.parse(existing.payload)
+          : existing.payload;
+    } catch {
+      throw new Error("That submission ID is already in use.");
+    }
+    if (
+      existing.appId === record.id &&
+      persisted?.id === record.id &&
+      persisted.eventId === record.eventId &&
+      persisted.source === "staff" &&
+      persisted.submissionId === record.submissionId &&
+      persisted.submissionFingerprint === record.submissionFingerprint
+    ) {
+      return false;
+    }
+    throw new Error("That submission ID is already in use.");
+  }
+}
+
 async function insertUniqueArenaRecord(
   collectionId,
   record,
-  assertLockOwned = async () => undefined,
+  assertLockOwned,
 ) {
   const storageId = arenaRecordStorageId(collectionId, record.id);
   try {
@@ -2618,102 +3936,112 @@ async function insertUniqueArenaRecord(
   }
 }
 
-async function withRegistrationDeskEventLock(eventId, callback) {
-  void eventId;
-  return withFullWorkspaceLocks(callback);
-}
-
-async function withRegistrationDeskLocks(lockIds, callback) {
-  void lockIds;
-  return withFullWorkspaceLocks(callback);
-}
-
 async function createRegistrationDeskSignupRecords(request) {
   const eventId = request?.eventId;
   if (!validAppId(eventId)) {
     throw new Error("Invalid signup request.");
   }
-  return withRegistrationDeskEventLock(eventId, async (lockScope) => {
-    const workspace = await readWorkspace({ consistentRead: true });
-    const event = workspace.events.find((item) => item.id === eventId);
-    if (!event) throw new Error("Competition not found.");
-    assertRegistrationDeskOpen(event);
-    const prepared = prepareRegistrationDeskSignup(workspace, request);
-    const submissionFingerprint = createHash("sha256")
-      .update(JSON.stringify(prepared.fingerprintPayload))
-      .digest("hex");
-    const repeated = registrationDeskSignupIsRetry(
-      workspace,
-      prepared,
-      submissionFingerprint,
-    );
-    const metadata = {
-      submissionFingerprint,
-      submittedAt: new Date().toISOString(),
-    };
-    const records = [
-      ...prepared.teams.map((record) => ({
-        collectionId: COLLECTIONS.teams,
-        record: { ...record, ...metadata },
-      })),
-      ...prepared.registrations.map((record) => ({
-        collectionId: COLLECTIONS.registrations,
-        record: { ...record, ...metadata },
-      })),
-    ];
-    const inserted = [];
-    try {
-      for (const item of records) {
-        if (
-          await insertUniqueArenaRecord(
-            item.collectionId,
-            item.record,
-            lockScope.assertOwned,
-          )
-        ) {
-          inserted.push(item);
-        }
-      }
-    } catch (error) {
-      const cleanupResults = await Promise.allSettled(
-        inserted.map(({ collectionId, record }) =>
-          wixData.remove(
-            collectionId,
-            arenaRecordStorageId(collectionId, record.id),
-            OPTIONS,
-          ),
-        ),
-      );
-      if (cleanupResults.some((result) => result.status === "rejected")) {
-        console.error("Registration Desk batch rollback failed.", {
-          eventId,
-          submissionId: request.submissionId,
-        });
-        throw new Error(
-          "The entry could not be completed or safely rolled back. Contact an administrator.",
-        );
-      }
-      throw error;
-    }
-    await bumpRevision(STAFF_REVISION_ID, {
+  return withWorkspaceLocks(
+    [WORKSPACE_MUTATION_LOCK_ID],
+    (lockScope) =>
+      createRegistrationDeskSignupRecordsLocked(request, lockScope),
+  );
+}
+
+async function createRegistrationDeskSignupRecordsLocked(request, lockScope) {
+  const eventId = request.eventId;
+  const workspace = await readWorkspace({ consistentRead: true });
+  const event = workspace.events.find((item) => item.id === eventId);
+  if (!event) throw new Error("Competition not found.");
+  assertRegistrationDeskOpen(event);
+  const reservedRoleEntries =
+    event.competitionType === "round-robin" &&
+    request.entryType === "draws" &&
+    ["Header", "Heeler"].includes(request.role)
+      ? await countActivePublicSignupRoleReservations(event.id, request.role)
+      : 0;
+  const prepared = prepareRegistrationDeskSignup(workspace, request, {
+    reservedRoleEntries,
+  });
+  const submissionFingerprint = createHash("sha256")
+    .update(JSON.stringify(prepared.fingerprintPayload))
+    .digest("hex");
+  const repeated = registrationDeskSignupIsRetry(
+    workspace,
+    prepared,
+    submissionFingerprint,
+  );
+  const metadata = {
+    submissionFingerprint,
+    submittedAt: new Date().toISOString(),
+  };
+  const registrations = prepared.registrations.map((registration) => ({
+    ...registration,
+    ...metadata,
+  }));
+  const teams = prepared.teams.map((team) => ({ ...team, ...metadata }));
+
+  await lockScope.assertOwned();
+  const insertResults = await Promise.allSettled([
+    ...teams.map((team) =>
+      insertUniqueRegistrationDeskRecord(
+        COLLECTIONS.teams,
+        team,
+        lockScope.assertOwned,
+      ),
+    ),
+    ...registrations.map((registration) =>
+      insertUniqueRegistrationDeskRecord(
+        COLLECTIONS.registrations,
+        registration,
+        lockScope.assertOwned,
+      ),
+    ),
+  ]);
+  const failedInsert = insertResults.find(
+    (result) => result.status === "rejected",
+  );
+  if (failedInsert) throw failedInsert.reason;
+  const committedStaffRevision = await bumpRevision(
+    STAFF_REVISION_ID,
+    {
       action: "submitRegistrationDeskSignup",
       entryType: prepared.canonicalRequest.entryType,
       payerContestantId: prepared.canonicalRequest.payerContestantId,
       competitionId: event.id,
       submissionId: request.submissionId,
-    });
-    const freshWorkspace = await readWorkspace({ consistentRead: true });
-    await savePublicScheduleSnapshot(freshWorkspace, lockScope.assertOwned);
-    return {
-      submissionId: request.submissionId,
-      competitionId: event.id,
-      entryType: prepared.canonicalRequest.entryType,
-      payerContestantId: prepared.canonicalRequest.payerContestantId,
-      recordIds: prepared.recordIds,
-      existing: repeated,
-      data: await registrationDeskProjection(freshWorkspace),
-    };
-  });
+    },
+    false,
+    lockScope,
+  );
+  // Replayed submissions may already be stored with earlier metadata, so only
+  // a fully fresh insert set can skip re-reading the committed workspace.
+  const allInsertedFresh = insertResults.every(
+    (result) => result.status === "fulfilled" && result.value === true,
+  );
+  const freshWorkspace = allInsertedFresh
+    ? workspaceAfterCommittedWrites(
+        workspace,
+        { teams, registrations },
+        committedStaffRevision,
+      )
+    : await readWorkspace({ consistentRead: true });
+  await savePublicScheduleSnapshot(
+    freshWorkspace,
+    lockScope.assertOwned,
+  );
+  return {
+    submissionId: request.submissionId,
+    competitionId: event.id,
+    entryType: prepared.canonicalRequest.entryType,
+    payerContestantId: prepared.canonicalRequest.payerContestantId,
+    recordIds: prepared.recordIds,
+    existing: repeated,
+    data:
+      await registrationDeskProjectionWithIndexedWaiverStatus(
+        freshWorkspace,
+      ),
+  };
 }
 
 export const submitOnlineSignup = webMethod(
@@ -2731,6 +4059,7 @@ export const submitRegistrationDeskSignup = webMethod(
   Permissions.SiteMember,
   async (request) => {
     await requireRegistrationDesk();
+    await ensureRegistrationDeskWaiverStatusMigration();
     const result = await createRegistrationDeskSignupRecords(request);
     return {
       ...result,
@@ -2741,81 +4070,6 @@ export const submitRegistrationDeskSignup = webMethod(
           : "Payment recorded. Contestant entries were sent to the draw area.",
       data: result.data,
     };
-  },
-);
-
-export const submitRegistrationDeskWaiver = webMethod(
-  Permissions.SiteMember,
-  async (request) => {
-    await requireRegistrationDesk();
-    if (!validAppId(request?.eventId) || !validAppId(request?.contestantId)) {
-      throw new Error("Choose a valid competition and contestant, then accept the waiver.");
-    }
-    const waiverDocument = await readRegistrationDeskWaiverDocument();
-    const signatureId = registrationDeskWaiverRecordId(
-      request.eventId,
-      request.contestantId,
-      waiverDocument.version,
-    );
-    await ensureRegistrationDeskWaiverCollections();
-    await loadRegistrationDeskWaiverStatusSnapshot(waiverDocument);
-    return withRegistrationDeskLocks(
-      [
-        WAIVER_STATUS_INDEX_MIGRATION_ID,
-        request.eventId,
-        `registration-desk-waiver-${signatureId}`,
-      ],
-      async () => {
-        const workspace = await readWorkspace({ consistentRead: true });
-        const prepared = prepareRegistrationDeskWaiver(
-          workspace,
-          waiverDocument,
-          request,
-          { id: signatureId },
-        );
-        const existingItem =
-          await findRegistrationDeskWaiverStorageItem(signatureId);
-        let persistedEvidence;
-        let signature;
-        if (existingItem) {
-          persistedEvidence =
-            parseRegistrationDeskWaiverStorageItem(existingItem);
-          signature = resolveRegistrationDeskWaiverRetry(
-            persistedEvidence,
-            prepared,
-          );
-        } else {
-          persistedEvidence = await insertImmutableRegistrationDeskWaiver(
-            prepared.evidence,
-            prepared,
-          );
-          signature = resolveRegistrationDeskWaiverRetry(
-            persistedEvidence,
-            prepared,
-          );
-        }
-        await ensureRegistrationDeskWaiverStatusForEvidence(
-          persistedEvidence,
-          waiverDocument,
-        );
-
-        const projected = await registrationDeskProjection(workspace);
-        return {
-          signature,
-          data: projected.waiverSignatures.some(
-            ({ id }) => id === signature.id,
-          )
-            ? projected
-            : {
-                ...projected,
-                waiverSignatures: [
-                  ...projected.waiverSignatures,
-                  signature,
-                ],
-              },
-        };
-      },
-    );
   },
 );
 
@@ -2834,7 +4088,7 @@ export const submitSpectatorPrediction = webMethod(
       throw new Error("Enter your full name.");
     }
     return withPublicSignupCompetitionLocks(
-      [WORKSPACE_MUTATION_LOCK_RESOURCE, request.eventId],
+      [WORKSPACE_MUTATION_LOCK_ID, request.eventId],
       async (lockScope) => {
         const workspace = await readWorkspace({ consistentRead: true });
         const event = workspace.events.find(
@@ -2922,7 +4176,7 @@ export const submitSpectatorPrediction = webMethod(
           existing: Boolean(existing) || !predictionInserted,
           publicData: publicProjection(latest),
         };
-      },
+      }
     );
   },
 );

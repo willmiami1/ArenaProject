@@ -41,6 +41,7 @@ export type WixAction =
   | "saveRegistration"
   | "setActiveRun"
   | "authenticateContestant"
+  | "updateContestantProfile"
   | "setContestantPin"
   | "loadPublicArenaData"
   | "loadPublicSchedule"
@@ -340,6 +341,7 @@ export function subscribeToWixSectionNavigation(
 export function sensitiveWixAction(action: WixAction) {
   return (
     action === "authenticateContestant" ||
+    action === "updateContestantProfile" ||
     action === "saveContestant" ||
     action === "saveEvent" ||
     action === "saveRegistration" ||
@@ -847,6 +849,27 @@ export function authenticateContestant(email: string, pin: string) {
   return requestWix<ContestantPortalData>("authenticateContestant", {
     email,
     pin,
+  });
+}
+
+export interface ContestantProfileUpdate {
+  name: string;
+  email: string;
+  phone: string;
+  hometown: string;
+  role: Contestant["role"];
+  newPin?: string;
+}
+
+export function updateContestantProfile(
+  email: string,
+  pin: string,
+  profile: ContestantProfileUpdate,
+) {
+  return requestWix<ContestantPortalData>("updateContestantProfile", {
+    email,
+    pin,
+    profile,
   });
 }
 
