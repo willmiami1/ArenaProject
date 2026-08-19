@@ -860,6 +860,7 @@ export interface ContestantProfileUpdate {
   role: Contestant["role"];
   photo?: string;
   clearPhoto?: boolean;
+  horses?: string[];
   newPin?: string;
 }
 
