@@ -1474,13 +1474,16 @@ function LedLeaderboard({
       (team) => team.status === "ready" && team.id !== currentTeam?.id,
     );
   const isFinalRound = event.rounds > 1 && round === event.rounds;
-  const finalRoundLeaderTotal = isFinalRound
+  const finalRoundTotals = isFinalRound
     ? roundTeams
         .filter((team) => team.status === "complete" && team.rawTime !== null)
         .map((team) =>
           teamQualifiedTotal(team, eventTeams, undefined, event, data.contestants),
         )
-        .sort((a, b) => a - b)[0]
+        .sort((a, b) => a - b)
+    : [];
+  const finalRoundLeaderTotal = finalRoundTotals.length
+    ? finalRoundTotals[0]
     : undefined;
   const currentTeamPriorTotal = currentTeam
     ? teamQualifiedTotal(currentTeam, eventTeams, round, event, data.contestants)
@@ -1489,6 +1492,20 @@ function LedLeaderboard({
     finalRoundLeaderTotal === undefined
       ? undefined
       : finalRoundLeaderTotal - currentTeamPriorTotal - 0.01;
+  const ledPayingSpots = Math.max(
+    1,
+    (event.payoutPercentages ?? [50, 30, 20]).filter(
+      (percentage) => percentage > 0,
+    ).length,
+  );
+  const ledMoneyCutoffTotal =
+    finalRoundTotals.length >= ledPayingSpots
+      ? finalRoundTotals[ledPayingSpots - 1]
+      : undefined;
+  const currentTeamTimeToMoney =
+    ledMoneyCutoffTotal === undefined
+      ? undefined
+      : ledMoneyCutoffTotal - currentTeamPriorTotal - 0.01;
   const rider = (id: string) =>
     data.contestants.find((contestant) => contestant.id === id);
   const ledRider = (id: string, horseName?: string) => {
@@ -1569,7 +1586,7 @@ function LedLeaderboard({
             </div>
             {isFinalRound && (
               <div className="led-current-targets">
-                <span><small>Stay in average</small><strong>Just catch</strong></span>
+                <span><small>Be in the money pot</small><strong>{currentTeamTimeToMoney === undefined ? "Just catch" : currentTeamTimeToMoney <= 0 ? "Out of reach" : `${currentTeamTimeToMoney.toFixed(2)}s`}</strong></span>
                 <span><small>Take 1st</small><strong>{currentTeamTimeToFirst === undefined ? "Set pace" : currentTeamTimeToFirst <= 0 ? "Out of reach" : `${currentTeamTimeToFirst.toFixed(2)}s`}</strong></span>
               </div>
             )}
@@ -4141,13 +4158,16 @@ function RunDesk({
       : 0;
   const purse = event ? calculatePurse(event, paidEntryCount) : 0;
   const payouts = calculatePayouts(purse, standings.length, event?.payoutPercentages);
-  const shortGoLeaderTotal =
+  const shortGoTotals =
     activeRound === roundCount && roundCount > 1
       ? eventTeams
           .filter((team) => team.status === "complete" && team.rawTime !== null)
           .map((team) => qualifiedTotal(team))
-          .sort((a, b) => a - b)[0]
-      : undefined;
+          .sort((a, b) => a - b)
+      : [];
+  const shortGoLeaderTotal = shortGoTotals.length
+    ? shortGoTotals[0]
+    : undefined;
   const selectedPriorTotal =
     selected && activeRound === roundCount && roundCount > 1
       ? qualifiedTotal(selected, activeRound)
@@ -4156,6 +4176,20 @@ function RunDesk({
     shortGoLeaderTotal === undefined
       ? undefined
       : shortGoLeaderTotal - selectedPriorTotal - 0.01;
+  const payingSpots = Math.max(
+    1,
+    (event?.payoutPercentages ?? [50, 30, 20]).filter(
+      (percentage) => percentage > 0,
+    ).length,
+  );
+  const moneyCutoffTotal =
+    shortGoTotals.length >= payingSpots
+      ? shortGoTotals[payingSpots - 1]
+      : undefined;
+  const timeToMoney =
+    moneyCutoffTotal === undefined
+      ? undefined
+      : moneyCutoffTotal - selectedPriorTotal - 0.01;
   const openLedLeaderboard = () => {
     if (!event) return;
     const url = new URL(window.location.href);
@@ -4570,7 +4604,7 @@ function RunDesk({
               {event && activeRound === roundCount && roundCount > 1 && selected.status === "ready" && (
                 <div className="announcer-times">
                   <div><span>Prior aggregate</span><strong>{selectedPriorTotal.toFixed(2)}s</strong></div>
-                  <div><span>To stay in the average</span><strong>Just catch</strong></div>
+                  <div><span>To be in the money pot</span><strong>{timeToMoney === undefined ? "Just catch" : timeToMoney <= 0 ? "Money out of reach" : `${timeToMoney.toFixed(2)}s or faster`}</strong></div>
                   <div><span>To move into 1st</span><strong>{timeToFirst === undefined ? "Set the pace" : timeToFirst <= 0 ? "Current lead out of reach" : `${timeToFirst.toFixed(2)}s or faster`}</strong></div>
                 </div>
               )}
