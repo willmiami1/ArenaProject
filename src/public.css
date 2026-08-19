@@ -27,8 +27,9 @@
 .public-header-actions a { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 14px; font-size: 11px; font-weight: 800; text-align: center; text-transform: uppercase; letter-spacing: .04em; }
 .public-header-actions .public-header-cta { color: #fff; background: var(--public-brown); border: 1px solid var(--public-brown); }
 .public-header-actions .public-header-cta:hover { background: #4f2d1d; border-color: var(--public-tan); }
-.public-header-actions .public-header-game { color: var(--public-cream); border: 1px solid var(--public-tan); }
-.public-header-actions .public-header-game:hover { color: #17130f; background: var(--public-tan); }
+.public-header-actions .public-header-game { grid-column: 1/-1; justify-self: center; width: min(560px,100%); padding: 0; border: 0; }
+.public-header-actions .public-header-game img { display: block; width: 100%; height: auto; }
+.public-header-actions .public-header-game:hover { transform: translateY(-2px); }
 .public-social-links { display: inline-flex; align-items: center; gap: 8px; }
 .public-social-links a { width: 36px; height: 36px; display: grid!important; place-items: center; padding: 0!important; color: var(--public-cream); border: 1px solid rgba(234,220,198,.28)!important; border-radius: 50%; }
 .public-social-links a:hover { color: #17130f; background: var(--public-tan); border-color: var(--public-tan)!important; }

@@ -229,8 +229,8 @@ function PublicHeader({ liveCompetitionId }: { liveCompetitionId?: string }) {
         <a className="public-header-cta" href={href("rider-account")}>
           <UsersRound size={16} /> CREATE A RIDER ACCOUNT
         </a>
-        <a className="public-header-game" href={spectatorGameHref}>
-          <Trophy size={16} /> Play Cowboy x Steers During Live Competitions
+        <a className="public-header-game" href={spectatorGameHref} aria-label="Play Cowboy x Steers during live competitions">
+          <img src="./play-cowboy-x-steers-banner.png" alt="During live competitions — play Cowboy x Steers" />
         </a>
       </div>
     </header>
