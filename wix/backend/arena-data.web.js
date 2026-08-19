@@ -3482,6 +3482,16 @@ export const updateContestantProfile = webMethod(
       .toUpperCase();
     const role = String(profile?.role || "");
     const newPin = profile?.newPin ? String(profile.newPin) : "";
+    const photo =
+      typeof profile?.photo === "string" ? profile.photo.trim() : "";
+    const clearPhoto = profile?.clearPhoto === true;
+    if (
+      photo &&
+      (photo.length > 3000000 ||
+        !/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+\/=\s]+$/i.test(photo))
+    ) {
+      throw new Error("The profile photo could not be used.");
+    }
     if (name.length < 2 || name.length > 100) {
       throw new Error("Enter your full name.");
     }
@@ -3564,6 +3574,8 @@ export const updateContestantProfile = webMethod(
             phone,
             hometown,
             role,
+            photo,
+            clearPhoto,
           },
           previousContestant,
         ),
