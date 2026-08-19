@@ -1,5 +1,10 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap");
 
+html.hide-window-scrollbar,
+html.hide-window-scrollbar body { scrollbar-width: none; -ms-overflow-style: none; }
+html.hide-window-scrollbar::-webkit-scrollbar,
+html.hide-window-scrollbar body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
 :root {
   font-family: "DM Sans", sans-serif;
   color: #202a25;
