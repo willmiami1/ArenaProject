@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   CalendarDays,
+  Camera,
   CheckCircle2,
   Clock3,
   Facebook,
@@ -80,6 +81,7 @@ import {
   type PublicFlyer,
 } from "./publicFlyers";
 import type { ContestantAccountRequest } from "./contestantAccount";
+import { resizeProfilePhoto } from "./profilePhoto";
 import type { ArenaData } from "./types";
 import { isBrowserStoragePreview } from "./adminAccess";
 
@@ -689,6 +691,8 @@ type RiderProfileDraft = {
   phone: string;
   hometown: string;
   role: ContestantProfileUpdate["role"];
+  photo: string;
+  clearPhoto: boolean;
   newPin: string;
   confirmNewPin: string;
 };
@@ -701,6 +705,8 @@ const riderProfileDraft = (
   phone: contestant.phone ?? "",
   hometown: contestant.hometown ?? "",
   role: contestant.role,
+  photo: contestant.photo ?? "",
+  clearPhoto: false,
   newPin: "",
   confirmNewPin: "",
 });
@@ -717,6 +723,24 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+
+  const handlePhoto = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Choose an image file.");
+      return;
+    }
+    try {
+      const photo = await resizeProfilePhoto(file);
+      setDraft((current) =>
+        current ? { ...current, photo, clearPhoto: false } : current,
+      );
+      setPhotoError("");
+    } catch {
+      setPhotoError("The photo could not be loaded.");
+    }
+  };
 
   const login = async (event: FormEvent) => {
     event.preventDefault();
@@ -763,6 +787,8 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
         phone: draft.phone,
         hometown: draft.hometown,
         role: draft.role,
+        photo: draft.photo,
+        clearPhoto: draft.clearPhoto,
         ...(draft.newPin ? { newPin: draft.newPin } : {}),
       });
       if (!result) throw new Error("Profile update did not return a result.");
@@ -872,6 +898,21 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
       <div className="public-rider-panel">
         <h2>My profile</h2>
         <form className="public-account-form" onSubmit={saveProfile}>
+          <div className="public-rider-photo">
+            <div className="public-rider-photo-preview">
+              {draft.photo ? <img src={draft.photo} alt="Profile preview" /> : <Camera size={22} />}
+            </div>
+            <div>
+              <strong>Profile picture</strong>
+              <p>Shown on the arena screens with your runs.</p>
+              <label className="public-rider-photo-button">
+                {draft.photo ? "Change picture" : "Choose picture"}
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void handlePhoto(event.target.files?.[0])} />
+              </label>
+              {draft.photo && <button type="button" className="public-rider-photo-remove" onClick={() => { setDraft({ ...draft, photo: "", clearPhoto: true }); setPhotoError(""); }}>Remove</button>}
+              {photoError && <span className="public-rider-photo-error" role="alert">{photoError}</span>}
+            </div>
+          </div>
           <label>Full name<input required maxLength={100} autoCapitalize="characters" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value.toUpperCase() })} /></label>
           <label>Email address<input required type="email" autoComplete="email" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value.toLowerCase() })} /></label>
           <label>Phone number<input required type="tel" autoComplete="tel" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} /></label>

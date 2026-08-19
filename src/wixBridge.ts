@@ -858,6 +858,8 @@ export interface ContestantProfileUpdate {
   phone: string;
   hometown: string;
   role: Contestant["role"];
+  photo?: string;
+  clearPhoto?: boolean;
   newPin?: string;
 }
 
