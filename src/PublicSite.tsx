@@ -6,6 +6,8 @@ import {
   Clock3,
   Facebook,
   Instagram,
+  LogIn,
+  LogOut,
   Mail,
   MapPin,
   Menu,
@@ -32,6 +34,7 @@ import {
   type PublicSpectatorLeaderboardRow,
 } from "./publicData";
 import {
+  authenticateContestant,
   createContestantAccount,
   createRiderAccount,
   isWixEmbed,
@@ -43,6 +46,9 @@ import {
   subscribeToWixSectionNavigation,
   submitPublicSignupCash,
   submitSpectatorPrediction,
+  updateContestantProfile,
+  type ContestantPortalData,
+  type ContestantProfileUpdate,
   type PublicSignupCashConfirmation,
   type PublicSignupOptions,
   type PublicSignupPayment,
@@ -209,11 +215,15 @@ function PublicHeader({ liveCompetitionId }: { liveCompetitionId?: string }) {
         <nav id="public-navigation" className={open ? "open" : ""} aria-label="Public navigation">
           <a href={href("home")} onClick={() => setOpen(false)}>Home</a>
           <a href={eventsHref} onClick={() => setOpen(false)}>Events</a>
+          <a href={href("rider")} onClick={() => setOpen(false)}><LogIn size={16} /> Rider login</a>
           <a href={operationalHref("command")} onClick={() => setOpen(false)}><ShieldCheck size={16} /> Admin login</a>
           <SocialLinks />
         </nav>
       </div>
       <div className="public-header-actions" aria-label="Rider and spectator actions">
+        <a className="public-header-cta" href={href("rider")}>
+          <LogIn size={16} /> RIDER LOG IN
+        </a>
         <a className="public-header-cta" href={href("rider-account")}>
           <UsersRound size={16} /> CREATE A RIDER ACCOUNT
         </a>
@@ -235,6 +245,7 @@ function PublicFooter() {
       <nav aria-label="Footer navigation">
         <a href={href("home")}>Home</a>
         <a href={eventsHref}>Events</a>
+        <a href={href("rider")}>Rider login</a>
         <a href={operationalHref("command")}>Admin login</a>
       </nav>
       <div className="public-footer-connect">
@@ -668,6 +679,213 @@ function RiderAccountPage() {
           <button className="public-button" disabled={busy}>{busy ? "Creating account…" : "Create Rider Account"}</button>
         </form>
       )}
+    </section>
+  );
+}
+
+type RiderProfileDraft = {
+  name: string;
+  email: string;
+  phone: string;
+  hometown: string;
+  role: ContestantProfileUpdate["role"];
+  newPin: string;
+  confirmNewPin: string;
+};
+
+const riderProfileDraft = (
+  contestant: ContestantPortalData["contestant"],
+): RiderProfileDraft => ({
+  name: contestant.name,
+  email: contestant.email ?? "",
+  phone: contestant.phone ?? "",
+  hometown: contestant.hometown ?? "",
+  role: contestant.role,
+  newPin: "",
+  confirmNewPin: "",
+});
+
+function RiderPage({ data }: { data: PublicArenaData | null }) {
+  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [session, setSession] =
+    useState<{ email: string; pin: string } | null>(null);
+  const [portal, setPortal] = useState<ContestantPortalData | null>(null);
+  const [draft, setDraft] = useState<RiderProfileDraft | null>(null);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileMessage, setProfileMessage] = useState("");
+  const [profileError, setProfileError] = useState(false);
+
+  const login = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      if (!isWixEmbed()) {
+        throw new Error("Rider login is available on the Destiny Ranch Arena Wix site.");
+      }
+      const result = await authenticateContestant(email, pin);
+      if (!result) throw new Error("Rider login did not return a profile.");
+      setSession({ email, pin });
+      setPortal(result);
+      setDraft(riderProfileDraft(result.contestant));
+      setPin("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not sign in.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signOut = () => {
+    setSession(null);
+    setPortal(null);
+    setDraft(null);
+    setProfileMessage("");
+    setMessage("");
+  };
+
+  const saveProfile = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!session || !draft || profileBusy) return;
+    setProfileBusy(true);
+    setProfileMessage("");
+    setProfileError(false);
+    try {
+      if (draft.newPin && draft.newPin !== draft.confirmNewPin) {
+        throw new Error("PIN confirmation does not match.");
+      }
+      const result = await updateContestantProfile(session.email, session.pin, {
+        name: draft.name,
+        email: draft.email,
+        phone: draft.phone,
+        hometown: draft.hometown,
+        role: draft.role,
+        ...(draft.newPin ? { newPin: draft.newPin } : {}),
+      });
+      if (!result) throw new Error("Profile update did not return a result.");
+      setPortal(result);
+      setSession({
+        email: result.contestant.email ?? draft.email,
+        pin: draft.newPin || session.pin,
+      });
+      setDraft(riderProfileDraft(result.contestant));
+      setProfileMessage("Profile saved. Use your updated email and PIN next time you sign in.");
+    } catch (error) {
+      setProfileError(true);
+      setProfileMessage(
+        error instanceof Error ? error.message : "Profile could not be saved.",
+      );
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+
+  if (!portal || !session || !draft) {
+    return (
+      <section className="public-signup">
+        <a href={href("home")}>← Return home</a>
+        <h1>Rider Log In</h1>
+        <p>Sign in with the email and four-digit PIN from your rider account to enter ropings, review your results, and update your profile.</p>
+        <form className="public-account-form public-rider-login" onSubmit={login}>
+          <label>Email address<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value.toLowerCase())} /></label>
+          <label>Four-digit PIN<input required type="password" inputMode="numeric" autoComplete="current-password" pattern="\d{4}" maxLength={4} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 4))} /></label>
+          {message && <p className="public-form-message" role="alert">{message}</p>}
+          <button className="public-button" disabled={busy}>{busy ? "Signing in…" : <><LogIn size={16} /> Sign in</>}</button>
+        </form>
+        <p className="public-rider-create">No account yet? <a href={href("rider-account")}>Create a rider account</a>.</p>
+      </section>
+    );
+  }
+
+  const eventName = (eventId: string) =>
+    portal.events.find((event) => event.id === eventId)?.name ?? "Competition";
+  const riderName = (id: string) =>
+    (portal.contestant.id === id
+      ? portal.contestant.name
+      : portal.contestants.find((contestant) => contestant.id === id)?.name) ??
+    "Unknown";
+  const sortedTeams = [...portal.teams].sort(
+    (a, b) =>
+      eventName(a.eventId).localeCompare(eventName(b.eventId)) ||
+      a.round - b.round ||
+      a.drawPosition - b.drawPosition,
+  );
+  const openRopings = (
+    data?.competitions ?? data?.meets.flatMap((meet) => meet.competitions) ?? []
+  ).filter((competition) => competition.registrationOpen);
+
+  return (
+    <section className="public-rider">
+      <header className="public-rider-header">
+        <div>
+          <span className="public-rider-eyebrow">Rider account</span>
+          <h1>{portal.contestant.name}</h1>
+          <p>{portal.contestant.email}</p>
+        </div>
+        <button className="public-button compact" onClick={signOut}><LogOut size={16} /> Sign out</button>
+      </header>
+
+      <div className="public-rider-panel">
+        <h2>Enter a roping</h2>
+        {openRopings.length ? (
+          <div className="public-rider-list">
+            {openRopings.map((competition) => (
+              <div className="public-rider-row" key={competition.id}>
+                <div><strong>{competition.name}</strong><small>{competition.date} · {competition.location}</small></div>
+                <a className="public-button compact" href={href("signup", competition.id)}>Sign up <ArrowRight size={15} /></a>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="public-rider-empty">No ropings are accepting online entries right now. Check the <a href={eventsHref}>event schedule</a>.</p>
+        )}
+      </div>
+
+      <div className="public-rider-panel">
+        <h2>My results and participations</h2>
+        <div className="public-rider-list">
+          {sortedTeams.map((team) => (
+            <div className="public-rider-row" key={team.id}>
+              <div><strong>{eventName(team.eventId)}</strong><small>Round {team.round} · Draw #{team.drawPosition}</small></div>
+              <div className="public-rider-partners"><small>Header</small><span>{riderName(team.headerId)}</span><small>Heeler</small><span>{riderName(team.heelerId)}</span></div>
+              <strong className="public-rider-result">{team.status === "complete" && team.rawTime !== null ? `${(team.rawTime + team.penalties).toFixed(2)}s` : team.status === "no-time" ? "No time" : team.rolled ? "Rolled" : "Ready"}</strong>
+            </div>
+          ))}
+          {!sortedTeams.length && <p className="public-rider-empty">No team runs are on record yet.</p>}
+        </div>
+        {portal.registrations.length > 0 && (
+          <div className="public-rider-list public-rider-registrations">
+            {portal.registrations.map((registration) => (
+              <div className="public-rider-row" key={registration.id}>
+                <div><strong>{eventName(registration.eventId)}</strong><small>Draw-pot entry</small></div>
+                <span>{registration.role} · {registration.entries} entr{registration.entries === 1 ? "y" : "ies"}</span>
+                <span className="public-rider-status">{registration.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="public-rider-panel">
+        <h2>My profile</h2>
+        <form className="public-account-form" onSubmit={saveProfile}>
+          <label>Full name<input required maxLength={100} autoCapitalize="characters" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value.toUpperCase() })} /></label>
+          <label>Email address<input required type="email" autoComplete="email" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value.toLowerCase() })} /></label>
+          <label>Phone number<input required type="tel" autoComplete="tel" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} /></label>
+          <label>Hometown<input maxLength={100} autoCapitalize="characters" value={draft.hometown} onChange={(event) => setDraft({ ...draft, hometown: event.target.value.toUpperCase() })} /></label>
+          <label>Roping position<select value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value as ContestantProfileUpdate["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
+          <label>New PIN (optional)<input type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={draft.newPin} onChange={(event) => setDraft({ ...draft, newPin: event.target.value.replace(/\D/g, "").slice(0, 4) })} placeholder="Keep current PIN" /></label>
+          {draft.newPin && (
+            <label>Confirm new PIN<input required type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={draft.confirmNewPin} onChange={(event) => setDraft({ ...draft, confirmNewPin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
+          )}
+          {profileMessage && <p className={`public-form-message${profileError ? "" : " success"}`} role={profileError ? "alert" : "status"}>{profileMessage}</p>}
+          <button className="public-button" disabled={profileBusy}>{profileBusy ? "Saving…" : "Save profile"}</button>
+        </form>
+        <p className="public-rider-note">Handicaps are managed by the event producer.</p>
+      </div>
     </section>
   );
 }
@@ -1637,7 +1855,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
   }, [data, route]);
 
   useEffect(() => {
-    const title = route.kind === "events" ? "Events" : route.kind === "rider-account" ? "Create Rider Account" : route.kind === "event" ? selected.meet?.name : route.kind === "competition" || route.kind === "signup" || route.kind === "spectator" ? selected.competition?.name : "Home";
+    const title = route.kind === "events" ? "Events" : route.kind === "rider-account" ? "Create Rider Account" : route.kind === "rider" ? "Rider Log In" : route.kind === "event" ? selected.meet?.name : route.kind === "competition" || route.kind === "signup" || route.kind === "spectator" ? selected.competition?.name : "Home";
     document.title = `${title ?? "Event"} | Destiny Ranch Arena`;
   }, [route.kind, selected.competition?.name, selected.meet?.name]);
 
@@ -1661,6 +1879,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
       <main className="public-main">
         {route.kind === "home" ? <HomePage data={data} scheduleError={error} /> :
           route.kind === "rider-account" ? <RiderAccountPage /> :
+          route.kind === "rider" ? <RiderPage data={data} /> :
           error ? <section className="public-not-found"><h1>We couldn’t open the event book.</h1><p>{error}</p></section> : !data ? <div className="public-loading" role="status">Loading the event book…</div> :
           route.kind === "events" ? <><section className="public-index-head"><h1>Every run starts here.</h1><p>Upcoming entries, live ropings, and the official results book.</p></section><EventExplorer data={data} /></> :
           route.kind === "event" ? <EventPage meet={selected.meet} /> :

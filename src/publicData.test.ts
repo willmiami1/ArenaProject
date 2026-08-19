@@ -308,6 +308,7 @@ describe("public routing", () => {
     expect(parsePublicRoute("?page=rider-account")).toEqual({
       kind: "rider-account",
     });
+    expect(parsePublicRoute("?page=rider")).toEqual({ kind: "rider" });
   });
 
   describe("admin access boundary", () => {
