@@ -54,7 +54,10 @@ main { grid-column: 2; min-width: 0; }
 .persistence-status.saved { color: #2c694c; background: #e9f3ed; }
 .persistence-status.saving, .persistence-status.loading { color: #8a601f; background: #fbf1df; }
 .persistence-status.error { color: #9a4740; background: #f8eae8; }
+.persistence-status.error.offline { color: #8a6116; background: #fbf3dd; }
 .workspace-save-error { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px clamp(22px, 4vw, 48px); color: #7c2721; background: #fff0ed; border-bottom: 1px solid #e9aaa4; }
+.workspace-save-error.offline { color: #6e4c0d; background: #fdf6e0; border-bottom-color: #e3ca8b; }
+.workspace-save-error.offline small { color: #8a6d33; }
 .workspace-save-error div { display: grid; gap: 2px; }
 .workspace-save-error strong { font-size: 12px; }
 .workspace-save-error span { font-size: 11px; }
@@ -726,6 +729,9 @@ main { grid-column: 2; min-width: 0; }
 .app-shell .persistence-status.saving,
 .app-shell .persistence-status.loading { color: #e6bd7c; background: #382714; }
 .app-shell .persistence-status.error { color: #efaaa2; background: #3a1d1a; }
+.app-shell .persistence-status.error.offline { color: #e8c887; background: #33270f; }
+.app-shell .workspace-save-error.offline { color: #ecd8a4; background: #241b0c; border-bottom-color: #55401c; }
+.app-shell .workspace-save-error.offline small { color: #bfa065; }
 .app-shell .topbar-front-screen { color: #fff8eb; background: #8d5a3b; border-color: #a66c43; }
 .app-shell .topbar-front-screen:hover { background: #6f432d; }
 .app-shell .event-switcher { color: #cf966b; background: #211812; border-color: #4a3527; }

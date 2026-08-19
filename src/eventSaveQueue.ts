@@ -198,4 +198,8 @@ export class EventSaveFailureTracker {
   recordSuccess(eventId: string) {
     this.eventIds.delete(eventId);
   }
+
+  clear() {
+    this.eventIds.clear();
+  }
 }
