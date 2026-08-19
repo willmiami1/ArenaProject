@@ -246,6 +246,16 @@
 .public-rider-photo-button input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .public-rider-photo-remove { margin-left: 12px; padding: 5px; color: #d99a8b; background: none; border: 0; font-size: 11px; font-weight: 700; cursor: pointer; }
 .public-rider-photo-error { display: block; margin-top: 8px; color: #d99a8b; font-size: 11px; }
+.public-rider-horses { grid-column: 1/-1; padding: 14px; border: 1px solid #80674f; background: #0e0b09; }
+.public-rider-horses strong { display: block; color: var(--public-cream); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.public-rider-horses p { margin: 3px 0 12px; color: var(--public-muted); font-size: 11px; }
+.public-rider-horse-entry { display: flex; flex-wrap: wrap; gap: 10px; }
+.public-rider-horse-entry input { flex: 1 1 200px; min-height: 42px; padding: 10px 13px; color: var(--public-cream); background: #17130f; border: 1px solid #80674f; border-radius: 0; }
+.public-rider-horse-add { min-height: 42px; padding: 8px 14px; color: var(--public-cream); background: transparent; border: 1px solid rgba(234,220,198,.38); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; cursor: pointer; }
+.public-rider-horse-list { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.public-rider-horse-list span { display: inline-flex; align-items: center; gap: 7px; padding: 6px 8px 6px 12px; color: var(--public-cream); border: 1px solid #80674f; background: #17130f; font-size: 12px; font-weight: 700; }
+.public-rider-horse-list span button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; color: #d99a8b; background: none; border: 0; cursor: pointer; }
+.public-rider-horse-list small { color: var(--public-muted); font-size: 11px; }
 .public-spectator { padding: 70px 0 100px; }
 .public-spectator>a { font-size: 11px; font-weight: 800; }
 .public-spectator .public-page-head { padding: 42px 0 55px; }

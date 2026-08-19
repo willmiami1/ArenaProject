@@ -693,6 +693,7 @@ type RiderProfileDraft = {
   role: ContestantProfileUpdate["role"];
   photo: string;
   clearPhoto: boolean;
+  horses: string[];
   newPin: string;
   confirmNewPin: string;
 };
@@ -707,6 +708,7 @@ const riderProfileDraft = (
   role: contestant.role,
   photo: contestant.photo ?? "",
   clearPhoto: false,
+  horses: contestant.horses ?? [],
   newPin: "",
   confirmNewPin: "",
 });
@@ -724,6 +726,19 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  const [horseName, setHorseName] = useState("");
+
+  const addHorse = () => {
+    if (!draft) return;
+    const name = horseName.trim().replace(/\s+/g, " ").toUpperCase();
+    if (
+      !name ||
+      draft.horses.length >= 20 ||
+      draft.horses.some((horse) => horse.toLowerCase() === name.toLowerCase())
+    ) return;
+    setDraft({ ...draft, horses: [...draft.horses, name] });
+    setHorseName("");
+  };
 
   const handlePhoto = async (file?: File) => {
     if (!file) return;
@@ -789,6 +804,7 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
         role: draft.role,
         photo: draft.photo,
         clearPhoto: draft.clearPhoto,
+        horses: draft.horses,
         ...(draft.newPin ? { newPin: draft.newPin } : {}),
       });
       if (!result) throw new Error("Profile update did not return a result.");
@@ -918,6 +934,30 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
           <label>Phone number<input required type="tel" autoComplete="tel" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} /></label>
           <label>Hometown<input maxLength={100} autoCapitalize="characters" value={draft.hometown} onChange={(event) => setDraft({ ...draft, hometown: event.target.value.toUpperCase() })} /></label>
           <label>Roping position<select value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value as ContestantProfileUpdate["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
+          <div className="public-rider-horses">
+            <strong>My horses</strong>
+            <p>Add every horse you ride so they can be listed with your entries.</p>
+            <div className="public-rider-horse-entry">
+              <input
+                maxLength={100}
+                value={horseName}
+                autoCapitalize="characters"
+                placeholder="Horse name"
+                onChange={(event) => setHorseName(event.target.value.toUpperCase())}
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addHorse(); } }}
+              />
+              <button type="button" className="public-rider-horse-add" onClick={addHorse}>Add horse</button>
+            </div>
+            <div className="public-rider-horse-list">
+              {draft.horses.map((horse) => (
+                <span key={horse}>
+                  {horse}
+                  <button type="button" title={`Remove ${horse}`} onClick={() => setDraft({ ...draft, horses: draft.horses.filter((name) => name !== horse) })}><X size={13} /></button>
+                </span>
+              ))}
+              {!draft.horses.length && <small>No horses added.</small>}
+            </div>
+          </div>
           <label>New PIN (optional)<input type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={draft.newPin} onChange={(event) => setDraft({ ...draft, newPin: event.target.value.replace(/\D/g, "").slice(0, 4) })} placeholder="Keep current PIN" /></label>
           {draft.newPin && (
             <label>Confirm new PIN<input required type="password" inputMode="numeric" autoComplete="new-password" pattern="\d{4}" maxLength={4} value={draft.confirmNewPin} onChange={(event) => setDraft({ ...draft, confirmNewPin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>

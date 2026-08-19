@@ -3485,6 +3485,19 @@ export const updateContestantProfile = webMethod(
     const photo =
       typeof profile?.photo === "string" ? profile.photo.trim() : "";
     const clearPhoto = profile?.clearPhoto === true;
+    const horsesByName = new Map();
+    (Array.isArray(profile?.horses) ? profile.horses : []).forEach((value) => {
+      const horse = String(value || "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .toUpperCase();
+      const key = horse.toLowerCase();
+      if (horse && !horsesByName.has(key)) horsesByName.set(key, horse);
+    });
+    const horses = [...horsesByName.values()];
+    if (horses.length > 20 || horses.some((horse) => horse.length > 100)) {
+      throw new Error("Horse names must be 100 characters or fewer.");
+    }
     if (
       photo &&
       (photo.length > 3000000 ||
@@ -3576,6 +3589,7 @@ export const updateContestantProfile = webMethod(
             role,
             photo,
             clearPhoto,
+            horses,
           },
           previousContestant,
         ),
