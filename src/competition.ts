@@ -1051,10 +1051,9 @@ function syncShortGoFinalists(
           existing?.id ??
           `team-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
         drawPosition: index + 1,
-        originalTeamNumber:
-          existing?.originalTeamNumber ??
-          qualifier.originalTeamNumber ??
-          qualifier.drawPosition,
+        // Final-round teams are renumbered by standings: slowest qualifier
+        // ropes first as the highest number, fastest ropes last as Team #1.
+        originalTeamNumber: finalists.length - index,
         round: finalRound,
         status: "ready" as const,
         rawTime: null,
