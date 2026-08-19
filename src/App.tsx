@@ -51,6 +51,7 @@ import {
   Upload,
   UserRound,
   UsersRound,
+  WifiOff,
   X,
 } from "lucide-react";
 import { normalizeData, useArenaData } from "./useArenaData";
@@ -263,6 +264,22 @@ const teamQualifiedTotal = (
       0,
     );
 
+function useOnlineStatus() {
+  const [online, setOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+  return online;
+}
+
 function StaffApp() {
   const [
     data,
@@ -280,6 +297,52 @@ function StaffApp() {
   const [view, setView] = useState<View>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [workspaceMessage, setWorkspaceMessage] = useState("");
+  const online = useOnlineStatus();
+  const restoreFileInput = useRef<HTMLInputElement>(null);
+  const downloadWorkspaceBackup = () => {
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `arena-command-backup-${stamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setWorkspaceMessage("Backup file saved to this computer.");
+  };
+  const restoreWorkspaceBackup = async (file: File) => {
+    try {
+      const parsed = JSON.parse(await file.text()) as ArenaData;
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        !Array.isArray(parsed.events) ||
+        !Array.isArray(parsed.teams) ||
+        !Array.isArray(parsed.contestants)
+      ) {
+        throw new Error("Not an Arena Command backup file.");
+      }
+      if (
+        !window.confirm(
+          `Replace the current workspace with the backup "${file.name}"? The restored data will save to Wix automatically.`,
+        )
+      ) {
+        return;
+      }
+      // Keep the live revision so the restore saves as a normal update and
+      // is not discarded as older than the workspace already on Wix.
+      setData(normalizeData({ ...parsed, revision: data.revision }));
+      setWorkspaceMessage(`Workspace restored from ${file.name}.`);
+    } catch {
+      window.alert(
+        "That file could not be read as an Arena Command backup. The workspace was not changed.",
+      );
+    }
+  };
   const activeEvent =
     data.events.find((event) => event.id === data.activeEventId) ?? data.events[0];
   useEffect(() => {
@@ -560,8 +623,20 @@ function StaffApp() {
             <span className="eyebrow">Arena workspace</span>
             <h1>{navItems.find((item) => item.id === view)?.label}</h1>
           </div>
-          <div className={`persistence-status ${persistenceStatus}`}>
-            {persistenceStatus === "error" ? <CloudOff size={15} /> : <Cloud size={15} />}
+          <div
+            className={`persistence-status ${persistenceStatus}${
+              persistenceStatus === "error" && !online ? " offline" : ""
+            }`}
+          >
+            {persistenceStatus === "error" ? (
+              online ? (
+                <CloudOff size={15} />
+              ) : (
+                <WifiOff size={15} />
+              )
+            ) : (
+              <Cloud size={15} />
+            )}
             <span>
               {persistenceStatus === "loading"
                 ? "Connecting to Wix"
@@ -570,7 +645,9 @@ function StaffApp() {
                   : persistenceStatus === "saved"
                     ? "Saved to Wix"
                     : persistenceStatus === "error"
-                      ? "Wix save failed"
+                      ? online
+                        ? "Wix save failed"
+                        : "Offline — saved on this computer"
                       : "Local preview"}
             </span>
           </div>
@@ -598,6 +675,33 @@ function StaffApp() {
             <Eye size={17} />
             <span>Front Screen</span>
           </button>
+          <button
+            className="topbar-front-screen"
+            onClick={downloadWorkspaceBackup}
+            title="Save a backup file of the whole workspace on this computer"
+          >
+            <Download size={17} />
+            <span>Backup</span>
+          </button>
+          <button
+            className="topbar-front-screen"
+            onClick={() => restoreFileInput.current?.click()}
+            title="Restore the workspace from a backup file"
+          >
+            <Upload size={17} />
+            <span>Restore</span>
+          </button>
+          <input
+            ref={restoreFileInput}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: "none" }}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void restoreWorkspaceBackup(file);
+            }}
+          />
           <label className="event-switcher">
             <CalendarDays size={18} />
             <select
@@ -615,7 +719,21 @@ function StaffApp() {
           </label>
         </header>
 
-        {persistenceStatus === "error" && lastSaveError && (
+        {persistenceStatus === "error" && !online && (
+          <div className="workspace-save-error offline" role="alert">
+            <div>
+              <strong>Working offline</strong>
+              <span>
+                No internet connection. Every change keeps saving on this
+                computer, and the workspace will sync to Wix automatically when
+                the connection returns.
+              </span>
+              <small>You can keep running the event with the Run Desk and LED screen.</small>
+            </div>
+          </div>
+        )}
+
+        {persistenceStatus === "error" && online && lastSaveError && (
           <div className="workspace-save-error" role="alert">
             <div>
               <strong>Wix save failed</strong>
@@ -3741,7 +3859,7 @@ function RunDesk({
   const [scoreboardResetMessage, setScoreboardResetMessage] = useState("");
   const [scoreboardResetError, setScoreboardResetError] = useState("");
   const [activeRunSaveStatus, setActiveRunSaveStatus] = useState<
-    "idle" | "saving" | "saved" | "error"
+    "idle" | "saving" | "saved" | "offline" | "error"
   >("idle");
   const [activeRunSaveError, setActiveRunSaveError] = useState("");
   const [pendingActiveSelection, setPendingActiveSelection] =
@@ -3844,6 +3962,25 @@ function RunDesk({
       setActiveRunSaveStatus("saved");
     } catch (error) {
       if (requestId !== activeRunRequestId.current) return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        // Offline: keep the selection on this computer instead of reverting.
+        // The workspace autosave persists it locally and syncs to Wix when
+        // the connection returns, matching the deferred selection path.
+        setPendingActiveSelection(null);
+        if (
+          event.activeRunId !== (teamId ?? undefined) ||
+          event.activeRound !== round
+        ) {
+          onUpdateEvent({
+            ...event,
+            activeRunId: teamId ?? undefined,
+            activeRound: round,
+          });
+        }
+        setActiveRunSaveStatus("offline");
+        setActiveRunSaveError("");
+        return;
+      }
       const confirmed =
         error instanceof ActiveRunSaveError
           ? error.confirmedSelection
@@ -4238,6 +4375,14 @@ function RunDesk({
           <span>Roping Now saved.</span>
         </div>
       )}
+      {activeRunSaveStatus === "offline" && (
+        <div className="notice">
+          <span>
+            Offline — Roping Now is saved on this computer and will sync to
+            Wix when the connection returns.
+          </span>
+        </div>
+      )}
       {activeRunSaveStatus === "error" && (
         <div className="notice error">
           <span>
@@ -4382,7 +4527,7 @@ function RunDesk({
       )}
       <div className="run-desk-grid">
         <section className={`panel desk-entry ${selected?.headerFreeRun || selected?.heelerFreeRun ? "free-run-panel" : ""} ${selected && repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) ? "repeat-team-panel" : ""}`}>
-          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>Round {activeRound} · {activeRunSaveStatus === "saving" ? "Saving Roping Now…" : activeRunSaveStatus === "error" ? "Roping Now save failed" : activeRunSaveStatus === "saved" ? "Roping Now saved" : isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Team #${selected.originalTeamNumber ?? selected.drawPosition}${activeRound > 1 ? ` · Draw #${selected.drawPosition}` : ""}` : "Round complete"}</h3></div></div>
+          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>Round {activeRound} · {activeRunSaveStatus === "saving" ? "Saving Roping Now…" : activeRunSaveStatus === "error" ? "Roping Now save failed" : activeRunSaveStatus === "offline" ? "Roping Now saved on this computer" : activeRunSaveStatus === "saved" ? "Roping Now saved" : isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Team #${selected.originalTeamNumber ?? selected.drawPosition}${activeRound > 1 ? ` · Draw #${selected.drawPosition}` : ""}` : "Round complete"}</h3></div></div>
           {selected ? (
             <>
               <div className="active-team">

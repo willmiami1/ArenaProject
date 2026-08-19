@@ -51,6 +51,7 @@ import {
 const STORAGE_KEY = "arena-command-data-v1";
 const PARTICIPANT_DATABASE_VERSION = 4;
 const WORKSPACE_REFRESH_MS = 3000;
+const WORKSPACE_RECONNECT_RETRY_MS = 20000;
 const LEGACY_SAMPLE_MEETS = new Set([
   "Summer Buckle Series",
   "Friday Night Jackpot",
@@ -1481,6 +1482,38 @@ export function useArenaData() {
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [ready, wixConnected]);
+
+  useEffect(() => {
+    if (!ready || !wixConnected || !isWixEmbed()) return;
+    const resumeAfterReconnect = () => {
+      if (statusRef.current !== "error") return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        return;
+      }
+      if (
+        saveInFlight.current ||
+        activeRunSaveInFlight.current ||
+        contestantSaveInFlight.current ||
+        eventSaveInFlight.current ||
+        registrationSaveInFlight.current
+      ) {
+        return;
+      }
+      // The full workspace save carries the latest local event state, so any
+      // event saves that failed while offline are superseded by this retry.
+      eventSaveFailures.current.clear();
+      retryWorkspaceSave();
+    };
+    const timer = window.setInterval(
+      resumeAfterReconnect,
+      WORKSPACE_RECONNECT_RETRY_MS,
+    );
+    window.addEventListener("online", resumeAfterReconnect);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("online", resumeAfterReconnect);
+    };
+  }, [ready, wixConnected, retryWorkspaceSave]);
 
   return [
     data,

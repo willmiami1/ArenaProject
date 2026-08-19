@@ -235,6 +235,17 @@ describe("direct Event saves", () => {
     expect(failures.hasFailures).toBe(false);
   });
 
+  it("clears every tracked failure when the workspace resyncs after reconnect", () => {
+    const failures = new EventSaveFailureTracker();
+
+    failures.recordFailure("event-a");
+    failures.recordFailure("event-b");
+    expect(failures.hasFailures).toBe(true);
+
+    failures.clear();
+    expect(failures.hasFailures).toBe(false);
+  });
+
   it("serializes rapid repeated saves without dropping the latest Event", async () => {
     let releaseFirst!: () => void;
     const firstPending = new Promise<void>((resolve) => {
