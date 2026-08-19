@@ -1864,6 +1864,13 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
     [],
   );
   useEffect(() => {
+    // Inside the Wix embed the page has its own scrollbar; hide the app's window
+    // scrollbar so only one shows. Wheel/touch scrolling still works.
+    if (!isWixEmbed()) return;
+    document.documentElement.classList.add("hide-window-scrollbar");
+    return () => document.documentElement.classList.remove("hide-window-scrollbar");
+  }, []);
+  useEffect(() => {
     if (route.kind === "rider-account") return;
     if (!isWixEmbed()) {
       const refresh = () => setData(loadLocalPublicData());
