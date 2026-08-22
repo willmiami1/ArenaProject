@@ -4125,13 +4125,14 @@ function RunDesk({
         : total.toFixed(2);
     return `${parts.join(" + ")} = ${totalLabel}`;
   };
-  const standings = eventTeams
-    .filter((team) => team.status === "complete" && team.rawTime !== null)
-    .sort(
-      (a, b) =>
-        qualifiedTotal(a) - qualifiedTotal(b) ||
-        a.drawPosition - b.drawPosition,
-    );
+  // Same data as the LED scoreboard: each team's latest qualified run
+  // through the active round, with cumulative totals.
+  const standings = event
+    ? sortLedStandings(
+        ledQualifiedRunsThroughRound(event.id, allEventTeams, activeRound),
+        (team) => qualifiedTotal(team, activeRound + 1),
+      )
+    : [];
   const fixedPaidEntries = allEventTeams.filter(
     (team) =>
       team.round === 1 &&
@@ -4225,27 +4226,6 @@ function RunDesk({
     link.click();
     URL.revokeObjectURL(url);
   };
-  const riderStandings = useMemo(() => {
-    const stats = new Map<string, { contestantId: string; runs: number; qualified: number; noTimes: number; totalTime: number; points: number }>();
-    eventTeams.filter((team) => team.status !== "ready").forEach((team) => {
-      [team.headerId, team.heelerId].forEach((contestantId) => {
-        const current = stats.get(contestantId) ?? { contestantId, runs: 0, qualified: 0, noTimes: 0, totalTime: 0, points: 0 };
-        current.runs += 1;
-        if (team.status === "complete" && team.rawTime !== null) {
-          current.qualified += 1;
-          current.totalTime += event
-            ? (officialRunTime(event, team, contestants) ?? 0)
-            : team.rawTime + team.penalties;
-          current.points += team.points || 1;
-        } else {
-          current.noTimes += 1;
-        }
-        stats.set(contestantId, current);
-      });
-    });
-    return [...stats.values()].sort((a, b) => b.points - a.points || (a.totalTime / Math.max(a.qualified, 1)) - (b.totalTime / Math.max(b.qualified, 1)));
-  }, [eventTeams, event, contestants]);
-
   const chooseTeam = (team: Team) => {
     void selectActiveRun(team.id);
     setRawTime(team.rawTime?.toString() ?? "");
@@ -4674,7 +4654,7 @@ function RunDesk({
 
       <section className="panel standings-panel">
         <div className="table-toolbar">
-          <div><h3>Round {activeRound} standings</h3><p>{standings.length} qualified average{standings.length === 1 ? "" : "s"} · {event?.resultsPublished ? "Published live" : "Draft results"}</p></div>
+          <div><h3>Results</h3><p>{standings.length} qualified average{standings.length === 1 ? "" : "s"} · {event?.resultsPublished ? "Published live" : "Draft results"}</p></div>
           <div className="toolbar-actions">
             <button className="secondary" disabled={!eventTeams.length || !event} onClick={openLedLeaderboard}><MonitorUp size={16} /> View LED leaderboard</button>
             <button className="secondary" disabled={!eventTeams.length || !event} onClick={() => event && exportResultsCsv(event, allEventTeams, contestants, activeRound)}><Download size={16} /> CSV / Excel</button>
@@ -4687,32 +4667,14 @@ function RunDesk({
           {standings.map((team, index) => (
             <div className="table-row" key={team.id}>
               <span><b className={`place place-${index + 1}`}>{index + 1}</b></span>
-              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong>{event?.competitionType === "slide" && <small>Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)} · R2 {slideAdjustmentLabel(team)}</small>}<small>Team #{team.originalTeamNumber ?? team.drawPosition}{activeRound > 1 ? ` · Draw #${team.drawPosition}` : ""}{activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
+              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong>{event?.competitionType === "slide" && <small>Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)} · R2 {slideAdjustmentLabel(team)}</small>}<small>Team #{team.originalTeamNumber ?? team.drawPosition}{activeRound > 1 ? ` · Draw #${team.drawPosition}` : ""}{team.round === activeRound && activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
               <span>{entryRuns(team).filter((run) => run.status === "complete" && run.rawTime !== null).length} / {roundCount}</span>
-              <span><b className="total-time">{qualifiedTotal(team).toFixed(2)}</b></span>
+              <span><b className="total-time">{qualifiedTotal(team, activeRound + 1).toFixed(2)}</b></span>
             </div>
           ))}
           {!standings.length && <EmptyState text="Qualified runs will appear here." />}
         </div>
       </section>
-      {event?.competitionType === "round-robin" && (
-        <section className="panel standings-panel">
-          <PanelHeading title={`Round ${activeRound} leaderboard`} subtitle="Contestant points and averages for this round" />
-          <div className="data-table round-robin-table">
-            <div className="table-row table-header"><span>Place</span><span>Contestant</span><span>Points</span><span>Wins</span><span>Losses</span><span>Average</span></div>
-            {riderStandings.map((standing, index) => (
-              <div className="table-row" key={standing.contestantId}>
-                <span><b className={`place place-${index + 1}`}>{index + 1}</b></span>
-                <span><strong>{rider(standing.contestantId)}</strong>{index < 4 && <small className="finalist-label">Finalist</small>}</span>
-                <span>{standing.points}</span>
-                <span>{standing.qualified}</span>
-                <span>{standing.noTimes}</span>
-                <span>{standing.qualified ? (standing.totalTime / standing.qualified).toFixed(2) : "—"}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
       <section className="panel payout-panel">
         <div className="payout-summary">
           <span className="stat-icon"><CircleDollarSign size={21} /></span>
