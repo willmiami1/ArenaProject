@@ -1505,7 +1505,7 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
               <div><dt>Minimum draws</dt><dd>{competition.minDrawsAllowed}</dd></div>
             )}
           </dl>
-          <p>{competition.allowRepeatPartners ? "Repeat partnerships are allowed." : "Each partnership may enter once."}</p>
+          <p>{competition.allowRepeatPartners ? "Repeat partnerships are allowed." : competition.allowSamePartnerDrawAndPick ? "Partners may run together twice — once in the draw and once as a picked team." : "Each partnership may enter once."}</p>
         </section>
       )}
       <section className="public-detail-section" id="results">

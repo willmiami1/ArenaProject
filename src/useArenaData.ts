@@ -94,6 +94,7 @@ export function normalizeData(parsed: ArenaData): ArenaData {
       description: event.description ?? "",
       parentEventId: event.parentEventId ?? `meet-${event.id}`,
       allowRepeatPartners: event.allowRepeatPartners ?? false,
+      allowSamePartnerDrawAndPick: event.allowSamePartnerDrawAndPick ?? false,
       producerFeePercent:
         event.producerFeePercent ?? legacyEvent.producerFee ?? 0,
       handicapTotal: applyHandicapDefaults

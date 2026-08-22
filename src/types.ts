@@ -51,6 +51,7 @@ export interface ArenaEvent {
   maxHeelers?: number;
   minDrawsAllowed: number;
   allowRepeatPartners: boolean;
+  allowSamePartnerDrawAndPick?: boolean;
   handicapTotal: number;
   slideNumber?: number;
   maxContestantHandicap: number;
