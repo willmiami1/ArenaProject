@@ -68,9 +68,9 @@ export function publicStandingRows(
 ) {
   if (!event.resultsPublished) return [];
   const names = new Map(contestants.map((contestant) => [contestant.id, contestant.name]));
-  // Published results carry only the final classification: teams that roped
-  // the last round, ranked like the LED scoreboard and run desk. Teams from
-  // earlier rounds are not listed.
+  // Published results carry the same final classification as the bottom of
+  // the Run Desk: every team that caught at least one steer, grouped by
+  // rounds caught (most first) and ranked fastest-to-slowest in each group.
   const finalRound = teams
     .filter(
       (team) =>
@@ -86,10 +86,9 @@ export function publicStandingRows(
     ]),
   );
   const finalists = sortLedStandings(
-    ledQualifiedRunsThroughRound(event.id, teams, finalRound).filter(
-      (team) => team.round === finalRound,
-    ),
+    ledQualifiedRunsThroughRound(event.id, teams, finalRound),
     (team) => aggregates.get(teamEntryKey(team))?.total ?? 0,
+    (team) => aggregates.get(teamEntryKey(team))?.rounds ?? 0,
   );
   return finalists.map((team, index) => {
     const aggregate = aggregates.get(teamEntryKey(team));
@@ -99,7 +98,7 @@ export function publicStandingRows(
       heelerName: names.get(team.heelerId) ?? "Unknown contestant",
       rounds: aggregate?.rounds ?? 0,
       officialTotal:
-        aggregate?.qualified
+        aggregate && aggregate.rounds > 0
           ? Math.round(aggregate.total * 100) / 100
           : null,
       status: aggregate?.status ?? ("no-time" as const),

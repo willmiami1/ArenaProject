@@ -694,14 +694,9 @@ function publishedResults(event, teams, contestants) {
         grouped.set(key, [...(grouped.get(key) || []), team]);
       });
     const names = new Map(contestants.map((contestant) => [contestant.id, contestant.name]));
-    // Published results carry only the final classification: teams whose
-    // latest resolved run happened in the last roped round, ranked like the
-    // LED scoreboard. Teams left in earlier rounds are not listed.
-    const resolvedRuns = (runs) =>
-      runs.filter((run) => run.status !== "ready");
-    const finalRound = [...grouped.values()]
-      .flatMap(resolvedRuns)
-      .reduce((highest, run) => Math.max(highest, Number(run.round) || 1), 1);
+    // Published results carry the same final classification as the bottom of
+    // the Run Desk: every team that caught at least one steer, grouped by
+    // rounds caught (most first) and ranked fastest-to-slowest in each group.
     return [...grouped.values()]
       .map((runs) => {
         const completed = runs.filter(
@@ -713,7 +708,7 @@ function publishedResults(event, teams, contestants) {
         );
         const qualified =
           completed.length > 0 && !runs.some((run) => run.status === "no-time");
-        const latest = resolvedRuns(runs).reduce(
+        const latestCompleted = completed.reduce(
           (last, run) => (!last || run.round > last.round ? run : last),
           null,
         );
@@ -721,27 +716,22 @@ function publishedResults(event, teams, contestants) {
           headerName: names.get(runs[0].headerId) || "Unknown contestant",
           heelerName: names.get(runs[0].heelerId) || "Unknown contestant",
           rounds: completed.length,
-          officialTotal: qualified ? Math.round(total * 100) / 100 : null,
+          officialTotal:
+            completed.length > 0 ? Math.round(total * 100) / 100 : null,
           status: qualified ? "qualified" : "no-time",
-          qualified,
           total,
-          latest,
+          latestCompleted,
         };
       })
-      .filter(
-        (entry) =>
-          entry.latest &&
-          entry.latest.round === finalRound &&
-          entry.latest.status === "complete" &&
-          entry.latest.rawTime !== null,
-      )
+      .filter((entry) => entry.latestCompleted)
       .sort(
         (left, right) =>
+          right.rounds - left.rounds ||
           left.total - right.total ||
-          Number(left.latest.drawPosition || 0) -
-            Number(right.latest.drawPosition || 0),
+          Number(left.latestCompleted.drawPosition || 0) -
+            Number(right.latestCompleted.drawPosition || 0),
       )
-      .map(({ qualified, total, latest, ...result }, index) => ({
+      .map(({ total, latestCompleted, ...result }, index) => ({
         place: index + 1,
         ...result,
       }));

@@ -1453,10 +1453,19 @@ function LedLeaderboard({
   const roundTeams = eventTeams
     .filter((team) => team.round === round)
     .sort((a, b) => a.drawPosition - b.drawPosition);
+  const completedRoundsFor = (team: Team) =>
+    eventTeams.filter(
+      (run) =>
+        sameTeamEntry(run, team) &&
+        run.round <= round &&
+        run.status === "complete" &&
+        run.rawTime !== null,
+    ).length;
   const standings = sortLedStandings(
     ledQualifiedRunsThroughRound(event.id, eventTeams, round),
     (team) =>
       teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants),
+    completedRoundsFor,
   ).slice(0, 20);
   const spectatorTopThree = aggregatePublicSpectatorLeaderboard(
     Array.from({ length: round }, (_, index) =>
@@ -1660,13 +1669,7 @@ function LedLeaderboard({
         </div>
         <LedScrollingRows rowCount={standings.length}>
           {standings.map((team, index) => {
-            const completedRounds = eventTeams.filter(
-              (run) =>
-                sameTeamEntry(run, team) &&
-                run.round <= round &&
-                run.status === "complete" &&
-                run.rawTime !== null,
-            ).length;
+            const completedRounds = completedRoundsFor(team);
             return (
               <div className={`led-row led-place-${index + 1}`} key={team.id}>
                 <span className="led-place">{index + 1}</span>
@@ -4494,11 +4497,15 @@ function RunDesk({
     return `${parts.join(" + ")} = ${totalLabel}`;
   };
   // Same data as the LED scoreboard: each team's latest qualified run
-  // through the active round, with cumulative totals.
+  // through the active round, ranked by rounds caught then fastest total.
   const standings = event
     ? sortLedStandings(
         ledQualifiedRunsThroughRound(event.id, allEventTeams, activeRound),
         (team) => qualifiedTotal(team, activeRound + 1),
+        (team) =>
+          entryRuns(team).filter(
+            (run) => run.status === "complete" && run.rawTime !== null,
+          ).length,
       )
     : [];
   const fixedPaidEntries = allEventTeams.filter(

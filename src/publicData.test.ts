@@ -873,7 +873,7 @@ describe("public grouping and privacy", () => {
 });
 
 describe("aggregate public standings", () => {
-  it("publishes only the final round classification with aggregate totals", () => {
+  it("publishes the full classification grouped by rounds caught", () => {
     const competition = event({ resultsPublished: true, rounds: 2 });
     const teams = [
       run(),
@@ -883,8 +883,23 @@ describe("aggregate public standings", () => {
       run({ id: "scratch", headerEntryNumber: 4, heelerEntryNumber: 4, scratched: true }),
     ];
     const rows = publicStandingRows(competition, teams, contestants);
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ place: 1, rounds: 2, officialTotal: 20, status: "qualified" });
+    expect(rows[1]).toMatchObject({ place: 2, rounds: 1, officialTotal: 9 });
+  });
+
+  it("drops a no-timed team into the fewer-rounds group with its earlier total", () => {
+    const competition = event({ resultsPublished: true, rounds: 2 });
+    const teams = [
+      run(),
+      run({ id: "round-2", round: 2, rawTime: 7, penalties: 0 }),
+      run({ id: "fast-r1", headerEntryNumber: 2, heelerEntryNumber: 2, rawTime: 6, penalties: 0 }),
+      run({ id: "fast-r1-nt", headerEntryNumber: 2, heelerEntryNumber: 2, round: 2, status: "no-time", rawTime: null }),
+    ];
+    const rows = publicStandingRows(competition, teams, contestants);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ place: 1, rounds: 2, officialTotal: 20 });
+    expect(rows[1]).toMatchObject({ place: 2, rounds: 1, officialTotal: 6, status: "no-time" });
   });
 
   it("applies the Slide adjustment only in Round 2 and caps it at four seconds", () => {
@@ -951,7 +966,7 @@ describe("render-time final classification", () => {
     ...overrides,
   });
 
-  it("filters a stale every-entry payload down to the final round classification", () => {
+  it("keeps earlier-round teams after the full-round group in a stale payload", () => {
     const stale = [
       row({ place: 1, rounds: 2, officialTotal: 20 }),
       row({ place: 2, headerName: "Cal", heelerName: "Dee", rounds: 2, officialTotal: 21.5 }),
@@ -961,16 +976,18 @@ describe("render-time final classification", () => {
     expect(finalClassificationRows(stale)).toEqual([
       row({ place: 1, rounds: 2, officialTotal: 20 }),
       row({ place: 2, headerName: "Cal", heelerName: "Dee", rounds: 2, officialTotal: 21.5 }),
+      row({ place: 3, headerName: "Eli", heelerName: "Fay", rounds: 1, officialTotal: 8 }),
     ]);
   });
 
-  it("re-ranks places after dropping earlier-round teams", () => {
+  it("re-ranks so more rounds caught outrank a faster partial total", () => {
     const stale = [
       row({ place: 1, rounds: 1, officialTotal: 7, headerName: "Eli", heelerName: "Fay" }),
       row({ place: 2, rounds: 2, officialTotal: 20 }),
     ];
     expect(finalClassificationRows(stale)).toEqual([
       row({ place: 1, rounds: 2, officialTotal: 20 }),
+      row({ place: 2, rounds: 1, officialTotal: 7, headerName: "Eli", heelerName: "Fay" }),
     ]);
   });
 
@@ -1006,8 +1023,8 @@ describe("render-time final classification", () => {
       new Date(2026, 7, 3),
     );
     const stale = [
-      row({ place: 1, rounds: 2, officialTotal: 20 }),
       row({ place: 2, headerName: "Eli", heelerName: "Fay", rounds: 1, officialTotal: 8 }),
+      row({ place: 1, rounds: 2, officialTotal: 20 }),
     ];
     projected.competitions[0].results = stale;
     projected.meets[0].competitions[0].results = [...stale];
@@ -1016,9 +1033,11 @@ describe("render-time final classification", () => {
 
     expect(normalized.competitions[0].results).toEqual([
       row({ place: 1, rounds: 2, officialTotal: 20 }),
+      row({ place: 2, headerName: "Eli", heelerName: "Fay", rounds: 1, officialTotal: 8 }),
     ]);
     expect(normalized.meets[0].competitions[0].results).toEqual([
       row({ place: 1, rounds: 2, officialTotal: 20 }),
+      row({ place: 2, headerName: "Eli", heelerName: "Fay", rounds: 1, officialTotal: 8 }),
     ]);
   });
 });

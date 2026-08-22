@@ -53,13 +53,17 @@ export interface PublicStandingRow {
 export function finalClassificationRows(
   rows: PublicStandingRow[],
 ): PublicStandingRow[] {
-  const qualified = rows.filter((row) => row.status === "qualified");
-  const finalRounds = qualified.reduce(
-    (highest, row) => Math.max(highest, row.rounds),
-    0,
-  );
-  return qualified
-    .filter((row) => row.rounds === finalRounds)
+  // Final classification: every team with a recorded total, grouped by rounds
+  // caught (most first) and ranked fastest-to-slowest inside each group —
+  // the same order as the bottom of the Run Desk. Also repairs payloads
+  // published before this rule existed.
+  return rows
+    .filter((row) => row.officialTotal !== null)
+    .sort(
+      (left, right) =>
+        right.rounds - left.rounds ||
+        (left.officialTotal ?? 0) - (right.officialTotal ?? 0),
+    )
     .map((row, index) => ({ ...row, place: index + 1 }));
 }
 

@@ -80,7 +80,7 @@ describe("LED Run Desk synchronization", () => {
     });
   });
 
-  it("keeps prior qualified runs until the next-round result is entered", () => {
+  it("keeps prior qualified runs when a later round no-times", () => {
     const firstRound = team("first-round", 1, "complete");
     const secondRound = {
       ...team("second-round", 2, "ready"),
@@ -97,19 +97,29 @@ describe("LED Run Desk synchronization", () => {
         [firstRound, { ...secondRound, status: "no-time" }],
         2,
       ),
+    ).toEqual([firstRound]);
+    expect(
+      ledQualifiedRunsThroughRound(
+        event.id,
+        [{ ...firstRound, status: "no-time", rawTime: null }],
+        2,
+      ),
     ).toEqual([]);
   });
 
   it("ranks more completed rounds ahead of a lower incomplete aggregate", () => {
     const oneRound = { ...team("one-round", 1, "complete"), rawTime: 6 };
     const twoRounds = { ...team("two-rounds", 2, "complete"), rawTime: 14 };
+    // Missed round 1, caught round 2: still only one completed round.
+    const lateOneRound = { ...team("late-one-round", 2, "complete"), rawTime: 5 };
 
     expect(
       sortLedStandings(
-        [oneRound, twoRounds],
+        [oneRound, lateOneRound, twoRounds],
         (run) => run.rawTime ?? Number.POSITIVE_INFINITY,
+        (run) => (run.id === "two-rounds" ? 2 : 1),
       ).map((run) => run.id),
-    ).toEqual(["two-rounds", "one-round"]);
+    ).toEqual(["two-rounds", "late-one-round", "one-round"]);
   });
 
   it("shows final results only after every final-round run is resolved", () => {
