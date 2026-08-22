@@ -78,6 +78,12 @@ import {
   payoffReportHtml,
 } from "./payoffReport";
 import {
+  positionCheckFileName,
+  positionCheckHtml,
+  riderPostingFileName,
+  riderPostingHtml,
+} from "./drawReports";
+import {
   normalizedRunDeskRound,
   runDeskSelectionToPersist,
 } from "./runDeskActiveSelection";
@@ -3513,6 +3519,12 @@ function Teams({
   const [teamSearch, setTeamSearch] = useState("");
   const [draftDraw, setDraftDraw] = useState<Team[] | null>(null);
   const [draggedTeamId, setDraggedTeamId] = useState("");
+  const [reportPreview, setReportPreview] = useState<{
+    title: string;
+    html: string;
+    fileName: string;
+  } | null>(null);
+  const reportFrame = useRef<HTMLIFrameElement | null>(null);
   const registrationSubmissionInFlight = useRef(false);
   const eventTeams = teams.filter((team) => team.eventId === event?.id).sort((a, b) => a.drawPosition - b.drawPosition);
   const eventRegistrations = registrations.filter(
@@ -3547,6 +3559,36 @@ function Teams({
     event?.competitionType === "slide";
   const canEdit = Boolean(event?.registrationOpen && !event?.drawLocked);
   const format = competitionTypes.find((type) => type.id === event?.competitionType);
+  const openPositionCheck = () => {
+    if (!event) return;
+    setReportPreview({
+      title: "Position check — headers & heelers",
+      html: positionCheckHtml(event, teams, contestants),
+      fileName: positionCheckFileName(event.name),
+    });
+  };
+  const openRiderPosting = () => {
+    if (!event) return;
+    setReportPreview({
+      title: "Rider posting list",
+      html: riderPostingHtml(event, teams, contestants),
+      fileName: riderPostingFileName(event.name),
+    });
+  };
+  const printReport = () => {
+    reportFrame.current?.contentWindow?.print();
+  };
+  const downloadReport = () => {
+    if (!reportPreview) return;
+    const url = URL.createObjectURL(
+      new Blob([reportPreview.html], { type: "text/html;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = reportPreview.fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     setDraftDraw(null);
@@ -3876,6 +3918,12 @@ function Teams({
             <label className="search draw-search"><Search size={15} /><input value={teamSearch} onChange={(e) => setTeamSearch(e.target.value)} placeholder="Search teams" /></label>
             <button className="secondary" disabled={!visibleDrawTeams.length} onClick={() => event && exportDrawCsv(event, visibleDrawTeams, contestants)}><Download size={16} /> CSV</button>
             <button className="secondary" disabled={!visibleDrawTeams.length} onClick={() => window.print()}><Printer size={16} /> Print / PDF</button>
+            {event?.drawApproved === true && !draftDraw && (
+              <>
+                <button className="secondary" disabled={!eventTeams.length} onClick={openPositionCheck}><Printer size={16} /> Position check</button>
+                <button className="secondary" disabled={!eventTeams.length} onClick={openRiderPosting}><Printer size={16} /> Rider posting</button>
+              </>
+            )}
             {event && <button className="secondary" onClick={() => onUpdateEvent({ ...event, drawLocked: !event.drawLocked })}>{event.drawLocked ? <><Unlock size={16} /> Unlock</> : <><Lock size={16} /> Lock draw</>}</button>}
             {draftDraw && (
               <button className="secondary" onClick={() => setDraftDraw(null)}>
@@ -3980,6 +4028,43 @@ function Teams({
               <button className="secondary" disabled={event.drawLocked} onClick={() => restoreDraw(snapshot.teams)}><RefreshCw size={14} /> Restore</button>
             </div>
           ))}
+        </div>
+      )}
+      {reportPreview && (
+        <div className="time-sheet-preview-overlay" role="presentation">
+          <section
+            className="time-sheet-preview-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="draw-report-preview-title"
+          >
+            <div className="time-sheet-preview-toolbar">
+              <div>
+                <strong id="draw-report-preview-title">{reportPreview.title}</strong>
+                <small>Preview the document before printing or downloading it.</small>
+              </div>
+              <span />
+              <button className="secondary" onClick={downloadReport}>
+                <Download size={16} /> Download
+              </button>
+              <button className="primary" onClick={printReport}>
+                <Printer size={16} /> Print
+              </button>
+              <button
+                className="icon-button"
+                aria-label="Close preview"
+                onClick={() => setReportPreview(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <iframe
+              ref={reportFrame}
+              className="time-sheet-preview-frame"
+              srcDoc={reportPreview.html}
+              title={`${reportPreview.title} preview`}
+            />
+          </section>
         </div>
       )}
     </>
