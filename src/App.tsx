@@ -73,6 +73,10 @@ import {
   roundTimeSheetHtml,
 } from "./runDeskPrint";
 import {
+  payoffReportFileName,
+  payoffReportHtml,
+} from "./payoffReport";
+import {
   normalizedRunDeskRound,
   runDeskSelectionToPersist,
 } from "./runDeskActiveSelection";
@@ -3891,6 +3895,7 @@ function RunDesk({
     useState<ActiveRunSelection | null>(null);
   const activeRunRequestId = useRef(0);
   const [timeSheetPreview, setTimeSheetPreview] = useState<{
+    title: string;
     html: string;
     fileName: string;
   } | null>(null);
@@ -4159,6 +4164,104 @@ function RunDesk({
       : 0;
   const purse = event ? calculatePurse(event, paidEntryCount) : 0;
   const payouts = calculatePayouts(purse, standings.length, event?.payoutPercentages);
+  const roundOneTeams = allEventTeams.filter((team) => team.round === 1);
+  const payoffHeaders = new Set(roundOneTeams.map((team) => team.headerId)).size;
+  const payoffHeelers = new Set(roundOneTeams.map((team) => team.heelerId)).size;
+  const payoffParticipants = new Set(
+    roundOneTeams.flatMap((team) => [team.headerId, team.heelerId]),
+  ).size;
+  const payoffFreeRuns = roundOneTeams.reduce(
+    (count, team) =>
+      count +
+      Number(Boolean(team.headerFreeRun)) +
+      Number(Boolean(team.heelerFreeRun)),
+    0,
+  );
+  const payoffFreeRunDeduction = payoffFreeRuns * (event?.entryFee ?? 0);
+  const payoffTotalPot =
+    paidEntryCount * (event?.entryFee ?? 0) + (event?.addedMoney ?? 0);
+  const payoffWinners = payouts.flatMap((payout) => {
+    const team = standings[payout.place - 1];
+    if (!team) return [];
+    const source =
+      roundOneTeams.find((run) => sameTeamEntry(run, team)) ?? team;
+    const recipients = source.headerFreeRun
+      ? [team.heelerId]
+      : source.heelerFreeRun
+        ? [team.headerId]
+        : [...new Set([team.headerId, team.heelerId])];
+    return [
+      {
+        payout,
+        team,
+        recipients,
+        note: source.headerFreeRun
+          ? "Header FR excluded"
+          : source.heelerFreeRun
+            ? "Heeler FR excluded"
+            : "",
+        rounds: `${entryRuns(team).filter((run) => run.status === "complete" && run.rawTime !== null).length} / ${roundCount}`,
+        totalTime: qualifiedTotal(team, activeRound + 1).toFixed(2),
+      },
+    ];
+  });
+  const payoffRiderShares = (() => {
+    const shares = new Map<
+      string,
+      { contestantId: string; amount: number; places: string[] }
+    >();
+    payoffWinners.forEach((winner) => {
+      const share = winner.payout.amount / Math.max(winner.recipients.length, 1);
+      winner.recipients.forEach((contestantId) => {
+        const current = shares.get(contestantId) ?? {
+          contestantId,
+          amount: 0,
+          places: [],
+        };
+        current.amount += share;
+        current.places.push(ordinal(winner.payout.place));
+        shares.set(contestantId, current);
+      });
+    });
+    return [...shares.values()].sort((a, b) => b.amount - a.amount);
+  })();
+  const payoffMoney = (value: number) =>
+    `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const openPayoffReport = () => {
+    if (!event) return;
+    setTimeSheetPreview({
+      title: "Payoff report",
+      html: payoffReportHtml({
+        eventName: event.name,
+        eventDate: event.date,
+        eventLocation: event.location ?? "",
+        participants: payoffParticipants,
+        headers: payoffHeaders,
+        heelers: payoffHeelers,
+        teams: roundOneTeams.length,
+        totalPot: payoffTotalPot,
+        freeRuns: payoffFreeRuns,
+        freeRunDeduction: payoffFreeRunDeduction,
+        jackpot: purse,
+        winners: payoffWinners.map((winner) => ({
+          place: winner.payout.place,
+          percentage: Math.round(winner.payout.percentage * 100),
+          header: rider(winner.team.headerId),
+          heeler: rider(winner.team.heelerId),
+          rounds: winner.rounds,
+          totalTime: winner.totalTime,
+          amount: winner.payout.amount,
+          note: winner.note,
+        })),
+        riderShares: payoffRiderShares.map((share) => ({
+          name: rider(share.contestantId),
+          places: share.places.join(", "),
+          amount: share.amount,
+        })),
+      }),
+      fileName: payoffReportFileName(event.name),
+    });
+  };
   const shortGoTotals =
     activeRound === roundCount && roundCount > 1
       ? eventTeams
@@ -4208,6 +4311,7 @@ function RunDesk({
   const previewRoundTimeSheet = () => {
     if (!event || !eventTeams.length) return;
     setTimeSheetPreview({
+      title: `Round ${activeRound} time sheet`,
       html: roundTimeSheetHtml(event, eventTeams, contestants, activeRound),
       fileName: roundTimeSheetFileName(event.name, activeRound),
     });
@@ -4520,8 +4624,8 @@ function RunDesk({
           >
             <div className="time-sheet-preview-toolbar">
               <div>
-                <strong id="time-sheet-preview-title">Round {activeRound} time sheet</strong>
-                <small>Preview the manual worksheet before printing or downloading it.</small>
+                <strong id="time-sheet-preview-title">{timeSheetPreview.title}</strong>
+                <small>Preview the document before printing or downloading it.</small>
               </div>
               <span />
               <button className="secondary" onClick={downloadRoundTimeSheet}>
@@ -4532,7 +4636,7 @@ function RunDesk({
               </button>
               <button
                 className="icon-button"
-                aria-label="Close time sheet preview"
+                aria-label="Close preview"
                 onClick={() => setTimeSheetPreview(null)}
               >
                 <X size={18} />
@@ -4542,7 +4646,7 @@ function RunDesk({
               ref={timeSheetFrame}
               className="time-sheet-preview-frame"
               srcDoc={timeSheetPreview.html}
-              title={`Round ${activeRound} manual time sheet preview`}
+              title={`${timeSheetPreview.title} preview`}
             />
           </section>
         </div>
@@ -4675,24 +4779,43 @@ function RunDesk({
           {!standings.length && <EmptyState text="Qualified runs will appear here." />}
         </div>
       </section>
-      <section className="panel payout-panel">
-        <div className="payout-summary">
-          <span className="stat-icon"><CircleDollarSign size={21} /></span>
-          <div><span>Calculated purse</span><strong>${purse.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><small>{paidEntryCount} paid entries + ${event?.addedMoney ?? 0} added money, after per-entry fees</small></div>
+      <section className="panel payoff-panel">
+        <div className="table-toolbar">
+          <div className="payoff-heading"><span className="stat-icon"><CircleDollarSign size={21} /></span><div><h3>Payoff</h3><p>{event ? `${event.name} · ${event.date}` : "Select an event to build the payoff."}</p></div></div>
+          <div className="toolbar-actions">
+            <button className="secondary" disabled={!event} onClick={openPayoffReport}><Printer size={16} /> Print payoff report</button>
+          </div>
         </div>
-        <div className="payout-places">
-          {payouts.length ? payouts.map((payout) => {
-            const team = standings[payout.place - 1];
-            const recipients = team
-              ? eligiblePayoutRecipients(team, contestants)
-              : "";
-            return (
-              <div key={payout.place}>
-                <span>{ordinal(payout.place)} place · {Math.round(payout.percentage * 100)}%<small>{recipients}</small></span>
-                <strong>${payout.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+        <div className="payoff-stats">
+          <div><span>Participants</span><strong>{payoffParticipants}</strong></div>
+          <div><span>Headers</span><strong>{payoffHeaders}</strong></div>
+          <div><span>Heelers</span><strong>{payoffHeelers}</strong></div>
+          <div><span>Teams</span><strong>{roundOneTeams.length}</strong></div>
+          <div><span>Total money in the pot</span><strong>{payoffMoney(payoffTotalPot)}</strong></div>
+          <div><span>Total free runs</span><strong>{payoffFreeRuns}</strong></div>
+          <div><span>Free run deductions</span><strong>{payoffMoney(payoffFreeRunDeduction)}</strong></div>
+          <div><span>Total jackpot money</span><strong>{payoffMoney(purse)}</strong></div>
+        </div>
+        <div className="payoff-columns">
+          <div>
+            <h4>Winners</h4>
+            {payoffWinners.length ? payoffWinners.map((winner) => (
+              <div className="payoff-row payoff-winner-row" key={winner.payout.place}>
+                <span><b className={`place place-${winner.payout.place}`}>{winner.payout.place}</b></span>
+                <span className="payoff-row-main"><strong>{rider(winner.team.headerId)} x {rider(winner.team.heelerId)}</strong><small>{winner.rounds} rounds · {winner.totalTime}s{winner.note ? ` · ${winner.note}` : ""}</small></span>
+                <span className="payoff-row-amount"><strong>{payoffMoney(winner.payout.amount)}</strong><small>{Math.round(winner.payout.percentage * 100)}% to split</small></span>
               </div>
-            );
-          }) : <p>Qualified runs will populate the payout projection.</p>}
+            )) : <p className="payoff-empty">Qualified runs will populate the winners.</p>}
+          </div>
+          <div>
+            <h4>Rider shares</h4>
+            {payoffRiderShares.length ? payoffRiderShares.map((share) => (
+              <div className="payoff-row" key={share.contestantId}>
+                <span className="payoff-row-main"><strong>{rider(share.contestantId)}</strong><small>{share.places.join(", ")}</small></span>
+                <span className="payoff-row-amount"><strong>{payoffMoney(share.amount)}</strong></span>
+              </div>
+            )) : <p className="payoff-empty">Rider shares appear once winners are known.</p>}
+          </div>
         </div>
       </section>
     </>
@@ -4827,13 +4950,7 @@ function ordinal(place: number) {
   return `${place}th`;
 }
 
-function eligiblePayoutRecipients(team: Team, contestants: Contestant[]) {
-  const name = (id: string) =>
-    contestants.find((contestant) => contestant.id === id)?.name ?? "Unknown";
-  if (team.headerFreeRun) return `${name(team.heelerId)} eligible · Header FR excluded`;
-  if (team.heelerFreeRun) return `${name(team.headerId)} eligible · Heeler FR excluded`;
-  return `${name(team.headerId)} & ${name(team.heelerId)} eligible`;
-}
+
 
 function App() {
   const route = parsePublicRoute(window.location.search);
