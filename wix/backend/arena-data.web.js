@@ -694,6 +694,14 @@ function publishedResults(event, teams, contestants) {
         grouped.set(key, [...(grouped.get(key) || []), team]);
       });
     const names = new Map(contestants.map((contestant) => [contestant.id, contestant.name]));
+    // Published results carry only the final classification: teams whose
+    // latest resolved run happened in the last roped round, ranked like the
+    // LED scoreboard. Teams left in earlier rounds are not listed.
+    const resolvedRuns = (runs) =>
+      runs.filter((run) => run.status !== "ready");
+    const finalRound = [...grouped.values()]
+      .flatMap(resolvedRuns)
+      .reduce((highest, run) => Math.max(highest, Number(run.round) || 1), 1);
     return [...grouped.values()]
       .map((runs) => {
         const completed = runs.filter(
@@ -705,6 +713,10 @@ function publishedResults(event, teams, contestants) {
         );
         const qualified =
           completed.length > 0 && !runs.some((run) => run.status === "no-time");
+        const latest = resolvedRuns(runs).reduce(
+          (last, run) => (!last || run.round > last.round ? run : last),
+          null,
+        );
         return {
           headerName: names.get(runs[0].headerId) || "Unknown contestant",
           heelerName: names.get(runs[0].heelerId) || "Unknown contestant",
@@ -713,14 +725,23 @@ function publishedResults(event, teams, contestants) {
           status: qualified ? "qualified" : "no-time",
           qualified,
           total,
+          latest,
         };
       })
-      .sort((left, right) => {
-        if (left.qualified !== right.qualified) return left.qualified ? -1 : 1;
-        if (left.rounds !== right.rounds) return right.rounds - left.rounds;
-        return left.total - right.total;
-      })
-      .map(({ qualified, total, ...result }, index) => ({
+      .filter(
+        (entry) =>
+          entry.latest &&
+          entry.latest.round === finalRound &&
+          entry.latest.status === "complete" &&
+          entry.latest.rawTime !== null,
+      )
+      .sort(
+        (left, right) =>
+          left.total - right.total ||
+          Number(left.latest.drawPosition || 0) -
+            Number(right.latest.drawPosition || 0),
+      )
+      .map(({ qualified, total, latest, ...result }, index) => ({
         place: index + 1,
         ...result,
       }));
