@@ -33,10 +33,6 @@ const signupPage = publicSite.slice(
   publicSite.indexOf("function SignupPage("),
   publicSite.indexOf("function NotFound("),
 );
-const checkout = signupPage.slice(
-  signupPage.indexOf("const checkout = async"),
-  signupPage.indexOf("const startNewCart"),
-);
 const cashBackend = backend.slice(
   backend.indexOf("async function submitPublicSignupCashLocked"),
   backend.indexOf("export async function getPublicSignupPaymentStatus"),
@@ -102,64 +98,19 @@ describe("public cash signup frontend", () => {
     expect(cashBridge).not.toMatch(/\bamount\b/);
   });
 
-  it("keeps card as the default and presents accessible payment choices", () => {
-    expect(signupPage).toContain(
-      'useState<"card" | "cash">("card")',
-    );
-    expect(signupPage).toContain("<legend>Payment method</legend>");
-    expect(signupPage).toContain('type="radio" name="payment-method"');
-    expect(signupPage).toContain("Pay by credit card");
-    expect(signupPage).toContain("Pay cash at event");
-    expect(signupPage).toContain(
-      "Registration is confirmed now; the full balance is due at event check-in.",
-    );
-  });
-
-  it("keeps card checkout intact and isolates cash from checkout and polling", () => {
-    const cashBranch = checkout.slice(
-      checkout.indexOf('if (paymentMethod === "cash")'),
-      checkout.indexOf("} else {"),
-    );
-    const cardBranch = checkout.slice(
-      checkout.indexOf("} else {"),
-      checkout.indexOf("} catch (error)"),
-    );
-    expect(cashBranch).toContain("submitPublicSignupCash(");
-    expect(cashBranch).not.toContain("startPublicSignupPayment(");
-    expect(cashBranch).not.toContain("getPublicSignupPaymentStatus(");
-    expect(cardBranch).toContain("startPublicSignupPayment(");
-    expect(signupPage).toContain(
-      "Opening secure Wix checkout…",
-    );
-    expect(signupPage).toContain(
-      "getPublicSignupPaymentStatus(",
-    );
-  });
-
-  it("shows cash-due wording and preserves retry state with double-submit protection", () => {
-    expect(signupPage).toContain("Registration confirmed — cash due");
-    expect(signupPage).toContain("cashConfirmation.message");
-    expect(signupPage).toContain("cashConfirmation.amount");
-    expect(signupPage).toContain("cashConfirmation.submissionId");
-    expect(signupPage).not.toContain("Payment confirmed — cash");
-    expect(checkout).toContain("checkoutSubmissionInFlight.current");
-    expect(checkout).toContain("checkoutSubmissionInFlight.current = true");
-    expect(checkout).toContain("checkoutSubmissionInFlight.current = false");
-    expect(signupPage).toContain("cashSubmissionAttempted");
-    expect(signupPage).toContain("disabled={full || cashSubmissionAttempted}");
-    expect(signupPage).toContain(
-      "Start over with a new submission",
-    );
-    expect(signupPage).toContain(
-      "Retry unchanged, or start over to make changes.",
-    );
-    const failure = checkout.slice(
-      checkout.indexOf("} catch (error)"),
-      checkout.indexOf("} finally {"),
-    );
-    expect(failure).not.toContain("setSelections");
-    expect(failure).not.toContain("setPaymentMethod");
-    expect(failure).not.toContain("setSubmissionId");
+  it("reserves spots from the signup page without any payment UI or money amounts", () => {
+    expect(signupPage).toContain("submitReservedSpot(");
+    expect(signupPage).toContain("Send reservation");
+    expect(signupPage).not.toContain("startPublicSignupPayment(");
+    expect(signupPage).not.toContain("submitPublicSignupCash(");
+    expect(signupPage).not.toContain("getPublicSignupPaymentStatus(");
+    expect(signupPage).not.toContain("formatMoney");
+    expect(signupPage).not.toContain("Payment method");
+    expect(signupPage).not.toContain("Pay by credit card");
+    expect(signupPage).not.toContain("options.price");
+    expect(signupPage).toContain("reservationInFlight.current");
+    expect(signupPage).toContain("reservationInFlight.current = true");
+    expect(signupPage).toContain("reservationInFlight.current = false");
   });
 
   it("does not persist payment choice or cash confirmation locally", () => {

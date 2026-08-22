@@ -39,24 +39,18 @@ import {
   createContestantAccount,
   createRiderAccount,
   isWixEmbed,
-  getPublicSignupPaymentStatus,
   loadPublicArenaData,
   loadSignupOptions,
   publicEventSectionTargetId,
-  startPublicSignupPayment,
   subscribeToWixSectionNavigation,
-  submitPublicSignupCash,
   submitReservedSpot,
   submitSpectatorPrediction,
   updateContestantProfile,
   type ContestantPortalData,
   type ContestantProfileUpdate,
-  type PublicSignupCashConfirmation,
   type PublicSignupOptions,
-  type PublicSignupPayment,
   type PublicSignupCompetition,
   type PublicSignupSelection,
-  type ReservedSpotConfirmation,
 } from "./wixBridge";
 import {
   createSpectatorPrediction,
@@ -88,7 +82,7 @@ import type { ArenaData } from "./types";
 import { isBrowserStoragePreview } from "./adminAccess";
 
 const localWorkspaceKey = "arena-command-data-v1";
-const registrationLinkLabel = "Accepting Entries - Log in or call/text Will 954-520-2631";
+const registrationLinkLabel = "Reserve your spot here or call/text Will 954-520-2631";
 
 function loadLocalPublicData() {
   const saved = window.localStorage.getItem(localWorkspaceKey);
@@ -1367,70 +1361,6 @@ function PublishedSpectatorWinners({
   );
 }
 
-function ReserveSpotCard({ competition }: { competition: PublicCompetition }) {
-  const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [pin, setPin] = useState("");
-  const [position, setPosition] = useState<"Header" | "Heeler" | "Both">("Both");
-  const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [confirmation, setConfirmation] = useState<ReservedSpotConfirmation | null>(null);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    try {
-      if (!isWixEmbed()) {
-        throw new Error("Spot reservations are available on the Destiny Ranch Arena Wix site.");
-      }
-      const result = await submitReservedSpot({
-        competitionId: competition.id,
-        email,
-        pin,
-        position,
-        notes: notes.trim() || undefined,
-      });
-      if (!result) throw new Error("Reservations are unavailable right now.");
-      setConfirmation(result);
-      setPin("");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not reserve your spot.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <section className="public-reserve-spot">
-      <div className="public-section-heading"><h2>Reserve a spot</h2><span>Will-call list for the arena office</span></div>
-      {confirmation ? (
-        <p className="public-form-message" role="status">
-          {confirmation.existing
-            ? `${confirmation.riderName}, you are already on the reserved list for ${confirmation.competitionName}. See you at the arena!`
-            : `${confirmation.riderName}, your spot for ${confirmation.competitionName} is reserved. The arena office has you on the list.`}
-        </p>
-      ) : !open ? (
-        <>
-          <p>Planning to rope but not entering online yet? Reserve your spot and the arena office will hold you on the will-call list.</p>
-          <button className="public-button" onClick={() => setOpen(true)}>Reserve my spot</button>
-        </>
-      ) : (
-        <form onSubmit={submit}>
-          <p>Sign in with your rider account to reserve. Need an account? Create one from the signup page first.</p>
-          <label>Email address<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-          <label>Four-digit PIN<input type="password" inputMode="numeric" autoComplete="one-time-code" pattern="\d{4}" maxLength={4} required value={pin} onChange={(event) => setPin(event.target.value)} /></label>
-          <label>Position<select value={position} onChange={(event) => setPosition(event.target.value as "Header" | "Heeler" | "Both")}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
-          <label>Note for the office (optional)<input maxLength={200} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Partner preference, arrival time…" /></label>
-          <button className="public-button primary" disabled={busy}>{busy ? "Reserving…" : "Reserve my spot"}</button>
-          {message && <p className="public-form-message" role="alert">{message}</p>}
-        </form>
-      )}
-    </section>
-  );
-}
-
 function CompetitionPage({ competition, meet }: { competition?: PublicCompetition; meet?: PublicMeet }) {
   if (!competition) return <NotFound />;
   return (
@@ -1477,7 +1407,6 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
           <p>{competition.allowRepeatPartners ? "Repeat partnerships are allowed." : "Each partnership may enter once."}</p>
         </section>
       )}
-      {competition.status !== "Complete" && <ReserveSpotCard competition={competition} />}
       <section className="public-detail-section" id="results">
         <div className="public-section-heading"><h2>{competition.status === "Live" ? "Live standings" : "Official results"}</h2>{competition.resultsPublished && <span>Published by arena staff</span>}</div>
         <ResultsTable competition={competition} />
@@ -1507,79 +1436,27 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   });
   const [options, setOptions] = useState<PublicSignupOptions | null>(null);
   const [selections, setSelections] = useState<Record<string, PublicSignupSelection>>({});
-  const [submissionId, setSubmissionId] = useState("");
-  const [payment, setPayment] = useState<PublicSignupPayment | null>(null);
-  const [cashConfirmation, setCashConfirmation] =
-    useState<PublicSignupCashConfirmation | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "cash">("card");
-  const [cashSubmissionAttempted, setCashSubmissionAttempted] = useState(false);
+  const [reserved, setReserved] = useState<
+    { label: string; existing: boolean }[] | null
+  >(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const accountSubmissionInFlight = useRef(false);
-  const checkoutSubmissionInFlight = useRef(false);
+  const reservationInFlight = useRef(false);
 
-  const paymentPending =
-    payment?.status === "creating" ||
-    payment?.status === "payment-created" ||
-    payment?.status === "pending";
   const selectedEntries = Object.values(selections);
-  const total = selectedEntries.length * (options?.price.amount ?? 200);
-  const formatMoney = (amount: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: options?.price.currency ?? "USD",
-      maximumFractionDigits: 0,
-    }).format(amount);
-
-  useEffect(() => {
-    if (!options || !paymentPending || !submissionId) return;
-    const poll = window.setInterval(async () => {
-      try {
-        const result = await getPublicSignupPaymentStatus(
-          options.signupToken,
-          submissionId,
-        );
-        if (!result) return;
-        setPayment(result);
-        setMessage(result.message);
-      } catch (error) {
-        console.error("Could not refresh Wix payment status.", error);
-        if (
-          error instanceof Error &&
-          /sign in again|session expired/i.test(error.message)
-        ) {
-          setOptions(null);
-          setPayment(null);
-          setCashConfirmation(null);
-          setCashSubmissionAttempted(false);
-          setSubmissionId("");
-          setMessage("Your secure session expired. Sign in again to continue checking payment.");
-        }
-      }
-    }, 2500);
-    return () => window.clearInterval(poll);
-  }, [options, paymentPending, submissionId]);
 
   if (!competition) return <NotFound />;
 
   const applySignupOptions = (result: PublicSignupOptions) => {
-    const active = result.activePayment;
-    const nextSubmissionId =
-      active?.submissionId ??
-      window.crypto.randomUUID?.() ??
-      `${Date.now()}-${result.contestant.id}`;
     const initial = result.competitions.find((item) => item.id === competition.id);
     const initialRole = initial?.roles.find(
       (role) => !initial.roleCapacities?.find((capacity) => capacity.role === role)?.full,
     );
     setOptions(result);
-    setSubmissionId(nextSubmissionId);
-    setPayment(active ?? null);
-    setCashConfirmation(null);
-    setPaymentMethod("card");
-    setCashSubmissionAttempted(false);
+    setReserved(null);
     setSelections(
-      !active && initial && initialRole
+      initial && initialRole
         ? {
             [initial.id]: {
               competitionId: initial.id,
@@ -1588,7 +1465,6 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
           }
         : {},
     );
-    if (active) setMessage(active.message);
   };
 
   const authenticate = async (event: FormEvent) => {
@@ -1597,12 +1473,11 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     setMessage("");
     try {
       if (!isWixEmbed()) {
-        throw new Error("Online signup is available on the Destiny Ranch Arena Wix site.");
+        throw new Error("Online reservations are available on the Destiny Ranch Arena Wix site.");
       }
       const result = await loadSignupOptions(competition.id, email, pin);
       if (!result) throw new Error("Signup options are unavailable.");
       applySignupOptions(result);
-      setPin("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not sign in.");
     } finally {
@@ -1634,6 +1509,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       );
       if (!result) throw new Error("Contestant account could not be opened.");
       setEmail(account.email);
+      setPin(account.pin);
       applySignupOptions(result);
       setMessage(`Account created for ${result.contestant.name}. Choose your ropings below.`);
     } catch (error) {
@@ -1692,10 +1568,10 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     }));
   };
 
-  const checkout = async (event: FormEvent) => {
+  const reserveSpots = async (event: FormEvent) => {
     event.preventDefault();
     if (
-      checkoutSubmissionInFlight.current ||
+      reservationInFlight.current ||
       !options ||
       !selectedEntries.length
     ) {
@@ -1713,68 +1589,52 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       );
       return;
     }
-    checkoutSubmissionInFlight.current = true;
+    reservationInFlight.current = true;
     setBusy(true);
-    setMessage(
-      paymentMethod === "cash"
-        ? "Confirming registration with cash due at check-in…"
-        : "Opening secure Wix checkout…",
-    );
+    setMessage("");
+    const results: { label: string; existing: boolean }[] = [];
     try {
-      if (paymentMethod === "cash") {
-        setCashSubmissionAttempted(true);
-        const result = await submitPublicSignupCash(
-          options.signupToken,
-          submissionId,
-          selectedEntries,
+      for (const selection of selectedEntries) {
+        const roping = options.competitions.find(
+          (item) => item.id === selection.competitionId,
         );
-        if (!result) throw new Error("Cash registration could not be confirmed.");
-        setCashConfirmation(result);
-        setSubmissionId(result.submissionId);
-        setMessage(result.message);
-      } else {
-        const result = await startPublicSignupPayment(
-          options.signupToken,
-          submissionId,
-          selectedEntries,
-        );
-        if (!result) throw new Error("Wix checkout could not be opened.");
-        setPayment(result);
-        setSubmissionId(result.submissionId);
-        setMessage(result.message);
+        const label = roping
+          ? formatSignupRopingLabel(roping.name, roping.date, roping.startTime)
+          : selection.competitionId;
+        const result = await submitReservedSpot({
+          competitionId: selection.competitionId,
+          email,
+          pin,
+          position: selection.role,
+        });
+        if (!result) throw new Error("Reservations are unavailable right now.");
+        results.push({ label, existing: result.existing });
       }
+      setReserved(results);
+      setSelections({});
     } catch (error) {
+      if (results.length) setReserved(results);
       setMessage(
         error instanceof Error
           ? error.message
-          : paymentMethod === "cash"
-            ? "Cash registration could not be confirmed."
-            : "The payment could not be started.",
+          : "Your reservation could not be sent. Call/text Will 954-520-2631.",
       );
     } finally {
-      checkoutSubmissionInFlight.current = false;
+      reservationInFlight.current = false;
       setBusy(false);
     }
   };
 
-  const startNewCart = () => {
-    setPayment(null);
-    setCashConfirmation(null);
-    setPaymentMethod("card");
-    setCashSubmissionAttempted(false);
-    setSelections({});
-    setSubmissionId(
-      window.crypto.randomUUID?.() ??
-        `${Date.now()}-${options?.contestant.id ?? "contestant"}`,
-    );
+  const startNewReservation = () => {
+    setReserved(null);
     setMessage("");
   };
 
   return (
     <section className="public-signup public-signup-cart">
       <ReturnToEventsLink />
-      <h1>Enter the arena</h1>
-      <p>Sign in once, choose every open roping you want to enter, then pay securely by credit card through Wix or confirm now and pay cash at event check-in.</p>
+      <h1>Reserve your spot</h1>
+      <p>Sign in once, check every roping you plan to enter, then send your reservation. The arena office will hold your place on the will-call list — no payment is needed now.</p>
       {!options ? (
         <>
           <div className="public-account-choice" role="tablist" aria-label="Contestant account access">
@@ -1805,22 +1665,20 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
         </>
       ) : (
         <>
-          <div className="public-authenticated"><CheckCircle2 /><span>Entering as <strong>{options.contestant.name}</strong></span></div>
-          {cashConfirmation ? (
-            <div className="public-payment-status cash-due">
-              <strong>Registration confirmed — cash due</strong>
-              <p>{cashConfirmation.message}</p>
-              <p><b>Balance due: {formatMoney(cashConfirmation.amount)}</b></p>
-              <small>Submission: {cashConfirmation.submissionId}</small>
-            </div>
-          ) : payment && (paymentPending || payment.status === "successful" || payment.status === "fulfillment-failed") ? (
-            <div className={`public-payment-status ${payment.status}`}>
-              <strong>{payment.status === "successful" ? "Payment confirmed" : payment.status === "fulfillment-failed" ? "Arena assistance needed" : "Checking payment"}</strong>
-              <p>{payment.message}</p>
-              <small>Submission: {payment.submissionId}</small>
+          <div className="public-authenticated"><CheckCircle2 /><span>Reserving as <strong>{options.contestant.name}</strong></span></div>
+          {reserved ? (
+            <div className="public-payment-status successful">
+              <strong>Reservation sent</strong>
+              <ul className="public-reservation-summary">
+                {reserved.map((item) => (
+                  <li key={item.label}>{item.label} — {item.existing ? "already on the reserved list" : "spot reserved"}</li>
+                ))}
+              </ul>
+              <p>The arena office has you on the will-call list. See you at the arena!</p>
+              <button className="public-button" type="button" onClick={startNewReservation}>Reserve more ropings</button>
             </div>
           ) : (
-            <form onSubmit={checkout}>
+            <form onSubmit={reserveSpots}>
               <div className="public-roping-list">
                 {options.competitions.length ? options.competitions.map((roping) => {
                   const selection = selections[roping.id];
@@ -1831,9 +1689,8 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                   return (
                     <article className={`public-roping-choice ${selection ? "selected" : ""}${full ? " full" : ""}`} key={roping.id}>
                       <label className="public-roping-toggle">
-                        <input type="checkbox" checked={Boolean(selection)} disabled={full || cashSubmissionAttempted} onChange={() => toggleCompetition(roping.id)} />
+                        <input type="checkbox" checked={Boolean(selection)} disabled={full} onChange={() => toggleCompetition(roping.id)} />
                         <span><strong>{formatSignupRopingLabel(roping.name, roping.date, roping.startTime)}</strong>{full && <small>Registration full</small>}</span>
-                        <b>{formatMoney(options.price.amount)}</b>
                       </label>
                       {roping.roleCapacities?.length ? (
                         <p className="public-payment-note">
@@ -1850,7 +1707,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                               const roleFull = roping.roleCapacities?.find((capacity) => capacity.role === role)?.full;
                               return (
                               <label className="public-radio" key={role}>
-                                <input type="radio" name={`role-${roping.id}`} disabled={roleFull || cashSubmissionAttempted} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role })} />
+                                <input type="radio" name={`role-${roping.id}`} disabled={roleFull} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role })} />
                                 {role}{roleFull ? " - FULL" : ""}
                               </label>
                               );
@@ -1867,44 +1724,14 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
               </div>
               <div className="public-cart-total">
                 <span>{selectedEntries.length} {selectedEntries.length === 1 ? "roping" : "ropings"} selected</span>
-                <strong>Total {formatMoney(total)}</strong>
               </div>
-              {!payment && (
-                <fieldset className="public-payment-method">
-                  <legend>Payment method</legend>
-                  <label className="public-payment-method-option">
-                    <input type="radio" name="payment-method" value="card" disabled={cashSubmissionAttempted} checked={paymentMethod === "card"} onChange={() => setPaymentMethod("card")} />
-                    <span><strong>Pay by credit card</strong><small>Continue to secure Wix checkout.</small></span>
-                  </label>
-                  <label className="public-payment-method-option">
-                    <input type="radio" name="payment-method" value="cash" disabled={cashSubmissionAttempted} checked={paymentMethod === "cash"} onChange={() => setPaymentMethod("cash")} />
-                    <span><strong>Pay cash at event</strong><small>Registration is confirmed now; the full balance is due at event check-in.</small></span>
-                  </label>
-                </fieldset>
-              )}
               <p className="public-payment-note">
-                {cashSubmissionAttempted
-                  ? "This cash submission is locked to the selected ropings. Retry unchanged, or start over to make changes."
-                  : paymentMethod === "cash" && !payment
-                  ? "Each checked roping is one basic entry. No card checkout will open; payment remains due at the event."
-                  : "Each checked roping is one basic entry. Wix securely processes the combined credit-card payment."}
+                No payment now — your reservation goes straight to the arena office's will-call list. Entry fees are settled at the event.
               </p>
               <button className="public-button primary" disabled={busy || !selectedEntries.length}>
-                {busy
-                  ? paymentMethod === "cash"
-                    ? "Confirming cash registration…"
-                    : "Opening Wix checkout…"
-                  : paymentMethod === "cash" && !payment
-                    ? `Confirm registration — ${formatMoney(total)} cash due`
-                    : `Pay ${formatMoney(total)} and preregister`}
+                {busy ? "Sending reservation…" : "Send reservation"}
               </button>
-              {cashSubmissionAttempted && !cashConfirmation && (
-                <button className="public-button" type="button" disabled={busy} onClick={startNewCart}>Start over with a new submission</button>
-              )}
             </form>
-          )}
-          {payment && !paymentPending && payment.status !== "successful" && payment.status !== "fulfillment-failed" && (
-            <button className="public-button" type="button" onClick={startNewCart}>Start a new checkout</button>
           )}
         </>
       )}

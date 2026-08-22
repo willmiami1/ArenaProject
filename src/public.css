@@ -160,14 +160,6 @@
 .public-rules dt { color: #c4b29f; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; }
 .public-rules dd { margin: 8px 0 0; font-family: "Manrope",sans-serif; font-size: 19px; }
 .public-rules>p { margin: 20px 0 0; color: #d4c5b5; font-size: 11px; }
-.public-reserve-spot { margin: 10px 0 80px; padding: 40px; color: var(--public-cream); background: var(--public-ink); }
-.public-reserve-spot .public-section-heading { margin-bottom: 18px; }
-.public-reserve-spot>p,.public-reserve-spot form>p { margin: 0 0 18px; color: #d4c5b5; font-size: 12px; max-width: 640px; }
-.public-reserve-spot form { display: grid; gap: 18px; max-width: 520px; }
-.public-reserve-spot label { display: grid; gap: 7px; color: var(--public-cream); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
-.public-reserve-spot input,.public-reserve-spot select { width: 100%; min-height: 49px; padding: 11px 13px; color: var(--public-cream); background: #0e0b09; border: 1px solid #80674f; border-radius: 0; }
-.public-reserve-spot .public-button { justify-self: start; }
-.public-reserve-spot .public-form-message { margin: 0; }
 .public-results { border-top: 1px solid rgba(234,220,198,.25); }
 .public-result-row { min-height: 78px; display: grid; grid-template-columns: 80px 1fr 100px 120px; align-items: center; gap: 16px; padding: 12px 8px; border-bottom: 1px solid rgba(234,220,198,.18); }
 .public-result-row.header { min-height: 42px; color: var(--public-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
@@ -222,6 +214,9 @@
 .public-payment-status.successful { color: #1a120b; background: #d8e8c9; border-color: #d8e8c9; }
 .public-payment-status.cash-due { color: #1a120b; background: #f2d6a2; border-color: #f2d6a2; }
 .public-payment-status.successful strong,.public-payment-status.successful p,.public-payment-status.successful small,.public-payment-status.cash-due strong,.public-payment-status.cash-due p,.public-payment-status.cash-due small { color: #1a120b; }
+.public-reservation-summary { margin: 14px 0; padding-left: 20px; display: grid; gap: 8px; font-size: 13px; }
+.public-payment-status.successful .public-reservation-summary { color: #1a120b; }
+.public-payment-status .public-button { margin-top: 12px; }
 .public-form-message { padding: 14px; color: #422814!important; background: #e6c89f; font-size: 12px; }
 .public-form-message.success { color: #1e3b24!important; background: #cbe0ba; }
 .public-rider { width: min(900px,100%); margin: 70px auto 0; display: grid; gap: 22px; }
@@ -412,7 +407,6 @@
   .public-registered-roster { grid-template-columns: 1fr; gap: 12px; }
   .public-rider-role { padding: 16px; }
   .public-rules { margin-bottom: 55px; padding: 25px 20px; }
-  .public-reserve-spot { margin-bottom: 55px; padding: 25px 20px; }
   .public-rules dl { grid-template-columns: 1fr; }
   .public-rules dl div { border-right: 0; }
   .public-result-row { grid-template-columns: 45px 1fr 50px 70px; gap: 8px; font-size: 11px; }
