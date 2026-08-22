@@ -227,6 +227,14 @@ export function RegistrationDesk() {
   const [waiverError, setWaiverError] = useState("");
 
   useEffect(() => {
+    // Inside the Wix embed the page has its own scrollbar; hide the app's window
+    // scrollbar so only one shows. Wheel/touch scrolling still works.
+    if (!isWixEmbed()) return;
+    document.documentElement.classList.add("hide-window-scrollbar");
+    return () => document.documentElement.classList.remove("hide-window-scrollbar");
+  }, []);
+
+  useEffect(() => {
     if (!embedded) return;
     loadRegistrationDeskData()
       .then((result) =>

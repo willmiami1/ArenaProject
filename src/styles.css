@@ -889,7 +889,7 @@ main { grid-column: 2; min-width: 0; }
 .app-shell ::-webkit-scrollbar-track { background: #0d0a08; }
 .app-shell ::-webkit-scrollbar-thumb { background: #5d412f; border: 2px solid #0d0a08; border-radius: 10px; }
 
-.registration-desk { height: 100vh; height: 100dvh; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; color: #eadcc6; background: #0d0a08; }
+.registration-desk { min-height: 100vh; min-height: 100dvh; overflow-x: hidden; color: #eadcc6; background: #0d0a08; }
 .registration-desk-header { min-height: 110px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px max(22px,calc((100vw - 1300px)/2 + 44px)); background: #17110d; border-bottom: 1px solid #49372b; }
 .registration-desk-header h1 { display: flex; align-items: center; gap: 11px; margin: 3px 0; font-family: "Manrope",sans-serif; font-size: clamp(25px,3vw,38px); }
 .registration-desk-header h1 svg { color: #d49a61; }
