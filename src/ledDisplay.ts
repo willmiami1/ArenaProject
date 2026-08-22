@@ -51,14 +51,18 @@ export function ledQualifiedRunsThroughRound(
   teams: Team[],
   round: number,
 ) {
-  const latestResolvedRuns = new Map<string, Team>();
+  // Latest completed run per team entry. A later no-time drops the team into
+  // the fewer-rounds-caught group (still ranked by their completed total)
+  // instead of removing them from the classification.
+  const latestCompletedRuns = new Map<string, Team>();
   teams
     .filter(
       (team) =>
         team.eventId === eventId &&
         team.round <= round &&
         !team.scratched &&
-        team.status !== "ready",
+        team.status === "complete" &&
+        team.rawTime !== null,
     )
     .forEach((team) => {
       const key = [
@@ -67,24 +71,25 @@ export function ledQualifiedRunsThroughRound(
         team.headerEntryNumber ?? 1,
         team.heelerEntryNumber ?? 1,
       ].join("|");
-      const current = latestResolvedRuns.get(key);
+      const current = latestCompletedRuns.get(key);
       if (!current || team.round > current.round) {
-        latestResolvedRuns.set(key, team);
+        latestCompletedRuns.set(key, team);
       }
     });
 
-  return [...latestResolvedRuns.values()].filter(
-    (team) => team.status === "complete" && team.rawTime !== null,
-  );
+  return [...latestCompletedRuns.values()];
 }
 
 export function sortLedStandings(
   teams: Team[],
   qualifiedTotal: (team: Team) => number,
+  completedRounds: (team: Team) => number,
 ) {
+  // Classification: most rounds caught first, then fastest total inside each
+  // group (3/3 fastest→slowest, then 2/3 fastest→slowest, then 1/3, ...).
   return [...teams].sort(
     (left, right) =>
-      right.round - left.round ||
+      completedRounds(right) - completedRounds(left) ||
       qualifiedTotal(left) - qualifiedTotal(right) ||
       left.drawPosition - right.drawPosition,
   );
