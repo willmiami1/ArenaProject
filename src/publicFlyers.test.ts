@@ -5,8 +5,17 @@ import {
 } from "./publicFlyers";
 
 describe("public flyer categories", () => {
-  it("shows no future event flyers", () => {
-    expect(futureEventFlyers).toEqual([]);
+  it("lists the upcoming event flyers soonest first", () => {
+    expect(futureEventFlyers).toEqual([
+      {
+        src: "./august-28-mixed-roping-flyer.png",
+        alt: "Destiny Ranch Arena August 28 Mixed Roping event flyer",
+      },
+      {
+        src: "./september-11-round-robin-2026-flyer.png",
+        alt: "Destiny Ranch Arena September 11 Round Robin event flyer",
+      },
+    ]);
   });
 
   it("keeps the winners flyers in the past winners category, newest first", () => {
