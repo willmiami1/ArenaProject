@@ -24,6 +24,7 @@ import { seedData } from "./data";
 import {
   aggregatePublicSpectatorLeaderboard,
   competitionGroup,
+  normalizePublicArenaData,
   parsePublicRoute,
   publicHorseNamesLabel,
   projectPublicArenaData,
@@ -1911,7 +1912,9 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
         const result = await loadPublicArenaData();
         if (!cancelled && pollGuard.complete(request)) {
           hasUsableData = true;
-          setData(result);
+          // Normalize at ingestion so stale Wix payloads published before the
+          // final-round fix still render the final classification only.
+          setData(result ? normalizePublicArenaData(result) : result);
           setError("");
           setRefreshWarning("");
         }

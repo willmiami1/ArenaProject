@@ -2248,11 +2248,14 @@ function ReservedSpotsView({
 }) {
   const sortedEvents = useMemo(
     () =>
-      [...events].sort(
-        (a, b) =>
-          (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0) ||
-          a.name.localeCompare(b.name),
-      ),
+      events
+        // Past ropings don't take reservations, so keep them out of the list.
+        .filter((item) => item.status !== "Complete")
+        .sort(
+          (a, b) =>
+            (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0) ||
+            a.name.localeCompare(b.name),
+        ),
     [events],
   );
   const [selectedEventId, setSelectedEventId] = useState(
@@ -2264,21 +2267,39 @@ function ReservedSpotsView({
     phone: "",
     notes: "",
   });
+  // Phone value last filled from a rider profile, so a manual entry is never
+  // overwritten when the rider name changes.
+  const [autoPhone, setAutoPhone] = useState("");
   const event =
-    events.find((item) => item.id === selectedEventId) ?? sortedEvents[0];
+    sortedEvents.find((item) => item.id === selectedEventId) ?? sortedEvents[0];
   const spots = event?.reservedSpots ?? [];
   const meetName = (target: ArenaEvent) =>
     meets.find((meet) => meet.id === target.parentEventId)?.name ?? "";
   const headerCount = spots.filter((spot) => spot.position !== "Heeler").length;
   const heelerCount = spots.filter((spot) => spot.position !== "Header").length;
+  const contestantByName = (name: string) =>
+    contestants.find(
+      (item) => item.name.trim().toUpperCase() === name.trim().toUpperCase(),
+    );
+  const setRiderName = (value: string) => {
+    const name = value.toUpperCase();
+    const profilePhone = contestantByName(name)?.phone?.trim() ?? "";
+    setForm((current) => ({
+      ...current,
+      name,
+      phone:
+        !current.phone.trim() || current.phone === autoPhone
+          ? profilePhone
+          : current.phone,
+    }));
+    setAutoPhone(profilePhone);
+  };
   const addSpot = (formEvent: FormEvent) => {
     formEvent.preventDefault();
     if (!event) return;
     const name = form.name.trim().toUpperCase();
     if (!name) return;
-    const contestant = contestants.find(
-      (item) => item.name.trim().toUpperCase() === name,
-    );
+    const contestant = contestantByName(name);
     onUpdateEvent({
       ...event,
       reservedSpots: [
@@ -2287,7 +2308,7 @@ function ReservedSpotsView({
           id: uid("reserved"),
           name,
           position: form.position,
-          phone: form.phone.trim(),
+          phone: form.phone.trim() || contestant?.phone?.trim() || "",
           notes: form.notes.trim(),
           source: "staff",
           contestantId: contestant?.id,
@@ -2296,6 +2317,7 @@ function ReservedSpotsView({
       ],
     });
     setForm({ name: "", position: form.position, phone: "", notes: "" });
+    setAutoPhone("");
   };
   const removeSpot = (spotId: string) => {
     if (!event) return;
@@ -2341,7 +2363,7 @@ function ReservedSpotsView({
                 list="reserved-rider-names"
                 autoCapitalize="characters"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value.toUpperCase() })}
+                onChange={(e) => setRiderName(e.target.value)}
                 placeholder="RIDER NAME"
               />
             </Field>

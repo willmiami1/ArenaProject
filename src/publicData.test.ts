@@ -14,9 +14,12 @@ import {
 import {
   aggregatePublicSpectatorLeaderboard,
   competitionGroup,
+  finalClassificationRows,
+  normalizePublicArenaData,
   parsePublicRoute,
   publicHorseNamesLabel,
   projectPublicArenaData,
+  type PublicStandingRow,
 } from "./publicData";
 import { publicStandingRows } from "./standings";
 import { createOnlineSignup, mergeStaleOnlineEntries } from "./onlineSignup";
@@ -934,6 +937,89 @@ describe("aggregate public standings", () => {
       publicStandingRows(slide, [roundOne, roundTwo], handicapNine)[0]
         .officialTotal,
     ).toBe(15);
+  });
+});
+
+describe("render-time final classification", () => {
+  const row = (overrides: Partial<PublicStandingRow> = {}): PublicStandingRow => ({
+    place: 1,
+    headerName: "Ada Header",
+    heelerName: "Bo Heeler",
+    rounds: 2,
+    officialTotal: 20,
+    status: "qualified",
+    ...overrides,
+  });
+
+  it("filters a stale every-entry payload down to the final round classification", () => {
+    const stale = [
+      row({ place: 1, rounds: 2, officialTotal: 20 }),
+      row({ place: 2, headerName: "Cal", heelerName: "Dee", rounds: 2, officialTotal: 21.5 }),
+      row({ place: 3, headerName: "Eli", heelerName: "Fay", rounds: 1, officialTotal: 8 }),
+      row({ place: 4, headerName: "Gus", heelerName: "Hal", rounds: 1, officialTotal: null, status: "no-time" }),
+    ];
+    expect(finalClassificationRows(stale)).toEqual([
+      row({ place: 1, rounds: 2, officialTotal: 20 }),
+      row({ place: 2, headerName: "Cal", heelerName: "Dee", rounds: 2, officialTotal: 21.5 }),
+    ]);
+  });
+
+  it("re-ranks places after dropping earlier-round teams", () => {
+    const stale = [
+      row({ place: 1, rounds: 1, officialTotal: 7, headerName: "Eli", heelerName: "Fay" }),
+      row({ place: 2, rounds: 2, officialTotal: 20 }),
+    ];
+    expect(finalClassificationRows(stale)).toEqual([
+      row({ place: 1, rounds: 2, officialTotal: 20 }),
+    ]);
+  });
+
+  it("keeps a corrected final-round-only payload unchanged", () => {
+    const corrected = [
+      row({ place: 1, officialTotal: 19 }),
+      row({ place: 2, headerName: "Cal", heelerName: "Dee", officialTotal: 20 }),
+    ];
+    expect(finalClassificationRows(corrected)).toEqual(corrected);
+  });
+
+  it("keeps duplicate partnerships that both roped the final round", () => {
+    const rows = [
+      row({ place: 1, officialTotal: 18 }),
+      row({ place: 2, officialTotal: 22 }),
+    ];
+    expect(finalClassificationRows(rows)).toHaveLength(2);
+  });
+
+  it("returns nothing when no team qualified", () => {
+    expect(
+      finalClassificationRows([
+        row({ officialTotal: null, status: "no-time", rounds: 1 }),
+      ]),
+    ).toEqual([]);
+    expect(finalClassificationRows([])).toEqual([]);
+  });
+
+  it("normalizes results in both competitions and meet children", () => {
+    const competition = event({ resultsPublished: true, rounds: 2 });
+    const projected = projectPublicArenaData(
+      workspace(competition, [run()]),
+      new Date(2026, 7, 3),
+    );
+    const stale = [
+      row({ place: 1, rounds: 2, officialTotal: 20 }),
+      row({ place: 2, headerName: "Eli", heelerName: "Fay", rounds: 1, officialTotal: 8 }),
+    ];
+    projected.competitions[0].results = stale;
+    projected.meets[0].competitions[0].results = [...stale];
+
+    const normalized = normalizePublicArenaData(projected);
+
+    expect(normalized.competitions[0].results).toEqual([
+      row({ place: 1, rounds: 2, officialTotal: 20 }),
+    ]);
+    expect(normalized.meets[0].competitions[0].results).toEqual([
+      row({ place: 1, rounds: 2, officialTotal: 20 }),
+    ]);
   });
 });
 
