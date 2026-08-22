@@ -5,21 +5,20 @@ import {
 } from "./publicFlyers";
 
 describe("public flyer categories", () => {
-  it("keeps the three current event flyers together", () => {
-    expect(futureEventFlyers.map((flyer) => flyer.src)).toEqual([
-      "./september-11-round-robin-flyer.png",
-      "./august-21-flyer.png",
-      "./august-28-flyer.png",
-    ]);
+  it("shows no future event flyers", () => {
+    expect(futureEventFlyers).toEqual([]);
   });
 
-  it("places the August 7 winners flyer in the past winners category", () => {
+  it("keeps the winners flyers in the past winners category, newest first", () => {
     expect(pastEventWinnerFlyers).toEqual([
+      {
+        src: "./august-21-winners-flyer.jpg",
+        alt: "Destiny Ranch Arena August 21 Round Robin winners",
+      },
       {
         src: "./august-7-flyer.jpg",
         alt: "Destiny Ranch Arena August 7 #10 Slide winners",
       },
     ]);
-    expect(futureEventFlyers).not.toContainEqual(pastEventWinnerFlyers[0]);
   });
 });
