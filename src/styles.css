@@ -791,9 +791,10 @@ main { grid-column: 2; min-width: 0; }
   .report-catalog-list > button,
   .report-filters,
   .report-columns,
-  .report-ready-card,
-  .report-preview
+  .report-ready-card
 ) { color: var(--ink); background: #18120e; border-color: var(--line); box-shadow: none; }
+/* Keep the report preview as a white paper document in dark mode */
+.app-shell .report-preview { --ink: #17201c; --muted: #6e7872; --line: #e3e3dc; --green: #285f46; color: var(--ink); background: #fff; border-color: #dfe3df; box-shadow: none; }
 .app-shell :is(.panel-heading,.table-toolbar,.meet-header,.competition-row,.run-row,.leader-row,.draw-row,.registration-row,.history-row,.desk-title,.portal-team-row,.portal-registration-row) { border-color: #382a20; }
 .app-shell :is(.stat-icon,.competition-icon,.report-card-icon,.report-type-icon,.person i,.draw-number,.place) { color: #d09a70; background: #2c2018; }
 .app-shell .stat-card > small { color: #a8947f; border-color: #382a20; }
