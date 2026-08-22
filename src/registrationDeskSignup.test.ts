@@ -222,7 +222,7 @@ describe("Registration Desk signup helpers", () => {
         [row("one"), row("two")],
         50,
       ),
-    ).toEqual({ runCount: 2, amount: 100 });
+    ).toEqual({ runCount: 4, amount: 200 });
     expect(
       registrationDeskReviewComplete("picked-teams", {
         rows: [row("one")],

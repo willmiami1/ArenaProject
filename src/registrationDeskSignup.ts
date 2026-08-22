@@ -210,7 +210,8 @@ export function registrationDeskTotals(
   rows: RegistrationDeskTeamRow[],
   entryFee: number,
 ) {
-  const runCount = mode === "draws" ? Number(entries) || 0 : rows.length;
+  // A picked team charges two entry fees: one ride for the header, one for the heeler.
+  const runCount = mode === "draws" ? Number(entries) || 0 : rows.length * 2;
   return { runCount, amount: runCount * Number(entryFee || 0) };
 }
 
