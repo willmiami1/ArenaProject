@@ -900,33 +900,53 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
 
   const eventName = (eventId: string) =>
     portal.events.find((event) => event.id === eventId)?.name ?? "Competition";
-  const riderName = (id: string) =>
-    (portal.contestant.id === id
-      ? portal.contestant.name
-      : portal.contestants.find((contestant) => contestant.id === id)?.name) ??
-    "Unknown";
-  const sortedTeams = [...portal.teams].sort(
-    (a, b) =>
-      eventName(a.eventId).localeCompare(eventName(b.eventId)) ||
-      a.round - b.round ||
-      a.drawPosition - b.drawPosition,
-  );
   const allCompetitions =
     data?.competitions ?? data?.meets.flatMap((meet) => meet.competitions) ?? [];
   const openRopings = allCompetitions.filter(
     (competition) => competition.registrationOpen,
   );
-  const finalPlacements = allCompetitions.flatMap((competition) =>
-    competition.resultsPublished
-      ? competition.results
-          .filter(
-            (row) =>
-              row.headerName === portal.contestant.name ||
-              row.heelerName === portal.contestant.name,
-          )
-          .map((row) => ({ competition, row }))
-      : [],
+  // One row per competition: the rider's best published placement, or pending.
+  const bestPlacements = new Map<
+    string,
+    { place: number; officialTotal: number | null }
+  >();
+  for (const competition of allCompetitions) {
+    if (!competition.resultsPublished) continue;
+    for (const row of competition.results) {
+      if (
+        row.headerName !== portal.contestant.name &&
+        row.heelerName !== portal.contestant.name
+      ) continue;
+      const current = bestPlacements.get(competition.id);
+      if (!current || row.place < current.place) {
+        bestPlacements.set(competition.id, {
+          place: row.place,
+          officialTotal: row.officialTotal,
+        });
+      }
+    }
+  }
+  const competitionById = new Map(
+    allCompetitions.map((competition) => [competition.id, competition]),
   );
+  const previousResults = [
+    ...new Set([
+      ...portal.teams.map((team) => team.eventId),
+      ...bestPlacements.keys(),
+    ]),
+  ]
+    .map((eventId) => {
+      const competition = competitionById.get(eventId);
+      return {
+        eventId,
+        name: competition?.name ?? eventName(eventId),
+        date: competition?.date ?? "",
+        placement: bestPlacements.get(eventId),
+      };
+    })
+    .sort(
+      (a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name),
+    );
 
   return (
     <section className="public-rider">
@@ -956,27 +976,19 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
       </div>
 
       <div className="public-rider-panel">
-        <h2>My results and participations</h2>
-        {finalPlacements.length > 0 && (
-          <div className="public-rider-list public-rider-placements">
-            {finalPlacements.map(({ competition, row }) => (
-              <div className="public-rider-row" key={`${competition.id}-${row.place}`}>
-                <div><strong>{competition.name}</strong><small>Final classification · {row.rounds} round{row.rounds === 1 ? "" : "s"}</small></div>
-                <div className="public-rider-partners"><small>Header</small><span>{row.headerName}</span><small>Heeler</small><span>{row.heelerName}</span></div>
-                <strong className="public-rider-result">{ordinalDay(row.place)} place · {row.officialTotal === null ? "No time" : `${row.officialTotal.toFixed(2)}s`}</strong>
-              </div>
-            ))}
-          </div>
-        )}
+        <h2>Previous results</h2>
         <div className="public-rider-list">
-          {sortedTeams.map((team) => (
-            <div className="public-rider-row" key={team.id}>
-              <div><strong>{eventName(team.eventId)}</strong><small>Round {team.round} · Draw #{team.drawPosition}</small></div>
-              <div className="public-rider-partners"><small>Header</small><span>{riderName(team.headerId)}</span><small>Heeler</small><span>{riderName(team.heelerId)}</span></div>
-              <strong className="public-rider-result">{team.status === "complete" && team.rawTime !== null ? `${(team.rawTime + team.penalties).toFixed(2)}s` : team.status === "no-time" ? "No time" : team.rolled ? "Rolled" : "Ready"}</strong>
+          {previousResults.map((result) => (
+            <div className="public-rider-row" key={result.eventId}>
+              <div><strong>{result.name}</strong>{result.date && <small>{formatDate(result.date)}</small>}</div>
+              <strong className="public-rider-result">
+                {result.placement
+                  ? `${ordinalDay(result.placement.place)} place${result.placement.officialTotal === null ? "" : ` · ${result.placement.officialTotal.toFixed(2)}s`}`
+                  : "Results pending"}
+              </strong>
             </div>
           ))}
-          {!sortedTeams.length && <p className="public-rider-empty">No team runs are on record yet.</p>}
+          {!previousResults.length && <p className="public-rider-empty">No results are on record yet.</p>}
         </div>
         {portal.registrations.length > 0 && (
           <div className="public-rider-list public-rider-registrations">
