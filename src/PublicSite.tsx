@@ -941,6 +941,7 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
         eventId,
         name: competition?.name ?? eventName(eventId),
         date: competition?.date ?? "",
+        published: competition?.resultsPublished ?? false,
         placement: bestPlacements.get(eventId),
       };
     })
@@ -984,7 +985,9 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
               <strong className="public-rider-result">
                 {result.placement
                   ? `${ordinalDay(result.placement.place)} place${result.placement.officialTotal === null ? "" : ` · ${result.placement.officialTotal.toFixed(2)}s`}`
-                  : "Results pending"}
+                  : result.published
+                    ? "No placement"
+                    : "Results pending"}
               </strong>
             </div>
           ))}
