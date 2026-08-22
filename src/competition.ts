@@ -104,6 +104,44 @@ export const defaultCompetitionSettings = {
   drawHistory: [],
 };
 
+export interface PayoutFormulaTier {
+  minTeams: number;
+  maxTeams: number | null;
+  payoutPercent: number;
+  percentages: number[];
+}
+
+// Standard payoff chart: the paying-team count sets both the share of the
+// pot that is paid out and how the payout splits across places.
+export const PAYOUT_FORMULA_TIERS: PayoutFormulaTier[] = [
+  { minTeams: 1, maxTeams: 49, payoutPercent: 40, percentages: [60, 40] },
+  { minTeams: 50, maxTeams: 99, payoutPercent: 50, percentages: [50, 30, 20] },
+  { minTeams: 100, maxTeams: 124, payoutPercent: 55, percentages: [40, 30, 20, 10] },
+  { minTeams: 125, maxTeams: 149, payoutPercent: 60, percentages: [33, 26, 20, 14, 7] },
+  { minTeams: 150, maxTeams: 199, payoutPercent: 65, percentages: [30, 24, 18, 12, 9, 7] },
+  { minTeams: 200, maxTeams: 249, payoutPercent: 70, percentages: [25, 20, 15, 12, 10, 8, 6, 4] },
+  { minTeams: 250, maxTeams: null, payoutPercent: 75, percentages: [20, 16, 14, 10, 9, 8, 7, 6, 5, 4] },
+];
+
+export function payoutFormulaTier(payingTeams: number): PayoutFormulaTier {
+  return (
+    [...PAYOUT_FORMULA_TIERS]
+      .reverse()
+      .find((tier) => payingTeams >= tier.minTeams) ?? PAYOUT_FORMULA_TIERS[0]
+  );
+}
+
+export function eventPayoutPercentages(
+  event: ArenaEvent | undefined,
+  payingTeams: number,
+) {
+  if (!event) return [50, 30, 20];
+  if (event.payoutMode === "formula") {
+    return payoutFormulaTier(payingTeams).percentages;
+  }
+  return event.payoutPercentages ?? [50, 30, 20];
+}
+
 export function slideTimeAdjustment(
   event: Pick<ArenaEvent, "competitionType" | "slideNumber">,
   team: Pick<Team, "round" | "headerId" | "heelerId">,
@@ -818,7 +856,19 @@ export function generateCompetitionDraw(
   return fixedTeams;
 }
 
-export function calculatePurse(event: ArenaEvent, teamCount: number) {
+export function calculatePurse(
+  event: ArenaEvent,
+  teamCount: number,
+  payingTeams = teamCount,
+) {
+  if (event.payoutMode === "formula") {
+    const tier = payoutFormulaTier(payingTeams);
+    return Math.max(
+      0,
+      teamCount * event.entryFee * (tier.payoutPercent / 100) +
+        event.addedMoney,
+    );
+  }
   const feeBase = Math.max(0, event.entryFee - event.officeCharge - event.stockCharge);
   const producerFee = feeBase * (event.producerFeePercent / 100);
   const payoutPerEntry = Math.max(0, feeBase - producerFee);

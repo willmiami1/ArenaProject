@@ -498,6 +498,10 @@ main { grid-column: 2; min-width: 0; }
 .payoff-row-amount { text-align: right; white-space: nowrap; }
 .payoff-row strong { font-family: "Manrope", sans-serif; font-size: 12px; }
 .payoff-empty { color: var(--muted); font-size: 10px; }
+.payout-formula-chart { grid-column: 1 / -1; display: grid; gap: 4px; padding: 12px; background: #f7f9f7; border: 1px solid var(--line); border-radius: 8px; }
+.payout-formula-row { display: grid; grid-template-columns: 1.2fr 1fr .6fr 2fr; gap: 10px; padding: 6px 9px; background: #fff; border-radius: 6px; font-size: 10px; }
+.payout-formula-row.payout-formula-head { background: transparent; color: var(--muted); font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.payout-formula-chart > small { margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .empty-state { min-height: 130px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: #a1a9a4; text-align: center; }
 .empty-state p { margin: 0; font-size: 11px; }
 .scrim { display: none; }
@@ -827,6 +831,9 @@ main { grid-column: 2; min-width: 0; }
 .app-shell .round-tabs button.active { color: #fff8eb; background: #8d5a3b; border-color: #a66c43; }
 .app-shell .round-tabs button.active small { color: #ead5c0; }
 .app-shell :is(.active-team div,.run-handicap,.photo-field,.toggle-row,.payout-places > div,.entry-totals span,.penalty-buttons button,.payoff-stats > div,.payoff-row) { color: #d6c4af; background: #211812; border-color: #443225; }
+.app-shell .payout-formula-chart { background: #211812; border-color: #443225; }
+.app-shell .payout-formula-row { color: #d6c4af; background: #171009; }
+.app-shell .payout-formula-row.payout-formula-head { background: transparent; }
 .app-shell .announcer-times div { background: #2a1e13; border-color: #624528; }
 .app-shell .announcer-times strong { color: #e2b778; }
 .app-shell .announcer-times span { color: #b99a6f; }
