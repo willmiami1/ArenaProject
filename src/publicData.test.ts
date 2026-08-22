@@ -870,8 +870,8 @@ describe("public grouping and privacy", () => {
 });
 
 describe("aggregate public standings", () => {
-  it("keeps entry numbers distinct and aggregates penalties, no-times, and scratches", () => {
-    const competition = event({ resultsPublished: true });
+  it("publishes only the final round classification with aggregate totals", () => {
+    const competition = event({ resultsPublished: true, rounds: 2 });
     const teams = [
       run(),
       run({ id: "round-2", round: 2, rawTime: 7, penalties: 0 }),
@@ -880,9 +880,8 @@ describe("aggregate public standings", () => {
       run({ id: "scratch", headerEntryNumber: 4, heelerEntryNumber: 4, scratched: true }),
     ];
     const rows = publicStandingRows(competition, teams, contestants);
-    expect(rows).toHaveLength(3);
-    expect(rows[0]).toMatchObject({ rounds: 2, officialTotal: 20, status: "qualified" });
-    expect(rows[2]).toMatchObject({ officialTotal: null, status: "no-time" });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ place: 1, rounds: 2, officialTotal: 20, status: "qualified" });
   });
 
   it("applies the Slide adjustment only in Round 2 and caps it at four seconds", () => {
