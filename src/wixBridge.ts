@@ -52,6 +52,7 @@ export type WixAction =
   | "getPublicSignupPaymentStatus"
   | "submitOnlineSignup"
   | "submitSpectatorPrediction"
+  | "submitReservedSpot"
   | "resetSpectatorScoreboard"
   | "createContestantAccount"
   | "createRiderAccount"
@@ -353,6 +354,7 @@ export function sensitiveWixAction(action: WixAction) {
     action === "getPublicSignupPaymentStatus" ||
     action === "submitOnlineSignup" ||
     action === "submitSpectatorPrediction" ||
+    action === "submitReservedSpot" ||
     action === "resetSpectatorScoreboard" ||
     action === "createContestantAccount" ||
     action === "createRiderAccount" ||
@@ -810,6 +812,22 @@ export function submitSpectatorPrediction(request: {
     existing: boolean;
     publicData: PublicArenaData;
   }>("submitSpectatorPrediction", request);
+}
+
+export interface ReservedSpotConfirmation {
+  existing: boolean;
+  riderName: string;
+  competitionName: string;
+}
+
+export function submitReservedSpot(request: {
+  competitionId: string;
+  email: string;
+  pin: string;
+  position: "Header" | "Heeler" | "Both";
+  notes?: string;
+}) {
+  return requestWix<ReservedSpotConfirmation>("submitReservedSpot", request);
 }
 
 export interface SpectatorScoreboardResetConfirmation {

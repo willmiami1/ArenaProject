@@ -17,6 +17,7 @@ import {
   setContestantPin,
   updateContestantProfile,
   submitSpectatorPrediction,
+  submitReservedSpot,
   resetSpectatorScoreboard,
   createContestantAccount,
   createRiderAccount,
@@ -270,6 +271,10 @@ $w.onReady(() => {
         );
       } else if (message.action === "submitSpectatorPrediction") {
         data = await submitSpectatorPrediction(message.data);
+      } else if (message.action === "submitReservedSpot") {
+        data = unwrapPublicSignupEnvelope(
+          await submitReservedSpot(message.data),
+        );
       } else if (message.action === "resetSpectatorScoreboard") {
         data = await resetSpectatorScoreboard(message.data);
       } else if (message.action === "createContestantAccount") {

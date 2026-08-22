@@ -46,6 +46,7 @@ import {
   startPublicSignupPayment,
   subscribeToWixSectionNavigation,
   submitPublicSignupCash,
+  submitReservedSpot,
   submitSpectatorPrediction,
   updateContestantProfile,
   type ContestantPortalData,
@@ -55,6 +56,7 @@ import {
   type PublicSignupPayment,
   type PublicSignupCompetition,
   type PublicSignupSelection,
+  type ReservedSpotConfirmation,
 } from "./wixBridge";
 import {
   createSpectatorPrediction,
@@ -1365,6 +1367,70 @@ function PublishedSpectatorWinners({
   );
 }
 
+function ReserveSpotCard({ competition }: { competition: PublicCompetition }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
+  const [position, setPosition] = useState<"Header" | "Heeler" | "Both">("Both");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [confirmation, setConfirmation] = useState<ReservedSpotConfirmation | null>(null);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      if (!isWixEmbed()) {
+        throw new Error("Spot reservations are available on the Destiny Ranch Arena Wix site.");
+      }
+      const result = await submitReservedSpot({
+        competitionId: competition.id,
+        email,
+        pin,
+        position,
+        notes: notes.trim() || undefined,
+      });
+      if (!result) throw new Error("Reservations are unavailable right now.");
+      setConfirmation(result);
+      setPin("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not reserve your spot.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="public-reserve-spot">
+      <div className="public-section-heading"><h2>Reserve a spot</h2><span>Will-call list for the arena office</span></div>
+      {confirmation ? (
+        <p className="public-form-message" role="status">
+          {confirmation.existing
+            ? `${confirmation.riderName}, you are already on the reserved list for ${confirmation.competitionName}. See you at the arena!`
+            : `${confirmation.riderName}, your spot for ${confirmation.competitionName} is reserved. The arena office has you on the list.`}
+        </p>
+      ) : !open ? (
+        <>
+          <p>Planning to rope but not entering online yet? Reserve your spot and the arena office will hold you on the will-call list.</p>
+          <button className="public-button" onClick={() => setOpen(true)}>Reserve my spot</button>
+        </>
+      ) : (
+        <form onSubmit={submit}>
+          <p>Sign in with your rider account to reserve. Need an account? Create one from the signup page first.</p>
+          <label>Email address<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+          <label>Four-digit PIN<input type="password" inputMode="numeric" autoComplete="one-time-code" pattern="\d{4}" maxLength={4} required value={pin} onChange={(event) => setPin(event.target.value)} /></label>
+          <label>Position<select value={position} onChange={(event) => setPosition(event.target.value as "Header" | "Heeler" | "Both")}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
+          <label>Note for the office (optional)<input maxLength={200} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Partner preference, arrival time…" /></label>
+          <button className="public-button primary" disabled={busy}>{busy ? "Reserving…" : "Reserve my spot"}</button>
+          {message && <p className="public-form-message" role="alert">{message}</p>}
+        </form>
+      )}
+    </section>
+  );
+}
+
 function CompetitionPage({ competition, meet }: { competition?: PublicCompetition; meet?: PublicMeet }) {
   if (!competition) return <NotFound />;
   return (
@@ -1411,6 +1477,7 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
           <p>{competition.allowRepeatPartners ? "Repeat partnerships are allowed." : "Each partnership may enter once."}</p>
         </section>
       )}
+      {competition.status !== "Complete" && <ReserveSpotCard competition={competition} />}
       <section className="public-detail-section" id="results">
         <div className="public-section-heading"><h2>{competition.status === "Live" ? "Live standings" : "Official results"}</h2>{competition.resultsPublished && <span>Published by arena staff</span>}</div>
         <ResultsTable competition={competition} />
