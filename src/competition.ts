@@ -85,6 +85,7 @@ export const defaultCompetitionSettings = {
   entriesAllowed: 1,
   minDrawsAllowed: 0,
   allowRepeatPartners: false,
+  allowSamePartnerDrawAndPick: false,
   handicapTotal: 20,
   slideNumber: 10,
   maxContestantHandicap: 10,
@@ -310,6 +311,25 @@ export function teamHandicapTotal(
   const header = contestants.find((contestant) => contestant.id === headerId);
   const heeler = contestants.find((contestant) => contestant.id === heelerId);
   return (header?.headerHandicap ?? 0) + (heeler?.heelerHandicap ?? 0);
+}
+
+export function repeatPairingBlockMessage(
+  event: Pick<ArenaEvent, "allowRepeatPartners" | "allowSamePartnerDrawAndPick">,
+  existingPairTeams: Pick<Team, "generated">[],
+  newTeamGenerated: boolean,
+): string {
+  if (!existingPairTeams.length || event.allowRepeatPartners) return "";
+  if (event.allowSamePartnerDrawAndPick) {
+    if (existingPairTeams.length > 1) {
+      return "That partnership already has both of its runs (one draw and one pick).";
+    }
+    const existingGenerated = Boolean(existingPairTeams[0].generated);
+    if (existingGenerated !== newTeamGenerated) return "";
+    return existingGenerated
+      ? "That partnership already has its draw run. The second run must be a picked team."
+      : "That partnership already has a picked run. The second run must come from the draw.";
+  }
+  return "That header and heeler are already entered as a team.";
 }
 
 export function contestantEligibleForRole(

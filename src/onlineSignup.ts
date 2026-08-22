@@ -2,6 +2,7 @@ import {
   contestantHasDrawRegistration,
   contestantEligibleForRole,
   minimumDrawEntries,
+  repeatPairingBlockMessage,
   teamHandicapTotal,
 } from "./competition";
 import type {
@@ -279,14 +280,16 @@ export function createOnlineSignup(
     ) {
       throw new Error("Team handicap exceeds the competition limit.");
     }
-    if (
-      !event.allowRepeatPartners &&
-      activeTeams.some(
+    const repeatBlock = repeatPairingBlockMessage(
+      event,
+      activeTeams.filter(
         (team) =>
           team.headerId === headerId && team.heelerId === heelerId,
-      )
-    ) {
-      throw new Error("That partnership is already entered.");
+      ),
+      false,
+    );
+    if (repeatBlock) {
+      throw new Error(repeatBlock);
     }
     const partnerStandaloneEntries = data.registrations
       .filter(

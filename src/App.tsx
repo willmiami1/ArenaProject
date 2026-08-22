@@ -128,6 +128,7 @@ import {
   repeatedTeamPairKeys,
   reorderDraftDrawTeams,
   reorderRunOrderTeams,
+  repeatPairingBlockMessage,
   slideTimeAdjustment,
   teamEligibleForCompetition,
   teamHandicapTotal,
@@ -2089,6 +2090,7 @@ function EventForm({
     maxHeelers: event?.maxHeelers?.toString() ?? "",
     minDrawsAllowed: (event?.minDrawsAllowed ?? (isNewPickAndDraw ? 4 : 0)).toString(),
     allowRepeatPartners: event?.allowRepeatPartners ?? false,
+    allowSamePartnerDrawAndPick: event?.allowSamePartnerDrawAndPick ?? false,
     handicapTotal: (event?.handicapTotal ?? 20).toString(),
     slideNumber: (event?.slideNumber ?? 10).toString(),
     maxContestantHandicap: (event?.maxContestantHandicap ?? 10).toString(),
@@ -2136,6 +2138,7 @@ function EventForm({
         ),
       ),
       allowRepeatPartners: form.allowRepeatPartners,
+      allowSamePartnerDrawAndPick: form.allowSamePartnerDrawAndPick,
       handicapTotal: Number(form.handicapTotal) || 0,
       slideNumber: Number(form.slideNumber) || 10,
       maxContestantHandicap: Number(form.maxContestantHandicap) || 0,
@@ -2233,6 +2236,7 @@ function EventForm({
       <div className="toggle-grid">
         <label className="toggle-row"><input type="checkbox" checked={form.registrationOpen} onChange={(e) => setForm({ ...form, registrationOpen: e.target.checked })} /><span><strong>Registration open</strong><small>Allow new contestants and teams to enter.</small></span></label>
         <label className="toggle-row"><input type="checkbox" checked={form.allowRepeatPartners} onChange={(e) => setForm({ ...form, allowRepeatPartners: e.target.checked })} /><span><strong>Allow repeat partner runs</strong><small>Permit the same header and heeler pairing to run more than once in Round 1.</small></span></label>
+        <label className="toggle-row"><input type="checkbox" checked={form.allowSamePartnerDrawAndPick} onChange={(e) => setForm({ ...form, allowSamePartnerDrawAndPick: e.target.checked })} /><span><strong>Allow same partners twice — one draw + one pick</strong><small>Permit a pairing to run twice only when one run comes from the draw and the other is a picked team. Ignored when repeat partner runs are fully allowed.</small></span></label>
       </div>
       <FormActions onCancel={onCancel} submitLabel={event ? "Save roping" : "Add roping"} />
     </form>
@@ -3620,14 +3624,17 @@ function Teams({
   };
 
   const saveTeam = (team: Team) => {
-    const duplicate = eventTeams.some(
+    const duplicatePairTeams = eventTeams.filter(
       (item) =>
         item.id !== team.id &&
         item.headerId === team.headerId &&
         item.heelerId === team.heelerId,
     );
-    if (duplicate && !event?.allowRepeatPartners) {
-      setMessage("That header and heeler are already entered as a team.");
+    const repeatBlock = event
+      ? repeatPairingBlockMessage(event, duplicatePairTeams, Boolean(team.generated))
+      : "";
+    if (repeatBlock) {
+      setMessage(repeatBlock);
       return;
     }
     if (
@@ -4794,16 +4801,19 @@ function RunDesk({
   };
   const addRideInTeam = (team: Team) => {
     if (!event) return;
-    const duplicate = allEventTeams.some(
+    const duplicatePairTeams = allEventTeams.filter(
       (existing) =>
         existing.round === 1 &&
         existing.headerId === team.headerId &&
         existing.heelerId === team.heelerId,
     );
-    if (duplicate && !event.allowRepeatPartners) {
-      setRideInMessage(
-        "That partnership is already in Round 1. Enable repeat partner runs to add it again.",
-      );
+    const repeatBlock = repeatPairingBlockMessage(
+      event,
+      duplicatePairTeams,
+      Boolean(team.generated),
+    );
+    if (repeatBlock) {
+      setRideInMessage(repeatBlock);
       return;
     }
     const handicap = teamHandicapTotal(
