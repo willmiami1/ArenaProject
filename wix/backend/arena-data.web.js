@@ -872,6 +872,28 @@ const mergeOnline = (incoming, latest) => {
   ];
 };
 
+const preserveOnlineReservedSpots = (event, previous) => {
+  const previousSpots = Array.isArray(previous?.reservedSpots)
+    ? previous.reservedSpots
+    : [];
+  if (!previousSpots.length) return event;
+  const spots = Array.isArray(event.reservedSpots) ? event.reservedSpots : [];
+  const ids = new Set(spots.map((spot) => spot.id));
+  const preserved = previousSpots.filter(
+    (spot) => spot.source === "online" && !ids.has(spot.id),
+  );
+  return preserved.length
+    ? { ...event, reservedSpots: [...spots, ...preserved] }
+    : event;
+};
+
+const mergeOnlineReservedSpots = (incoming, latest) => {
+  const latestById = new Map(latest.map((event) => [event.id, event]));
+  return incoming.map((event) =>
+    preserveOnlineReservedSpots(event, latestById.get(event.id)),
+  );
+};
+
 async function savePublicScheduleSnapshot(
   workspaceOrEvents,
   assertLockOwned = async () => undefined,
@@ -1249,6 +1271,9 @@ async function saveArenaDataLocked(data, lockScope, timing = startSaveTiming()) 
   );
   const next = {
     ...data,
+    events: onlineChanged
+      ? mergeOnlineReservedSpots(data.events || [], latest.events)
+      : data.events || [],
     contestants: (
       onlineChanged
         ? mergeOnline(data.contestants || [], latest.contestants)
@@ -1410,6 +1435,9 @@ async function debugSaveArenaDataLocked(
   );
   const next = {
     ...data,
+    events: onlineChanged
+      ? mergeOnlineReservedSpots(data.events || [], latest.events)
+      : data.events || [],
     contestants: (
       onlineChanged
         ? mergeOnline(data.contestants || [], latest.contestants)
@@ -2352,7 +2380,10 @@ export const saveEvent = webMethod(
         const previous = workspace.events.find(
           (event) => event.id === request.event.id,
         );
-        const event = prepareEventSave(request.event, previous);
+        const event = preserveOnlineReservedSpots(
+          prepareEventSave(request.event, previous),
+          previous,
+        );
         await assertWorkspacePreservesPublicSignupReservations(
           {
             ...workspace,
@@ -4205,6 +4236,104 @@ export const submitSpectatorPrediction = webMethod(
       }
     );
   },
+);
+
+export const submitReservedSpot = webMethod(
+  Permissions.Anyone,
+  async (request) =>
+    publicSignupEnvelope("submitReservedSpot", async () => {
+      if (!validAppId(request?.competitionId)) {
+        throw new PublicSignupError(
+          "RESERVATION_INVALID",
+          "Choose a valid competition to reserve.",
+        );
+      }
+      const position = ["Header", "Heeler", "Both"].includes(request?.position)
+        ? request.position
+        : null;
+      if (!position) {
+        throw new PublicSignupError(
+          "RESERVATION_INVALID",
+          "Pick the position you plan to rope.",
+        );
+      }
+      const notes = String(request?.notes || "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 200);
+      const contestantId = await verifyContestantCredentials(
+        request.email,
+        request.pin,
+      );
+      return withPublicSignupCompetitionLocks(
+        [WORKSPACE_MUTATION_LOCK_ID, request.competitionId],
+        async (lockScope) => {
+          const workspace = await readWorkspace({ consistentRead: true });
+          const event = workspace.events.find(
+            (item) => item.id === request.competitionId,
+          );
+          if (!event) {
+            throw new PublicSignupError(
+              "RESERVATION_INVALID",
+              "That competition is no longer available.",
+            );
+          }
+          const contestant = workspace.contestants.find(
+            (item) => item.id === contestantId,
+          );
+          if (!contestant) {
+            throw new PublicSignupError(
+              "INVALID_CREDENTIALS",
+              "Email or PIN is incorrect, or login is temporarily unavailable.",
+            );
+          }
+          const reservedSpots = Array.isArray(event.reservedSpots)
+            ? event.reservedSpots
+            : [];
+          const existing = reservedSpots.find(
+            (spot) => spot.contestantId === contestantId,
+          );
+          if (existing) {
+            return {
+              existing: true,
+              riderName: contestant.name,
+              competitionName: event.name,
+            };
+          }
+          const spot = {
+            id: `reserved-${contestantId}-${event.id}`,
+            name: contestant.name,
+            position,
+            phone: String(contestant.phone || "").trim(),
+            notes,
+            source: "online",
+            contestantId,
+            createdAt: new Date().toISOString(),
+          };
+          await upsertArenaRecord(
+            COLLECTIONS.events,
+            { ...event, reservedSpots: [...reservedSpots, spot] },
+            "Competition record",
+            lockScope.assertOwned,
+          );
+          await lockScope.assertOwned();
+          await wixData.save(
+            SETTINGS_COLLECTION,
+            {
+              _id: ONLINE_REVISION_ID,
+              value: workspace.onlineRevision + 1,
+              updatedAt: new Date(),
+            },
+            OPTIONS,
+          );
+          return {
+            existing: false,
+            riderName: contestant.name,
+            competitionName: event.name,
+          };
+        },
+      );
+    }),
 );
 
 async function removeSpectatorPredictionRecords(eventId, assertLockOwned) {

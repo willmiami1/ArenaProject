@@ -1,4 +1,4 @@
-export type View = "overview" | "events" | "contestants" | "teams" | "run-desk" | "reports";
+export type View = "overview" | "events" | "contestants" | "teams" | "reserved" | "run-desk" | "reports";
 export type EventStatus = "Upcoming" | "Live" | "Complete";
 export type RunStatus = "ready" | "complete" | "no-time";
 export type CompetitionType =
@@ -9,6 +9,17 @@ export type CompetitionType =
   | "slide";
 export type PickDrawRole = "header" | "heeler" | "both";
 export type EntryStatus = "entered" | "waitlist" | "scratched";
+
+export interface ReservedSpot {
+  id: string;
+  name: string;
+  position: "Header" | "Heeler" | "Both";
+  phone?: string;
+  notes?: string;
+  source: "staff" | "online";
+  contestantId?: string;
+  createdAt: string;
+}
 
 export interface ArenaMeet {
   id: string;
@@ -57,6 +68,7 @@ export interface ArenaEvent {
   producerFeePercent: number;
   payoutPercentages: number[];
   payoutMode?: "custom" | "formula";
+  reservedSpots?: ReservedSpot[];
   drawHistory: DrawSnapshot[];
   activeRunId?: string;
   activeRound?: number;

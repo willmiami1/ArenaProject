@@ -12,6 +12,7 @@ import {
 } from "react";
 import {
   ArrowRight,
+  BookmarkCheck,
   Camera,
   CalendarDays,
   Check,
@@ -147,6 +148,7 @@ import type {
   Contestant,
   EventRegistration,
   EventStatus,
+  ReservedSpot,
   Team,
   View,
 } from "./types";
@@ -156,6 +158,7 @@ const navItems: { id: View; label: string; icon: typeof Gauge }[] = [
   { id: "events", label: "Events", icon: CalendarDays },
   { id: "contestants", label: "Contestants", icon: UserRound },
   { id: "teams", label: "Teams & Draw", icon: UsersRound },
+  { id: "reserved", label: "Reserved Spots", icon: BookmarkCheck },
   { id: "run-desk", label: "Run Desk", icon: Gauge },
   { id: "reports", label: "Reports", icon: FileBarChart },
 ];
@@ -996,6 +999,22 @@ function StaffApp() {
                   };
                 })
               }
+              onUpdateEvent={(updatedEvent) =>
+                setData((current) => ({
+                  ...current,
+                  events: current.events.map((event) =>
+                    event.id === updatedEvent.id ? updatedEvent : event,
+                  ),
+                }))
+              }
+            />
+          )}
+          {view === "reserved" && (
+            <ReservedSpotsView
+              meets={data.meets}
+              events={data.events}
+              contestants={data.contestants}
+              activeEventId={data.activeEventId}
               onUpdateEvent={(updatedEvent) =>
                 setData((current) => ({
                   ...current,
@@ -2211,6 +2230,215 @@ function EventForm({
       </div>
       <FormActions onCancel={onCancel} submitLabel={event ? "Save roping" : "Add roping"} />
     </form>
+  );
+}
+
+function ReservedSpotsView({
+  meets,
+  events,
+  contestants,
+  activeEventId,
+  onUpdateEvent,
+}: {
+  meets: ArenaMeet[];
+  events: ArenaEvent[];
+  contestants: Contestant[];
+  activeEventId: string;
+  onUpdateEvent: (event: ArenaEvent) => void;
+}) {
+  const sortedEvents = useMemo(
+    () =>
+      [...events].sort(
+        (a, b) =>
+          (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0) ||
+          a.name.localeCompare(b.name),
+      ),
+    [events],
+  );
+  const [selectedEventId, setSelectedEventId] = useState(
+    activeEventId || sortedEvents[0]?.id || "",
+  );
+  const [form, setForm] = useState({
+    name: "",
+    position: "Header" as ReservedSpot["position"],
+    phone: "",
+    notes: "",
+  });
+  const event =
+    events.find((item) => item.id === selectedEventId) ?? sortedEvents[0];
+  const spots = event?.reservedSpots ?? [];
+  const meetName = (target: ArenaEvent) =>
+    meets.find((meet) => meet.id === target.parentEventId)?.name ?? "";
+  const headerCount = spots.filter((spot) => spot.position !== "Heeler").length;
+  const heelerCount = spots.filter((spot) => spot.position !== "Header").length;
+  const addSpot = (formEvent: FormEvent) => {
+    formEvent.preventDefault();
+    if (!event) return;
+    const name = form.name.trim().toUpperCase();
+    if (!name) return;
+    const contestant = contestants.find(
+      (item) => item.name.trim().toUpperCase() === name,
+    );
+    onUpdateEvent({
+      ...event,
+      reservedSpots: [
+        ...spots,
+        {
+          id: uid("reserved"),
+          name,
+          position: form.position,
+          phone: form.phone.trim(),
+          notes: form.notes.trim(),
+          source: "staff",
+          contestantId: contestant?.id,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
+    setForm({ name: "", position: form.position, phone: "", notes: "" });
+  };
+  const removeSpot = (spotId: string) => {
+    if (!event) return;
+    onUpdateEvent({
+      ...event,
+      reservedSpots: spots.filter((spot) => spot.id !== spotId),
+    });
+  };
+  return (
+    <section className="reserved-spots">
+      <div className="panel">
+        <PanelHeading
+          title="Reserved spots"
+          subtitle="Internal will-call list of riders who called in or reserved online"
+        />
+        <div className="reserved-controls">
+          <Field label="Roping">
+            <select
+              value={event?.id ?? ""}
+              onChange={(e) => setSelectedEventId(e.target.value)}
+            >
+              {sortedEvents.map((item) => (
+                <option value={item.id} key={item.id}>
+                  {meetName(item) ? `${meetName(item)} — ` : ""}{item.name} ({item.date})
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        {event && (
+          <div className="payoff-stats reserved-stats">
+            <div><span>Reserved</span><strong>{spots.length}</strong></div>
+            <div><span>Headers</span><strong>{headerCount}</strong></div>
+            <div><span>Heelers</span><strong>{heelerCount}</strong></div>
+            <div><span>Called in</span><strong>{spots.filter((spot) => spot.source === "staff").length}</strong></div>
+          </div>
+        )}
+        {event && (
+          <form className="form-grid reserved-form" onSubmit={addSpot}>
+            <Field label="Rider name">
+              <input
+                required
+                list="reserved-rider-names"
+                autoCapitalize="characters"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value.toUpperCase() })}
+                placeholder="RIDER NAME"
+              />
+            </Field>
+            <datalist id="reserved-rider-names">
+              {contestants.map((contestant) => (
+                <option value={contestant.name} key={contestant.id} />
+              ))}
+            </datalist>
+            <Field label="Position">
+              <select
+                value={form.position}
+                onChange={(e) =>
+                  setForm({ ...form, position: e.target.value as ReservedSpot["position"] })
+                }
+              >
+                <option value="Header">Header</option>
+                <option value="Heeler">Heeler</option>
+                <option value="Both">Both</option>
+              </select>
+            </Field>
+            <Field label="Phone">
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="(305) 555-0100"
+              />
+            </Field>
+            <Field label="Notes">
+              <input
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Wants 2 runs, pays at the desk"
+              />
+            </Field>
+            <div className="reserved-add">
+              <button className="primary" type="submit">
+                <Plus size={16} /> Add reservation
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+      <div className="panel">
+        <PanelHeading
+          title={event ? `${event.name} reservations` : "Reservations"}
+          subtitle="Riders expected at the event"
+        />
+        {spots.length === 0 ? (
+          <div className="empty-state">
+            <BookmarkCheck size={26} />
+            <p>No reserved spots yet for this roping.</p>
+          </div>
+        ) : (
+          <div className="reserved-list">
+            <div className="table-row table-header reserved-row">
+              <span>#</span>
+              <span>Rider</span>
+              <span>Position</span>
+              <span>Phone</span>
+              <span>Notes</span>
+              <span>Source</span>
+              <span>Added</span>
+              <span />
+            </div>
+            {spots.map((spot, index) => (
+              <div className="table-row reserved-row" key={spot.id}>
+                <span>{index + 1}</span>
+                <span>
+                  <strong>{spot.name}</strong>
+                  {spot.contestantId && <small>On contestant list</small>}
+                </span>
+                <span>{spot.position}</span>
+                <span>{spot.phone || "—"}</span>
+                <span className="reserved-notes">{spot.notes || "—"}</span>
+                <span>
+                  <span className={`tag ${spot.source === "online" ? "live" : "neutral"}`}>
+                    {spot.source === "online" ? "Online" : "Called in"}
+                  </span>
+                </span>
+                <span>{new Date(spot.createdAt).toLocaleDateString()}</span>
+                <span>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    title="Remove reservation"
+                    onClick={() => removeSpot(spot.id)}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
