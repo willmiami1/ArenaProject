@@ -2,6 +2,7 @@ import {
   calculatePayouts,
   calculatePurse,
   competitionName,
+  eventPayoutPercentages,
   officialRunTime,
   slideTimeAdjustment,
   teamHandicapTotal,
@@ -334,6 +335,13 @@ function eventEntries(
   return registrationEntries + fixedTeamEntries;
 }
 
+function eventPayingTeams(event: ArenaEvent, teams: Team[]) {
+  return teams.filter(
+    (team) =>
+      team.eventId === event.id && team.round === 1 && !team.scratched,
+  ).length;
+}
+
 function eventFinancials(
   event: ArenaEvent,
   teams: Team[],
@@ -341,12 +349,13 @@ function eventFinancials(
   contestants: Contestant[] = [],
 ) {
   const entries = eventEntries(event, teams, registrations);
+  const payingTeams = eventPayingTeams(event, teams);
   const collected = entries * event.entryFee;
   const office = entries * event.officeCharge;
   const stock = entries * event.stockCharge;
   const feeBase = Math.max(0, event.entryFee - event.officeCharge - event.stockCharge);
   const producer = entries * feeBase * (event.producerFeePercent / 100);
-  const purse = calculatePurse(event, entries);
+  const purse = calculatePurse(event, entries, payingTeams);
   const standings = aggregateStandings(event, teams, contestants);
   const qualified = standings.filter(
     (standing) => standing.qualified,
@@ -354,7 +363,7 @@ function eventFinancials(
   const payouts = calculatePayouts(
     purse,
     qualified.length,
-    event.payoutPercentages,
+    eventPayoutPercentages(event, payingTeams),
   );
   const totalPayouts = payouts.reduce((sum, payout) => sum + payout.amount, 0);
   const incentives = incentiveAwards(event, standings, contestants, teams);
@@ -467,7 +476,7 @@ function teamRows(
     const projected = calculatePayouts(
       financials.purse,
       standings.filter((standing) => standing.qualified).length,
-      event.payoutPercentages,
+      eventPayoutPercentages(event, eventPayingTeams(event, data.teams)),
     );
     standings.forEach((standing) => {
       payouts.set(`${event.id}|${standing.key}`, {
@@ -676,7 +685,7 @@ export function contestantFinancials(
     const payouts = calculatePayouts(
       financials.purse,
       standings.length,
-      event.payoutPercentages,
+      eventPayoutPercentages(event, eventPayingTeams(event, data.teams)),
     );
     payouts.forEach((payout) => {
       const standing = standings[payout.place - 1];
@@ -840,7 +849,7 @@ function payoutRows(
     const payouts = calculatePayouts(
       financials.purse,
       standings.length,
-      event.payoutPercentages,
+      eventPayoutPercentages(event, eventPayingTeams(event, data.teams)),
     );
     const mainAwards = new Map(
       payouts.map((payout) => [
@@ -918,7 +927,7 @@ function standingRows(data: ArenaData, events: ArenaEvent[], teams: Team[]) {
     const payouts = calculatePayouts(
       financials.purse,
       standings.filter((standing) => standing.qualified).length,
-      event.payoutPercentages,
+      eventPayoutPercentages(event, eventPayingTeams(event, data.teams)),
     );
     return standings.map((standing) => {
       const slideDetails = slideReportDetails(

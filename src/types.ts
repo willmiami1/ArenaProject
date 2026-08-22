@@ -56,6 +56,7 @@ export interface ArenaEvent {
   stockCharge: number;
   producerFeePercent: number;
   payoutPercentages: number[];
+  payoutMode?: "custom" | "formula";
   drawHistory: DrawSnapshot[];
   activeRunId?: string;
   activeRound?: number;

@@ -106,6 +106,8 @@ import {
 import {
   calculatePayouts,
   calculatePurse,
+  eventPayoutPercentages,
+  PAYOUT_FORMULA_TIERS,
   applyRunResult,
   competitionName,
   competitionTypes,
@@ -1498,9 +1500,10 @@ function LedLeaderboard({
       : finalRoundLeaderTotal - currentTeamPriorTotal - 0.01;
   const ledPayingSpots = Math.max(
     1,
-    (event.payoutPercentages ?? [50, 30, 20]).filter(
-      (percentage) => percentage > 0,
-    ).length,
+    eventPayoutPercentages(
+      event,
+      eventTeams.filter((team) => team.round === 1).length,
+    ).filter((percentage) => percentage > 0).length,
   );
   const ledMoneyCutoffTotal =
     finalRoundTotals.length >= ledPayingSpots
@@ -2077,6 +2080,7 @@ function EventForm({
     stockCharge: (event?.stockCharge ?? 0).toString(),
     producerFeePercent: (event?.producerFeePercent ?? 50).toString(),
     payoutPercentages: (event?.payoutPercentages ?? [50, 30, 20]).join(", "),
+    payoutMode: (event?.payoutMode ?? "custom") as "custom" | "formula",
   });
   const submit = (formEvent: FormEvent) => {
     formEvent.preventDefault();
@@ -2174,7 +2178,24 @@ function EventForm({
         <Field label="Office charge / entry"><input type="number" min="0" value={form.officeCharge} onChange={(e) => setForm({ ...form, officeCharge: e.target.value })} /></Field>
         <Field label="Stock charge / entry"><input type="number" min="0" value={form.stockCharge} onChange={(e) => setForm({ ...form, stockCharge: e.target.value })} /></Field>
         <Field label="Producer fee (%)"><input type="number" min="0" max="100" step="0.1" value={form.producerFeePercent} onChange={(e) => setForm({ ...form, producerFeePercent: e.target.value })} /></Field>
-        <Field label="Payout split (%)"><input required value={form.payoutPercentages} onChange={(e) => setForm({ ...form, payoutPercentages: e.target.value })} placeholder="50, 30, 20" /></Field>
+        <Field label="Payoff setup"><select value={form.payoutMode} onChange={(e) => setForm({ ...form, payoutMode: e.target.value as "custom" | "formula" })}><option value="custom">Custom split</option><option value="formula">Standard payoff formula</option></select><small>The standard formula sets the payout pool and place splits from the number of paying teams.</small></Field>
+        {form.payoutMode === "custom" && (
+          <Field label="Payout split (%)"><input required value={form.payoutPercentages} onChange={(e) => setForm({ ...form, payoutPercentages: e.target.value })} placeholder="50, 30, 20" /></Field>
+        )}
+        {form.payoutMode === "formula" && (
+          <div className="payout-formula-chart">
+            <div className="payout-formula-row payout-formula-head"><span>Paying teams</span><span>Payout pool</span><span>Places</span><span>Split (%)</span></div>
+            {PAYOUT_FORMULA_TIERS.map((tier) => (
+              <div className="payout-formula-row" key={tier.minTeams}>
+                <span>{tier.maxTeams === null ? `${tier.minTeams}+` : `${tier.minTeams}–${tier.maxTeams}`}</span>
+                <span>{tier.payoutPercent}% payout</span>
+                <span>{tier.percentages.length}</span>
+                <span>{tier.percentages.join(" / ")}</span>
+              </div>
+            ))}
+            <small>The payout pool percentage replaces the office, stock, and producer deductions when calculating the jackpot. Added money is paid on top.</small>
+          </div>
+        )}
         <label className="toggle-row"><input type="checkbox" checked={form.incentivePayouts} onChange={(e) => setForm({ ...form, incentivePayouts: e.target.checked })} /><span><strong>Incentive payout</strong><small>Award the fastest qualifying team or teams from Round 1.</small></span></label>
         {form.incentivePayouts && (
           <>
@@ -4162,9 +4183,15 @@ function RunDesk({
               .reduce((total, entry) => total + entry.entries, 0)
           : 0)
       : 0;
-  const purse = event ? calculatePurse(event, paidEntryCount) : 0;
-  const payouts = calculatePayouts(purse, standings.length, event?.payoutPercentages);
   const roundOneTeams = allEventTeams.filter((team) => team.round === 1);
+  const purse = event
+    ? calculatePurse(event, paidEntryCount, roundOneTeams.length)
+    : 0;
+  const activePayoutPercentages = eventPayoutPercentages(
+    event,
+    roundOneTeams.length,
+  );
+  const payouts = calculatePayouts(purse, standings.length, activePayoutPercentages);
   const payoffHeaders = new Set(roundOneTeams.map((team) => team.headerId)).size;
   const payoffHeelers = new Set(roundOneTeams.map((team) => team.heelerId)).size;
   const payoffParticipants = new Set(
@@ -4282,9 +4309,7 @@ function RunDesk({
       : shortGoLeaderTotal - selectedPriorTotal - 0.01;
   const payingSpots = Math.max(
     1,
-    (event?.payoutPercentages ?? [50, 30, 20]).filter(
-      (percentage) => percentage > 0,
-    ).length,
+    activePayoutPercentages.filter((percentage) => percentage > 0).length,
   );
   const moneyCutoffTotal =
     shortGoTotals.length >= payingSpots
