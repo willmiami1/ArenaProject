@@ -1,4 +1,5 @@
 import { seedData } from "./data";
+import { contestantHasDrawRegistration } from "./competition";
 import {
   assertRegistrationDeskOpen,
   registrationDeskIsVisible,
@@ -693,6 +694,21 @@ export function submitLocalRegistrationDeskSignup(
         !withinHandicap(heeler, "Heeler")
       ) {
         fail("A contestant is not eligible for that team position.");
+      }
+      if (event.competitionType === "pick-and-draw") {
+        for (const rider of [header, heeler]) {
+          if (
+            !contestantHasDrawRegistration(
+              data.registrations,
+              event.id,
+              rider.id,
+            )
+          ) {
+            fail(
+              `${rider.name} must be entered in the draw before joining a picked team.`,
+            );
+          }
+        }
       }
       if (
         Number(header.headerHandicap) + Number(heeler.heelerHandicap) >
