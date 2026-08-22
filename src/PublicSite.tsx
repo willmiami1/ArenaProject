@@ -113,6 +113,36 @@ const operationalHref = (app: "command" | "registration") => {
     : `?app=${app}`;
 };
 
+// Rider sign-in shared across the portal and reservation pages for this tab.
+const riderSessionKey = "arena-rider-session";
+type StoredRiderSession = { email: string; pin: string };
+const loadStoredRiderSession = (): StoredRiderSession | null => {
+  try {
+    const raw = window.sessionStorage.getItem(riderSessionKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredRiderSession>;
+    return typeof parsed.email === "string" && typeof parsed.pin === "string"
+      ? { email: parsed.email, pin: parsed.pin }
+      : null;
+  } catch {
+    return null;
+  }
+};
+const storeRiderSession = (email: string, pin: string) => {
+  try {
+    window.sessionStorage.setItem(riderSessionKey, JSON.stringify({ email, pin }));
+  } catch {
+    /* storage unavailable */
+  }
+};
+const clearRiderSession = () => {
+  try {
+    window.sessionStorage.removeItem(riderSessionKey);
+  } catch {
+    /* storage unavailable */
+  }
+};
+
 const formatDate = (date: string) =>
   new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
     weekday: "short",
@@ -724,6 +754,30 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
   const [photoError, setPhotoError] = useState("");
   const [horseName, setHorseName] = useState("");
 
+  useEffect(() => {
+    const stored = loadStoredRiderSession();
+    if (!stored || !isWixEmbed()) return;
+    let cancelled = false;
+    setBusy(true);
+    authenticateContestant(stored.email, stored.pin)
+      .then((result) => {
+        if (cancelled || !result) return;
+        setEmail(stored.email);
+        setSession(stored);
+        setPortal(result);
+        setDraft(riderProfileDraft(result.contestant));
+      })
+      .catch(() => {
+        if (!cancelled) clearRiderSession();
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const addHorse = () => {
     if (!draft) return;
     const name = horseName.trim().replace(/\s+/g, " ").toUpperCase();
@@ -766,6 +820,7 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
       setSession({ email, pin });
       setPortal(result);
       setDraft(riderProfileDraft(result.contestant));
+      storeRiderSession(email, pin);
       setPin("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not sign in.");
@@ -775,6 +830,7 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
   };
 
   const signOut = () => {
+    clearRiderSession();
     setSession(null);
     setPortal(null);
     setDraft(null);
@@ -809,6 +865,10 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
         email: result.contestant.email ?? draft.email,
         pin: draft.newPin || session.pin,
       });
+      storeRiderSession(
+        result.contestant.email ?? draft.email,
+        draft.newPin || session.pin,
+      );
       setDraft(riderProfileDraft(result.contestant));
       setProfileMessage("Profile saved. Use your updated email and PIN next time you sign in.");
     } catch (error) {
@@ -851,9 +911,22 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
       a.round - b.round ||
       a.drawPosition - b.drawPosition,
   );
-  const openRopings = (
-    data?.competitions ?? data?.meets.flatMap((meet) => meet.competitions) ?? []
-  ).filter((competition) => competition.registrationOpen);
+  const allCompetitions =
+    data?.competitions ?? data?.meets.flatMap((meet) => meet.competitions) ?? [];
+  const openRopings = allCompetitions.filter(
+    (competition) => competition.registrationOpen,
+  );
+  const finalPlacements = allCompetitions.flatMap((competition) =>
+    competition.resultsPublished
+      ? competition.results
+          .filter(
+            (row) =>
+              row.headerName === portal.contestant.name ||
+              row.heelerName === portal.contestant.name,
+          )
+          .map((row) => ({ competition, row }))
+      : [],
+  );
 
   return (
     <section className="public-rider">
@@ -867,13 +940,13 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
       </header>
 
       <div className="public-rider-panel">
-        <h2>Enter a roping</h2>
+        <h2>Reserve your spot</h2>
         {openRopings.length ? (
           <div className="public-rider-list">
             {openRopings.map((competition) => (
               <div className="public-rider-row" key={competition.id}>
                 <div><strong>{competition.name}</strong><small>{competition.date} · {competition.location}</small></div>
-                <a className="public-button compact" href={href("signup", competition.id)}>Sign up <ArrowRight size={15} /></a>
+                <a className="public-button compact" href={href("signup", competition.id)}>Reserve <ArrowRight size={15} /></a>
               </div>
             ))}
           </div>
@@ -884,6 +957,17 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
 
       <div className="public-rider-panel">
         <h2>My results and participations</h2>
+        {finalPlacements.length > 0 && (
+          <div className="public-rider-list public-rider-placements">
+            {finalPlacements.map(({ competition, row }) => (
+              <div className="public-rider-row" key={`${competition.id}-${row.place}`}>
+                <div><strong>{competition.name}</strong><small>Final classification · {row.rounds} round{row.rounds === 1 ? "" : "s"}</small></div>
+                <div className="public-rider-partners"><small>Header</small><span>{row.headerName}</span><small>Heeler</small><span>{row.heelerName}</span></div>
+                <strong className="public-rider-result">{ordinalDay(row.place)} place · {row.officialTotal === null ? "No time" : `${row.officialTotal.toFixed(2)}s`}</strong>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="public-rider-list">
           {sortedTeams.map((team) => (
             <div className="public-rider-row" key={team.id}>
@@ -1444,6 +1528,31 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
   const accountSubmissionInFlight = useRef(false);
   const reservationInFlight = useRef(false);
 
+  useEffect(() => {
+    if (!competition || !isWixEmbed()) return;
+    const stored = loadStoredRiderSession();
+    if (!stored) return;
+    let cancelled = false;
+    setBusy(true);
+    loadSignupOptions(competition.id, stored.email, stored.pin)
+      .then((result) => {
+        if (cancelled || !result) return;
+        setEmail(stored.email);
+        setPin(stored.pin);
+        applySignupOptions(result);
+      })
+      .catch(() => {
+        if (!cancelled) clearRiderSession();
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const selectedEntries = Object.values(selections);
 
   if (!competition) return <NotFound />;
@@ -1477,6 +1586,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       }
       const result = await loadSignupOptions(competition.id, email, pin);
       if (!result) throw new Error("Signup options are unavailable.");
+      storeRiderSession(email, pin);
       applySignupOptions(result);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not sign in.");
@@ -1510,6 +1620,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
       if (!result) throw new Error("Contestant account could not be opened.");
       setEmail(account.email);
       setPin(account.pin);
+      storeRiderSession(account.email, account.pin);
       applySignupOptions(result);
       setMessage(`Account created for ${result.contestant.name}. Choose your ropings below.`);
     } catch (error) {
