@@ -1141,6 +1141,7 @@ function FlyerGallery({
   description: string;
   flyers: PublicFlyer[];
 }) {
+  if (!flyers.length) return null;
   return (
     <section className="public-flyers" aria-labelledby={headingId}>
       <div className="public-flyers-heading">
