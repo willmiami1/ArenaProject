@@ -44,6 +44,50 @@ export interface PublicStandingRow {
   status: "qualified" | "no-time";
 }
 
+// Published result payloads saved or served before the final-round fix list
+// every team entry that roped. The public site only shows the final
+// classification: qualified teams that completed the last roped round,
+// re-ranked in the payload's qualified order (fastest total first). Corrected
+// payloads already contain exactly those rows, so this pass leaves them
+// unchanged.
+export function finalClassificationRows(
+  rows: PublicStandingRow[],
+): PublicStandingRow[] {
+  const qualified = rows.filter((row) => row.status === "qualified");
+  const finalRounds = qualified.reduce(
+    (highest, row) => Math.max(highest, row.rounds),
+    0,
+  );
+  return qualified
+    .filter((row) => row.rounds === finalRounds)
+    .map((row, index) => ({ ...row, place: index + 1 }));
+}
+
+export function normalizePublicArenaData(data: PublicArenaData): PublicArenaData {
+  const normalizeCompetition = (
+    competition: PublicCompetition,
+  ): PublicCompetition => ({
+    ...competition,
+    results: finalClassificationRows(competition.results ?? []),
+  });
+  // Preserve a missing competitions/meets list so callers keep their
+  // existing fallback between the two shapes.
+  return {
+    ...data,
+    ...(data.competitions
+      ? { competitions: data.competitions.map(normalizeCompetition) }
+      : {}),
+    ...(data.meets
+      ? {
+          meets: data.meets.map((meet) => ({
+            ...meet,
+            competitions: (meet.competitions ?? []).map(normalizeCompetition),
+          })),
+        }
+      : {}),
+  };
+}
+
 export interface PublicRegisteredRider {
   id: string;
   name: string;
