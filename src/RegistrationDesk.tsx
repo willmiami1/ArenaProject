@@ -1266,6 +1266,12 @@ export function RegistrationDesk() {
                 </>
               ) : (
                 <div className="registration-team-builder">
+                  {event.competitionType === "pick-and-draw" && (
+                    <p className="registration-search-hint">
+                      Only riders already entered in the draw can be picked. Enter
+                      the draw first to appear in these lists.
+                    </p>
+                  )}
                   <div className="registration-team-rows">
                     {teamRows.map((row, index) => {
                       const header = data.contestants.find(({ id }) => id === row.headerId);

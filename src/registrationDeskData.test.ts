@@ -217,7 +217,7 @@ describe("Registration Desk local mirror", () => {
     expect(result.result.recordIds.teams).toHaveLength(2);
   });
 
-  it.each(["pick-only", "pick-and-draw", "slide"] as const)(
+  it.each(["pick-only", "slide"] as const)(
     "allows %s teams without draw registrations",
     (competitionType) => {
       const selectedEvent = event(competitionType);
@@ -229,6 +229,33 @@ describe("Registration Desk local mirror", () => {
       ).toHaveLength(1);
     },
   );
+
+  it("blocks pick-and-draw teams when a rider is not entered in the draw", () => {
+    const selectedEvent = event("pick-and-draw");
+    expect(() =>
+      submitLocalRegistrationDeskSignup(
+        workspace(selectedEvent, {
+          registrations: [drawRegistration(selectedEvent, "header-1")],
+        }),
+        picked(selectedEvent),
+      ),
+    ).toThrow(/HEELER-1 must be entered in the draw/);
+  });
+
+  it("accepts pick-and-draw teams when both riders are in the draw", () => {
+    const selectedEvent = event("pick-and-draw");
+    expect(
+      submitLocalRegistrationDeskSignup(
+        workspace(selectedEvent, {
+          registrations: [
+            drawRegistration(selectedEvent, "header-1"),
+            drawRegistration(selectedEvent, "heeler-1"),
+          ],
+        }),
+        picked(selectedEvent),
+      ).data.teams,
+    ).toHaveLength(1);
+  });
 
   it("aggregates persisted draws and all in-batch teams against rider capacity", () => {
     const selectedEvent = event("pick-only", { entriesAllowed: 3 });

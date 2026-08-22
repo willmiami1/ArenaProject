@@ -1,3 +1,4 @@
+import { contestantHasDrawRegistration } from "./competition";
 import type {
   ArenaEvent,
   Contestant,
@@ -177,7 +178,9 @@ export function registrationDeskRoleCandidates(
   return contestants.filter(
     (contestant) =>
       canFillRole(contestant, role) &&
-      withinRoleHandicap(event, contestant, role),
+      withinRoleHandicap(event, contestant, role) &&
+      (event.competitionType !== "pick-and-draw" ||
+        contestantHasDrawRegistration(registrations, event.id, contestant.id)),
   );
 }
 

@@ -8,12 +8,13 @@ import {
   pickedTeamRowsError,
   registrationDeskPayerCandidates,
   registrationDeskReviewComplete,
+  registrationDeskRoleCandidates,
   registrationDeskTotals,
   resetRegistrationDeskEntryState,
   supportedRegistrationDeskModes,
   type RegistrationDeskTeamRow,
 } from "./registrationDeskSignup";
-import type { ArenaEvent, Contestant } from "./types";
+import type { ArenaEvent, Contestant, EventRegistration } from "./types";
 
 const event = (competitionType: ArenaEvent["competitionType"]): ArenaEvent => ({
   ...defaultCompetitionSettings,
@@ -52,6 +53,41 @@ const row = (
 });
 
 describe("Registration Desk signup helpers", () => {
+  it("limits pick-and-draw picked-team candidates to riders in the draw", () => {
+    const riders = [
+      contestant("in-draw", "IN DRAW"),
+      contestant("no-draw", "NO DRAW"),
+    ];
+    const registrations: EventRegistration[] = [
+      {
+        id: "reg-1",
+        eventId: "event-pick-and-draw",
+        contestantId: "in-draw",
+        role: "Header",
+        entries: 1,
+        checkedIn: false,
+        status: "entered",
+        notes: "",
+      },
+    ];
+    expect(
+      registrationDeskRoleCandidates(
+        riders,
+        event("pick-and-draw"),
+        registrations,
+        "Header",
+      ).map(({ id }) => id),
+    ).toEqual(["in-draw"]);
+    expect(
+      registrationDeskRoleCandidates(
+        riders,
+        event("pick-only"),
+        [],
+        "Heeler",
+      ).map(({ id }) => id),
+    ).toEqual(["in-draw", "no-draw"]);
+  });
+
   it("derives format availability and defaults", () => {
     expect(supportedRegistrationDeskModes(event("draw-pot"))).toEqual(["draws"]);
     expect(supportedRegistrationDeskModes(event("round-robin"))).toEqual(["draws"]);
