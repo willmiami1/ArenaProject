@@ -5127,7 +5127,7 @@ function RunDesk({
         </div>
       )}
       <div className="run-desk-grid">
-        <section className={`panel desk-entry ${selected?.headerFreeRun || selected?.heelerFreeRun ? "free-run-panel" : ""} ${selected && repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) ? "repeat-team-panel" : ""}`}>
+        <section className="panel desk-entry">
           <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>Round {activeRound} · {activeRunSaveStatus === "saving" ? "Saving Roping Now…" : activeRunSaveStatus === "error" ? "Roping Now save failed" : activeRunSaveStatus === "offline" ? "Roping Now saved on this computer" : activeRunSaveStatus === "saved" ? "Roping Now saved" : isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Team #${selected.originalTeamNumber ?? selected.drawPosition}${activeRound > 1 ? ` · Draw #${selected.drawPosition}` : ""}` : "Round complete"}</h3></div></div>
           {selected ? (
             <>
