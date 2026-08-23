@@ -41,6 +41,7 @@ export type ReportKind =
   | "standings"
   | "payout"
   | "stock"
+  | "roper-ranking"
   | "arena";
 
 export interface ReportDefinition {
@@ -141,6 +142,7 @@ export const reportDefinitions: ReportDefinition[] = [
   { id: "competition-payout", title: "Payout Report", description: "Projected and earned payouts by final place.", section: "competition", category: "Payout Reports", kind: "payout", roles: financialRoles },
   { id: "competition-incentive", title: "Incentive Report", description: "Incentive-eligible teams and payout tracking.", section: "competition", category: "Payout Reports", kind: "payout", roles: financialRoles },
   { id: "competition-team-stats", title: "Team Statistics", description: "Round count, averages, penalties, and performance.", section: "competition", category: "Statistics", kind: "standings", roles: allRoles },
+  { id: "competition-roper-ranking", title: "Ropers Ranking", description: "Top 12 ropers by steers-roped percentage and average time.", section: "competition", category: "Statistics", kind: "roper-ranking", roles: allRoles },
   { id: "competition-arena", title: "Arena Statistics", description: "Selected-competition run and time statistics.", section: "competition", category: "Statistics", kind: "arena", roles: allRoles },
   { id: "competition-judge", title: "Judge Report", description: "Barrier calls, penalties, no-times, and notes.", section: "competition", category: "Competition Reports", kind: "results", roles: operationsRoles },
   { id: "competition-scratch", title: "Scratch List", description: "Scratched teams and registration entries.", section: "competition", category: "Competition Reports", kind: "status", roles: financialRoles },
@@ -1031,6 +1033,69 @@ function stockRows(
   });
 }
 
+export function roperRankingRows(
+  data: ArenaData,
+  events: ArenaEvent[],
+  teams: Team[],
+) {
+  const eventMap = new Map(events.map((event) => [event.id, event]));
+  const stats = new Map<string, { runs: number; caught: number; totalTime: number }>();
+  teams
+    .filter(
+      (team) =>
+        !team.scratched &&
+        (team.status === "complete" || team.status === "no-time"),
+    )
+    .forEach((team) => {
+      const time =
+        team.status === "complete"
+          ? finalTime(eventMap.get(team.eventId), team, data.contestants)
+          : null;
+      [team.headerId, team.heelerId].forEach((contestantId) => {
+        const entry = stats.get(contestantId) ?? {
+          runs: 0,
+          caught: 0,
+          totalTime: 0,
+        };
+        entry.runs += 1;
+        if (time !== null) {
+          entry.caught += 1;
+          entry.totalTime += time;
+        }
+        stats.set(contestantId, entry);
+      });
+    });
+  return [...stats.entries()]
+    .map(([contestantId, entry]) => ({
+      roper:
+        data.contestants.find((item) => item.id === contestantId)?.name ??
+        "Unknown",
+      runs: entry.runs,
+      caught: entry.caught,
+      percentageValue: entry.runs ? (entry.caught / entry.runs) * 100 : 0,
+      averageValue: entry.caught ? entry.totalTime / entry.caught : Infinity,
+    }))
+    .sort(
+      (a, b) =>
+        b.percentageValue - a.percentageValue ||
+        a.averageValue - b.averageValue ||
+        b.caught - a.caught ||
+        a.roper.localeCompare(b.roper),
+    )
+    .slice(0, 12)
+    .map((entry, index) => ({
+      rank: index + 1,
+      roper: entry.roper,
+      runs: entry.runs,
+      caught: entry.caught,
+      percentage: `${Math.round(entry.percentageValue)}%`,
+      average:
+        entry.averageValue === Infinity
+          ? "—"
+          : entry.averageValue.toFixed(2),
+    }));
+}
+
 const columns = {
   summary: [
     ["event", "Event"],
@@ -1199,6 +1264,14 @@ const columns = {
   arena: [
     ["metric", "Arena Statistic"],
     ["value", "Value"],
+  ],
+  "roper-ranking": [
+    ["rank", "Rank"],
+    ["roper", "Roper"],
+    ["runs", "Runs"],
+    ["caught", "Steers Roped"],
+    ["percentage", "Catch %"],
+    ["average", "Average Time"],
   ],
 } satisfies Record<ReportKind, [string, string][]>;
 
@@ -1414,6 +1487,8 @@ export function generateReport(
     );
   } else if (definition.kind === "stock") {
     rows = stockRows(data, events, teams);
+  } else if (definition.kind === "roper-ranking") {
+    rows = roperRankingRows(data, events, teams);
   } else {
     rows = [
       { metric: "Total Runs", value: teams.length },
