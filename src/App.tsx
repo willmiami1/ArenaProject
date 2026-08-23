@@ -5177,11 +5177,10 @@ function RunDesk({
                 {["0", "5", "10", "15"].map((value) => <button className={penalties === value ? "active" : ""} key={value} onClick={() => setPenalties(value)}>{value === "0" ? "Clean" : `+${value}s`}</button>)}
               </div>
               <Field label="Run notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional note" /></Field>
-              <div className={`result-preview ${rawTime && event && (officialRunTime(event, { ...selected, rawTime: Number(rawTime), penalties: Number(penalties) }, contestants) ?? 0) > event.timeLimit ? "over-limit" : ""}`}><span>Official time {event ? `· ${event.timeLimit}s limit` : ""}</span><strong>{rawTime && event ? (officialRunTime(event, { ...selected, rawTime: Number(rawTime), penalties: Number(penalties) }, contestants) ?? 0).toFixed(2) : "—"}</strong></div>
               <div className={`desk-actions${isEditingResult ? " editing" : ""}`}>
                 {isEditingResult && <button className="clear-result-button" onClick={clearRunResult}>Clear result / Not run yet</button>}
-                <button className="re-run-button" onClick={grantReRun}>Grant re-run</button>
                 <button className="no-time-button" onClick={() => saveRun("no-time")}>Mark no time</button>
+                <button className="re-run-button" onClick={grantReRun}>Grant re-run</button>
                 <button className="primary" disabled={!rawTime || Number(rawTime) <= 0} onClick={() => saveRun("complete")}><Check size={18} /> {isEditingResult ? "Save corrected time" : "Save result"}</button>
               </div>
             </>
