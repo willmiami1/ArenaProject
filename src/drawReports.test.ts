@@ -113,7 +113,7 @@ describe("rider posting report", () => {
     expect(html).toContain("3 riders · 2 teams");
   });
 
-  it("bolds free runs", () => {
+  it("bolds free runs only under the rider whose side runs free", () => {
     const html = riderPostingHtml(
       event,
       [
@@ -124,6 +124,8 @@ describe("rider posting report", () => {
     );
 
     expect(html).toContain('<li class="free-run">Team 1 · Heading for Bo &amp; Heeler · HC 9 · FREE RUN</li>');
+    // Bo paid for his heeling entry — his side of the same team is not a free run.
+    expect(html).toContain('<li class="">Team 1 · Heeling for Ada &lt;Header&gt; · HC 9</li>');
     expect(html).toContain('<li class="">Team 2 · Heading for Bo &amp; Heeler · HC 8</li>');
     expect(html).toContain(".rider li.free-run { font-weight: 700; }");
   });

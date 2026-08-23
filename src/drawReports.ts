@@ -169,7 +169,11 @@ export function riderPostingHtml(
           const heading = team.headerId === riderId;
           const partnerId = heading ? team.heelerId : team.headerId;
           const partnerName = names.get(partnerId) ?? "Unknown";
-          const freeRun = Boolean(team.headerFreeRun || team.heelerFreeRun);
+          // Only the rider's own side counts as a free run — the partner
+          // paid for their entry even when the other side runs free.
+          const freeRun = Boolean(
+            heading ? team.headerFreeRun : team.heelerFreeRun,
+          );
           const teamNumber = team.originalTeamNumber ?? team.drawPosition;
           const handicap = teamHandicapTotal(
             team.headerId,
