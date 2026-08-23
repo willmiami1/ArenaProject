@@ -5192,7 +5192,7 @@ function RunDesk({
           <div className="queue-scroll">
             {eventTeams.map((team) => (
               <div
-                className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.reRun && team.status === "ready" ? "re-run-pending-row" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""} ${eventTeams.length > 1 ? "draggable-queue-row" : ""} ${draggedQueueTeamId === team.id ? "dragging" : ""}`}
+                className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.reRun && team.status === "ready" ? "re-run-pending-row" : ""} ${eventTeams.length > 1 ? "draggable-queue-row" : ""} ${draggedQueueTeamId === team.id ? "dragging" : ""}`}
                 key={team.id}
                 draggable={eventTeams.length > 1}
                 onDragStart={(dragEvent: DragEvent<HTMLDivElement>) => {
