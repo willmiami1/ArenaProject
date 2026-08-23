@@ -436,14 +436,16 @@ main { grid-column: 2; min-width: 0; }
 .run-queue { order: 1; overflow: hidden; }
 .queue-scroll { max-height: 640px; overflow-y: auto; }
 .queue-row { width: 100%; min-height: 62px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 7px 20px; color: var(--ink); background: #fff; border-bottom: 1px solid #efefeb; text-align: left; }
-.queue-row:hover, .queue-row.active { background: #f3f7f4; }
-.queue-row.active { box-shadow: inset 3px 0 var(--green); }
+.queue-row:hover { background: #f3f7f4; }
 .queue-row.rolled { background: #fff8eb; }
 .queue-row.re-run-pending-row { background: rgba(91, 61, 150, .12); box-shadow: inset 4px 0 #5b3d96; }
 .queue-row.re-run-pending-row small { color: #4a2f7d; font-weight: 800; }
 .queue-row.free-run-row, .desk-entry.free-run-panel { background: rgba(214, 145, 43, .14); box-shadow: inset 4px 0 #d6912b; }
 .queue-row.repeat-team-row, .desk-entry.repeat-team-panel { background: rgba(75, 118, 170, .14); box-shadow: inset 4px 0 #4b76aa; }
 .queue-row.free-run-row.repeat-team-row, .desk-entry.free-run-panel.repeat-team-panel { background: linear-gradient(90deg, rgba(214, 145, 43, .18), rgba(75, 118, 170, .14)); box-shadow: inset 4px 0 #d6912b, inset 8px 0 #4b76aa; }
+.queue-row.active { background: #c9efd9; box-shadow: inset 6px 0 var(--green); }
+.queue-row.active strong { color: #10381f; }
+.queue-row.active small { color: #2f6647; }
 .run-entry-markers { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 12px; }
 .team-source-tag.draw, .team-source-inline.draw { color: #245d43; background: #dcefe4; border-color: #91bea3; }
 .team-source-tag.pick, .team-source-inline.pick { color: #754616; background: #f5e3cc; border-color: #d6aa76; }
@@ -834,8 +836,7 @@ main { grid-column: 2; min-width: 0; }
 .app-shell .waiver-load-message { color: #efaaa2 !important; }
 .app-shell .report-catalog-list > button:hover,
 .app-shell .competition-row.selected,
-.app-shell .queue-row:hover,
-.app-shell .queue-row.active { background: #291d16; }
+.app-shell .queue-row:hover { background: #291d16; }
 .app-shell .competition-card:hover,
 .app-shell .report-dashboard-card:hover,
 .app-shell .event-card.selected { border-color: #9a6a4b; box-shadow: 0 12px 24px rgba(0,0,0,.22); }
@@ -846,6 +847,9 @@ main { grid-column: 2; min-width: 0; }
 .app-shell .queue-row.free-run-row, .app-shell .desk-entry.free-run-panel { background: #302411; }
 .app-shell .queue-row.repeat-team-row, .app-shell .desk-entry.repeat-team-panel { background: #172438; }
 .app-shell .queue-row.free-run-row.repeat-team-row, .app-shell .desk-entry.free-run-panel.repeat-team-panel { background: linear-gradient(90deg, #302411, #172438); }
+.app-shell .queue-row.active { background: #2f6b46; box-shadow: inset 6px 0 #6fe3a1; }
+.app-shell .queue-row.active strong { color: #fff; }
+.app-shell .queue-row.active small { color: #d6f5e3; }
 .app-shell .round-tabs button.active { color: #fff8eb; background: #8d5a3b; border-color: #a66c43; }
 .app-shell .round-tabs button.active small { color: #ead5c0; }
 .app-shell :is(.active-team div,.run-handicap,.photo-field,.toggle-row,.payout-places > div,.entry-totals span,.penalty-buttons button,.payoff-stats > div,.payoff-row) { color: #d6c4af; background: #211812; border-color: #443225; }
