@@ -110,6 +110,7 @@ export function payoffReportHtml(payload: PayoffReportPayload) {
     header p { margin: 0; color: #58645d; }
     header strong { color: #285f46; font-size: 18px; }
     h2 { margin: 18px 0 6px; color: #285f46; font-size: 14px; text-transform: uppercase; letter-spacing: .05em; }
+    h2 .note { color: #66716b; font-size: 9px; font-weight: 400; text-transform: none; letter-spacing: 0; }
     table { width: 100%; border-collapse: collapse; }
     th { padding: 6px 8px; color: #fff; background: #285f46; border: 1px solid #285f46; font-size: 10px; text-align: left; text-transform: uppercase; }
     td { padding: 6px 8px; border: 1px solid #9fa8a2; vertical-align: middle; }
@@ -140,14 +141,14 @@ export function payoffReportHtml(payload: PayoffReportPayload) {
     </thead>
     <tbody>${winnerRows || '<tr><td colspan="6">No qualified winners yet.</td></tr>'}</tbody>
   </table>
-  <h2>Rider Shares</h2>
+  <h2>Rider Shares <span class="note">Rounded to the nearest $20</span></h2>
   <table>
     <thead>
       <tr><th>Rider</th><th>Places Won</th><th>Total Share</th></tr>
     </thead>
     <tbody>${shareRows || '<tr><td colspan="3">Rider shares appear once winners are known.</td></tr>'}</tbody>
   </table>
-  <footer><span>Destiny Ranch Arena · Free-run slots are excluded from the jackpot; a free-run winner receives 50% of the regular pay.</span><span>Printed ${escapeHtml(new Date().toLocaleString())}</span></footer>
+  <footer><span>Destiny Ranch Arena · Free-run winners receive 50% of the regular pay · Rider shares are rounded to the nearest $20.</span><span>Printed ${escapeHtml(new Date().toLocaleString())}</span></footer>
 </body>
 </html>`;
 }
