@@ -26,6 +26,7 @@ export interface PayoffRiderShareRow {
   name: string;
   places: string;
   amount: number;
+  freeRunReduced?: boolean;
 }
 
 export interface PayoffReportPayload {
@@ -87,10 +88,10 @@ export function payoffReportHtml(payload: PayoffReportPayload) {
 
   const shareRows = payload.riderShares
     .map(
-      (share) => `<tr>
-        <td>${escapeHtml(share.name)}</td>
-        <td>${escapeHtml(share.places)}</td>
-        <td class="value">${money(share.amount)}</td>
+      (share) => `<tr${share.freeRunReduced ? ' class="fr-reduced"' : ""}>
+        <td>${escapeHtml(share.name)}${share.freeRunReduced ? ' <b class="fr">FR</b>' : ""}</td>
+        <td>${escapeHtml(share.places)}${share.freeRunReduced ? "<small>Reduced amount — free-run winners receive 50% of the regular pay.</small>" : ""}</td>
+        <td class="value${share.freeRunReduced ? " reduced" : ""}">${money(share.amount)}</td>
       </tr>`,
     )
     .join("");
@@ -115,6 +116,9 @@ export function payoffReportHtml(payload: PayoffReportPayload) {
     td.value { font-weight: 700; text-align: right; white-space: nowrap; }
     td.place { width: 8%; font-size: 14px; font-weight: 700; text-align: center; }
     td small { display: block; margin-top: 2px; color: #58645d; font-size: 9px; }
+    tr.fr-reduced td { background: #fdf3e0; }
+    tr.fr-reduced .fr { color: #9a5d15; }
+    td.value.reduced { color: #9a5d15; }
     .stats td:first-child { width: 60%; color: #38423c; }
     footer { display: flex; justify-content: space-between; margin-top: 14px; color: #66716b; font-size: 9px; }
   </style>
@@ -143,7 +147,7 @@ export function payoffReportHtml(payload: PayoffReportPayload) {
     </thead>
     <tbody>${shareRows || '<tr><td colspan="3">Rider shares appear once winners are known.</td></tr>'}</tbody>
   </table>
-  <footer><span>Destiny Ranch Arena · Free-run slots are excluded from the jackpot and payout shares.</span><span>Printed ${escapeHtml(new Date().toLocaleString())}</span></footer>
+  <footer><span>Destiny Ranch Arena · Free-run slots are excluded from the jackpot; a free-run winner receives 50% of the regular pay.</span><span>Printed ${escapeHtml(new Date().toLocaleString())}</span></footer>
 </body>
 </html>`;
 }

@@ -82,14 +82,16 @@ describe("contestant spending and earnings", () => {
     ]);
   });
 
-  it("awards the full payout to the eligible partner on a free run", () => {
+  it("pays a free-run winner 50% of his regular share", () => {
     const rows = contestantFinancials(
       data([team({ headerFreeRun: true })]),
       [event],
     );
 
-    expect(rows.find((row) => row.contestantId === "header")?.earnings).toBe(0);
-    expect(rows.find((row) => row.contestantId === "heeler")?.earnings).toBe(100);
+    // Team payout $100: heeler keeps his regular $50 half, the
+    // free-run header receives 50% of his half ($25).
+    expect(rows.find((row) => row.contestantId === "header")?.earnings).toBe(25);
+    expect(rows.find((row) => row.contestantId === "heeler")?.earnings).toBe(50);
   });
 
   it("ignores orphan registrations in a pick-only roping", () => {
