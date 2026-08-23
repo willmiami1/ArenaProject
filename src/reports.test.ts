@@ -5,6 +5,7 @@ import {
   emptyReportFilters,
   generateReport,
   reportDefinitions,
+  roperRankingRows,
 } from "./reports";
 import type {
   ArenaData,
@@ -114,6 +115,58 @@ describe("contestant spending and earnings", () => {
     );
 
     expect(header).toMatchObject({ entries: 1, spent: 50 });
+  });
+});
+
+describe("ropers ranking", () => {
+  it("ranks ropers by catch percentage then average time", () => {
+    const riders: Contestant[] = [
+      { id: "a", name: "Ada Header", role: "Header", headerHandicap: 4, heelerHandicap: 0, photo: "", phone: "", hometown: "", horses: [] },
+      { id: "b", name: "Bo Heeler", role: "Heeler", headerHandicap: 0, heelerHandicap: 4, photo: "", phone: "", hometown: "", horses: [] },
+      { id: "c", name: "Cal Catch", role: "Heeler", headerHandicap: 0, heelerHandicap: 4, photo: "", phone: "", hometown: "", horses: [] },
+      { id: "d", name: "Dee Fast", role: "Header", headerHandicap: 4, heelerHandicap: 0, photo: "", phone: "", hometown: "", horses: [] },
+      { id: "e", name: "Eli Fast", role: "Heeler", headerHandicap: 0, heelerHandicap: 4, photo: "", phone: "", hometown: "", horses: [] },
+    ];
+    const workspace = {
+      ...data([
+        team({ id: "t1", headerId: "a", heelerId: "b", rawTime: 8 }),
+        team({ id: "t2", headerId: "a", heelerId: "b", round: 2, status: "no-time", rawTime: null, points: 0 }),
+        team({ id: "t3", headerId: "a", heelerId: "c", drawPosition: 2, rawTime: 6 }),
+        team({ id: "t4", headerId: "d", heelerId: "e", drawPosition: 3, rawTime: 5 }),
+      ]),
+      contestants: riders,
+    };
+
+    const rows = roperRankingRows(workspace, [event], workspace.teams);
+
+    expect(rows.map((row) => [row.rank, row.roper, row.runs, row.caught, row.percentage, row.average])).toEqual([
+      [1, "Dee Fast", 1, 1, "100%", "5.00"],
+      [2, "Eli Fast", 1, 1, "100%", "5.00"],
+      [3, "Cal Catch", 1, 1, "100%", "6.00"],
+      [4, "Ada Header", 3, 2, "67%", "7.00"],
+      [5, "Bo Heeler", 2, 1, "50%", "8.00"],
+    ]);
+  });
+
+  it("keeps only the 12 best ropers", () => {
+    const riders: Contestant[] = [];
+    const teams: Team[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      riders.push(
+        { id: `h${index}`, name: `Header ${index}`, role: "Header", headerHandicap: 4, heelerHandicap: 0, photo: "", phone: "", hometown: "", horses: [] },
+        { id: `l${index}`, name: `Heeler ${index}`, role: "Heeler", headerHandicap: 0, heelerHandicap: 4, photo: "", phone: "", hometown: "", horses: [] },
+      );
+      teams.push(
+        team({ id: `t${index}`, headerId: `h${index}`, heelerId: `l${index}`, drawPosition: index + 1, rawTime: 6 + index }),
+      );
+    }
+    const workspace = { ...data(teams), contestants: riders };
+
+    const rows = roperRankingRows(workspace, [event], workspace.teams);
+
+    expect(rows).toHaveLength(12);
+    expect(rows[0].rank).toBe(1);
+    expect(rows[11].rank).toBe(12);
   });
 });
 
