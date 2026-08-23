@@ -492,6 +492,7 @@ main { grid-column: 2; min-width: 0; }
 .payoff-stats > div strong { display: block; margin-top: 3px; font-family: "Manrope", sans-serif; font-size: 17px; }
 .payoff-columns { display: grid; grid-template-columns: 3fr 2fr; gap: 22px; align-items: start; }
 .payoff-columns h4 { margin: 0 0 8px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.payoff-columns h4 .payoff-note { font-weight: 400; text-transform: none; letter-spacing: 0; opacity: .8; }
 .payoff-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 11px; margin-bottom: 5px; background: #f7f9f7; border-radius: 6px; font-size: 11px; }
 .payoff-row small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; }
 .payoff-row-main { flex: 1; min-width: 0; }

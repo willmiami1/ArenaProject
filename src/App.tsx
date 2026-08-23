@@ -4629,7 +4629,13 @@ function RunDesk({
         shares.set(contestantId, current);
       });
     });
-    return [...shares.values()].sort((a, b) => b.amount - a.amount);
+    // Cash payouts: each rider's total share rounds to the nearest $20.
+    return [...shares.values()]
+      .map((share) => ({
+        ...share,
+        amount: Math.round(share.amount / 20) * 20,
+      }))
+      .sort((a, b) => b.amount - a.amount);
   })();
   const payoffMoney = (value: number) =>
     `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -5216,7 +5222,7 @@ function RunDesk({
             )) : <p className="payoff-empty">Qualified runs will populate the winners.</p>}
           </div>
           <div>
-            <h4>Rider shares</h4>
+            <h4>Rider shares <small className="payoff-note">rounded to the nearest $20</small></h4>
             {payoffRiderShares.length ? payoffRiderShares.map((share) => (
               <div className={`payoff-row ${share.freeRunReduced ? "free-run-row" : ""}`} key={share.contestantId}>
                 <span className="payoff-row-main"><strong>{rider(share.contestantId)} {share.freeRunReduced && <b className="free-run-symbol" title="Free run — paid 50% of the regular share">FR</b>}</strong><small>{share.places.join(", ")}{share.freeRunReduced ? " · 50% pay (free run)" : ""}</small></span>
