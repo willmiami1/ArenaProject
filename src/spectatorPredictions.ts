@@ -108,6 +108,19 @@ export function clearSpectatorScoreboard(
   };
 }
 
+export function clearTeamPredictions(
+  data: Pick<ArenaData, "spectatorPredictions">,
+  teamId: string,
+) {
+  const spectatorPredictions = data.spectatorPredictions.filter(
+    (prediction) => prediction.teamId !== teamId,
+  );
+  return {
+    spectatorPredictions,
+    cleared: data.spectatorPredictions.length - spectatorPredictions.length,
+  };
+}
+
 export function createSpectatorPrediction(
   data: ArenaData,
   request: {

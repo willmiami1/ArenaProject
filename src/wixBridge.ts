@@ -54,6 +54,7 @@ export type WixAction =
   | "submitSpectatorPrediction"
   | "submitReservedSpot"
   | "resetSpectatorScoreboard"
+  | "clearTeamSpectatorPredictions"
   | "createContestantAccount"
   | "createRiderAccount"
   | "getAdminAccess"
@@ -356,6 +357,7 @@ export function sensitiveWixAction(action: WixAction) {
     action === "submitSpectatorPrediction" ||
     action === "submitReservedSpot" ||
     action === "resetSpectatorScoreboard" ||
+    action === "clearTeamSpectatorPredictions" ||
     action === "createContestantAccount" ||
     action === "createRiderAccount" ||
     action === "getAdminAccess" ||
@@ -842,6 +844,20 @@ export async function resetSpectatorScoreboard(eventId: string) {
   );
   if (!confirmation) {
     throw new Error("Wix did not confirm the scoreboard reset.");
+  }
+  return confirmation;
+}
+
+export async function clearTeamSpectatorPredictions(
+  eventId: string,
+  teamId: string,
+) {
+  const confirmation = await requestWix<SpectatorScoreboardResetConfirmation>(
+    "clearTeamSpectatorPredictions",
+    { eventId, teamId },
+  );
+  if (!confirmation) {
+    throw new Error("Wix did not confirm the re-run pick reset.");
   }
   return confirmation;
 }
