@@ -4347,7 +4347,11 @@ export const submitReservedSpot = webMethod(
     }),
 );
 
-async function removeSpectatorPredictionRecords(eventId, assertLockOwned) {
+async function removeSpectatorPredictionRecords(
+  eventId,
+  assertLockOwned,
+  teamId,
+) {
   let result;
   try {
     result = await wixData
@@ -4366,7 +4370,11 @@ async function removeSpectatorPredictionRecords(eventId, assertLockOwned) {
   const removeIds = items
     .filter((item) => {
       try {
-        return JSON.parse(item.payload)?.eventId === eventId;
+        const payload = JSON.parse(item.payload);
+        return (
+          payload?.eventId === eventId &&
+          (!teamId || payload?.teamId === teamId)
+        );
       } catch {
         return false;
       }
@@ -4409,6 +4417,44 @@ export const resetSpectatorScoreboard = webMethod(
           {
             action: "resetSpectatorScoreboard",
             eventId: request.eventId,
+          },
+          true,
+          lockScope,
+        );
+        return { cleared, resetAt: new Date().toISOString() };
+      },
+    );
+  },
+);
+
+export const clearTeamSpectatorPredictions = webMethod(
+  Permissions.SiteMember,
+  async (request) => {
+    await requireArenaAdmin();
+    if (!validAppId(request?.eventId) || !request?.teamId) {
+      throw new Error("Invalid re-run pick reset request.");
+    }
+    return withPublicSignupCompetitionLocks(
+      [WORKSPACE_MUTATION_LOCK_RESOURCE, request.eventId],
+      async (lockScope) => {
+        const workspace = await readWorkspace({ consistentRead: true });
+        const event = workspace.events.find(
+          (item) => item.id === request.eventId,
+        );
+        if (!event) {
+          throw new Error("That competition could not be found.");
+        }
+        const cleared = await removeSpectatorPredictionRecords(
+          request.eventId,
+          lockScope.assertOwned,
+          String(request.teamId),
+        );
+        await bumpRevision(
+          ONLINE_REVISION_ID,
+          {
+            action: "clearTeamSpectatorPredictions",
+            eventId: request.eventId,
+            teamId: request.teamId,
           },
           true,
           lockScope,

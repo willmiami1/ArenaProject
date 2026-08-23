@@ -93,6 +93,8 @@ main { grid-column: 2; min-width: 0; }
 .secondary:hover { border-color: #b9c4bd; }
 .selected-button { color: var(--green); background: #eef5f0; border: 1px solid #cee1d5; }
 .no-time-button { color: #a14a41; background: #fff; border: 1px solid #e4c7c4; }
+.re-run-button { min-height: 39px; display: inline-flex; align-items: center; justify-content: center; padding: 9px 15px; color: #4a2f7d; background: #fff; border: 1px solid #c6b3e6; border-radius: 7px; font-size: 12px; font-weight: 700; transition: .15s ease; }
+.re-run-button:hover { color: #fff; background: #5b3d96; border-color: #5b3d96; }
 
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 17px 0; }
 .stat-card { display: grid; grid-template-columns: 38px 1fr; grid-template-rows: auto auto auto; column-gap: 11px; padding: 19px; background: #fff; border: 1px solid var(--line); border-radius: 11px; }
@@ -339,6 +341,7 @@ main { grid-column: 2; min-width: 0; }
 .draw-color-legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0 2px; }
 .draw-color-legend span { padding: 5px 9px; border-radius: 5px; font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
 .free-run-key, .free-run-tag { color: #7b490b !important; background: #f8dfb8 !important; border: 1px solid #e4b66f; }
+.re-run-tag { color: #4a2f7d !important; background: #e8dff7 !important; border: 1px solid #b49ade; }
 .repeat-entry-key, .repeat-team-tag { color: #294f7d !important; background: #dce9f8 !important; border: 1px solid #9dbada; }
 .draggable-draw-row { cursor: grab; transition: opacity .15s ease, background-color .15s ease; }
 .draggable-draw-row:active { cursor: grabbing; }
@@ -436,6 +439,8 @@ main { grid-column: 2; min-width: 0; }
 .queue-row:hover, .queue-row.active { background: #f3f7f4; }
 .queue-row.active { box-shadow: inset 3px 0 var(--green); }
 .queue-row.rolled { background: #fff8eb; }
+.queue-row.re-run-pending-row { background: rgba(91, 61, 150, .12); box-shadow: inset 4px 0 #5b3d96; }
+.queue-row.re-run-pending-row small { color: #4a2f7d; font-weight: 800; }
 .queue-row.free-run-row, .desk-entry.free-run-panel { background: rgba(214, 145, 43, .14); box-shadow: inset 4px 0 #d6912b; }
 .queue-row.repeat-team-row, .desk-entry.repeat-team-panel { background: rgba(75, 118, 170, .14); box-shadow: inset 4px 0 #4b76aa; }
 .queue-row.free-run-row.repeat-team-row, .desk-entry.free-run-panel.repeat-team-panel { background: linear-gradient(90deg, rgba(214, 145, 43, .18), rgba(75, 118, 170, .14)); box-shadow: inset 4px 0 #d6912b, inset 8px 0 #4b76aa; }
@@ -788,6 +793,7 @@ main { grid-column: 2; min-width: 0; }
 .app-shell .round-tabs button:hover { color: #fff8eb; border-color: #9b6b4c; }
 .app-shell .selected-button { color: #edc49d; background: #39271c; border-color: #765038; }
 .app-shell .no-time-button { color: #efaaa2; background: #261614; border-color: #684039; }
+.app-shell .re-run-button { color: #c8b3ef; background: #1d1626; border-color: #514070; }
 .app-shell :is(
   .stat-card,
   .panel,

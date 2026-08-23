@@ -94,6 +94,7 @@ import {
 import {
   authenticateContestant,
   isWixEmbed,
+  clearTeamSpectatorPredictions,
   loadContestantSignedWaiver,
   loadContestantWaiverStatuses,
   loadPublicArenaData,
@@ -133,7 +134,7 @@ import {
   teamEligibleForCompetition,
   teamHandicapTotal,
 } from "./competition";
-import { clearSpectatorScoreboard, spectatorLeaderboard } from "./spectatorPredictions";
+import { clearSpectatorScoreboard, clearTeamPredictions, spectatorLeaderboard } from "./spectatorPredictions";
 import { normalizeHorseNames } from "./contestantHorses";
 import { contestantRopingHistory } from "./contestantHistory";
 import {
@@ -1095,6 +1096,24 @@ function StaffApp() {
                   ),
                 }))
               }
+              onClearTeamPredictions={(teamId) => {
+                setData((current) => ({
+                  ...current,
+                  spectatorPredictions: clearTeamPredictions(
+                    current,
+                    teamId,
+                  ).spectatorPredictions,
+                }));
+                if (isWixEmbed() && activeEvent) {
+                  clearTeamSpectatorPredictions(activeEvent.id, teamId).catch(
+                    (error) =>
+                      console.error(
+                        "Failed to clear online Cowboys × Steer picks for the re-run",
+                        error,
+                      ),
+                  );
+                }
+              }}
               onResetScoreboard={async () => {
                 if (!activeEvent) {
                   throw new Error("Select a competition first.");
@@ -4225,6 +4244,7 @@ function RunDesk({
   onRollTeam,
   onReorderTeams,
   onSetPredictionCutoff,
+  onClearTeamPredictions,
   onResetScoreboard,
 }: {
   event?: ArenaEvent;
@@ -4238,6 +4258,7 @@ function RunDesk({
   onRollTeam: (teamId: string, rolled: boolean) => void;
   onReorderTeams: (movingTeamId: string, targetTeamId: string) => void;
   onSetPredictionCutoff: (teamId: string, predictionClosesAt?: string) => void;
+  onClearTeamPredictions: (teamId: string) => void;
   onResetScoreboard: () => Promise<number>;
 }) {
   const [selectedRound, setSelectedRound] = useState(
@@ -4810,6 +4831,7 @@ function RunDesk({
       notes: exceededLimit ? `${notes}${notes ? " · " : ""}Time limit exceeded` : notes,
       points: status === "complete" && !exceededLimit ? 1 : 0,
       rolled: false,
+      reRun: false,
     });
     selectActiveRunDeferred(followingTeam?.id ?? null);
     setRawTime("");
@@ -4826,8 +4848,47 @@ function RunDesk({
       notes: "",
       points: 0,
       rolled: false,
+      reRun: false,
     });
     selectActiveRunDeferred(selected.id);
+    setRawTime("");
+    setPenalties("0");
+    setNotes("");
+  };
+  const grantReRun = () => {
+    if (!selected) return;
+    if (
+      !window.confirm(
+        `Grant a re-run to Draw #${selected.drawPosition}? The team goes back in the run order as a pending re-run and all Cowboys × Steer picks on this run are cleared — spectators pick again when the team is up.`,
+      )
+    )
+      return;
+    const followingTeam =
+      eventTeams.find(
+        (team) =>
+          team.id !== selected.id &&
+          team.status === "ready" &&
+          !team.rolled &&
+          team.drawPosition > selected.drawPosition,
+      ) ??
+      eventTeams.find(
+        (team) =>
+          team.id !== selected.id &&
+          team.status === "ready" &&
+          !team.rolled,
+      );
+    onSave(selected.id, {
+      status: "ready",
+      rawTime: null,
+      penalties: 0,
+      notes: "",
+      points: 0,
+      rolled: false,
+      reRun: true,
+      predictionClosesAt: undefined,
+    });
+    onClearTeamPredictions(selected.id);
+    selectActiveRunDeferred(followingTeam?.id ?? null);
     setRawTime("");
     setPenalties("0");
     setNotes("");
@@ -5080,6 +5141,7 @@ function RunDesk({
                   {selected.generated ? "Draw" : "Pick"}
                 </span>
                 {(selected.headerFreeRun || selected.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}
+                {selected.reRun && selected.status === "ready" && <span className="tag re-run-tag">Pending Re-run</span>}
                 {repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}
               </div>
               <div className="run-handicap"><span>Combined team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
@@ -5118,6 +5180,7 @@ function RunDesk({
               <div className={`result-preview ${rawTime && event && (officialRunTime(event, { ...selected, rawTime: Number(rawTime), penalties: Number(penalties) }, contestants) ?? 0) > event.timeLimit ? "over-limit" : ""}`}><span>Official time {event ? `· ${event.timeLimit}s limit` : ""}</span><strong>{rawTime && event ? (officialRunTime(event, { ...selected, rawTime: Number(rawTime), penalties: Number(penalties) }, contestants) ?? 0).toFixed(2) : "—"}</strong></div>
               <div className={`desk-actions${isEditingResult ? " editing" : ""}`}>
                 {isEditingResult && <button className="clear-result-button" onClick={clearRunResult}>Clear result / Not run yet</button>}
+                <button className="re-run-button" onClick={grantReRun}>Grant re-run</button>
                 <button className="no-time-button" onClick={() => saveRun("no-time")}>Mark no time</button>
                 <button className="primary" disabled={!rawTime || Number(rawTime) <= 0} onClick={() => saveRun("complete")}><Check size={18} /> {isEditingResult ? "Save corrected time" : "Save result"}</button>
               </div>
@@ -5130,7 +5193,7 @@ function RunDesk({
           <div className="queue-scroll">
             {eventTeams.map((team) => (
               <div
-                className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""} ${eventTeams.length > 1 ? "draggable-queue-row" : ""} ${draggedQueueTeamId === team.id ? "dragging" : ""}`}
+                className={`queue-row ${selected?.id === team.id ? "active" : ""} ${team.rolled ? "rolled" : ""} ${team.reRun && team.status === "ready" ? "re-run-pending-row" : ""} ${team.headerFreeRun || team.heelerFreeRun ? "free-run-row" : ""} ${repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "repeat-team-row" : ""} ${eventTeams.length > 1 ? "draggable-queue-row" : ""} ${draggedQueueTeamId === team.id ? "dragging" : ""}`}
                 key={team.id}
                 draggable={eventTeams.length > 1}
                 onDragStart={(dragEvent: DragEvent<HTMLDivElement>) => {
@@ -5156,7 +5219,7 @@ function RunDesk({
               >
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{eventTeams.length > 1 && <GripVertical className="draw-drag-handle" size={14} />}{team.originalTeamNumber ?? team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.competitionType === "slide" ? ` · R2 ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.competitionType === "slide" ? ` · R2 ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.reRun ? "PENDING RE-RUN · Picks cleared" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>

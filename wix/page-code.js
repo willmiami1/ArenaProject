@@ -19,6 +19,7 @@ import {
   submitSpectatorPrediction,
   submitReservedSpot,
   resetSpectatorScoreboard,
+  clearTeamSpectatorPredictions,
   createContestantAccount,
   createRiderAccount,
   getAdminAccess as getAdminAccessFromBackend,
@@ -277,6 +278,8 @@ $w.onReady(() => {
         );
       } else if (message.action === "resetSpectatorScoreboard") {
         data = await resetSpectatorScoreboard(message.data);
+      } else if (message.action === "clearTeamSpectatorPredictions") {
+        data = await clearTeamSpectatorPredictions(message.data);
       } else if (message.action === "createContestantAccount") {
         data = await createContestantAccount(message.data);
       } else if (message.action === "createRiderAccount") {

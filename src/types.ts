@@ -113,6 +113,7 @@ export interface Team {
   generated: boolean;
   rideIn?: boolean;
   rolled?: boolean;
+  reRun?: boolean;
   points: number;
   headerEntryNumber?: number;
   heelerEntryNumber?: number;
