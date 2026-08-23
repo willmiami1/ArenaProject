@@ -5218,11 +5218,11 @@ function RunDesk({
               >
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{eventTeams.length > 1 && <GripVertical className="draw-drag-handle" size={14} />}{team.originalTeamNumber ?? team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.competitionType === "slide" ? ` · R2 ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.reRun ? "PENDING RE-RUN · Picks cleared" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.competitionType === "slide" ? ` · R2 ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.reRun ? "PENDING RE-RUN · Picks cleared" : team.rolled ? "NEXT · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>
-                    {team.rolled ? "Unroll" : "Roll"}
+                    {team.rolled ? "Undo next" : "Next"}
                   </button>
                 )}
                 <span className={`status-dot ${team.status}`} />
