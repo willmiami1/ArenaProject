@@ -4561,21 +4561,45 @@ function RunDesk({
     if (!team) return [];
     const source =
       roundOneTeams.find((run) => sameTeamEntry(run, team)) ?? team;
-    const recipients = source.headerFreeRun
-      ? [team.heelerId]
-      : source.heelerFreeRun
-        ? [team.headerId]
-        : [...new Set([team.headerId, team.heelerId])];
+    // Each partner's regular share is half the team payout; a free-run
+    // winner receives 50% of his regular share.
+    const halfShare = payout.amount / 2;
+    const recipients =
+      team.headerId === team.heelerId
+        ? [
+            {
+              contestantId: team.headerId,
+              amount:
+                halfShare * (source.headerFreeRun ? 0.5 : 1) +
+                halfShare * (source.heelerFreeRun ? 0.5 : 1),
+              freeRunReduced: Boolean(
+                source.headerFreeRun || source.heelerFreeRun,
+              ),
+            },
+          ]
+        : [
+            {
+              contestantId: team.headerId,
+              amount: halfShare * (source.headerFreeRun ? 0.5 : 1),
+              freeRunReduced: Boolean(source.headerFreeRun),
+            },
+            {
+              contestantId: team.heelerId,
+              amount: halfShare * (source.heelerFreeRun ? 0.5 : 1),
+              freeRunReduced: Boolean(source.heelerFreeRun),
+            },
+          ];
     return [
       {
         payout,
         team,
         recipients,
-        note: source.headerFreeRun
-          ? "Header FR excluded"
-          : source.heelerFreeRun
-            ? "Heeler FR excluded"
-            : "",
+        note: [
+          source.headerFreeRun ? "Header FR · 50% pay" : "",
+          source.heelerFreeRun ? "Heeler FR · 50% pay" : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
         rounds: `${entryRuns(team).filter((run) => run.status === "complete" && run.rawTime !== null).length} / ${roundCount}`,
         totalTime: qualifiedTotal(team, activeRound + 1).toFixed(2),
       },
@@ -4584,18 +4608,24 @@ function RunDesk({
   const payoffRiderShares = (() => {
     const shares = new Map<
       string,
-      { contestantId: string; amount: number; places: string[] }
+      {
+        contestantId: string;
+        amount: number;
+        places: string[];
+        freeRunReduced: boolean;
+      }
     >();
     payoffWinners.forEach((winner) => {
-      const share = winner.payout.amount / Math.max(winner.recipients.length, 1);
-      winner.recipients.forEach((contestantId) => {
+      winner.recipients.forEach(({ contestantId, amount, freeRunReduced }) => {
         const current = shares.get(contestantId) ?? {
           contestantId,
           amount: 0,
           places: [],
+          freeRunReduced: false,
         };
-        current.amount += share;
+        current.amount += amount;
         current.places.push(ordinal(winner.payout.place));
+        current.freeRunReduced = current.freeRunReduced || freeRunReduced;
         shares.set(contestantId, current);
       });
     });
@@ -4633,6 +4663,7 @@ function RunDesk({
           name: rider(share.contestantId),
           places: share.places.join(", "),
           amount: share.amount,
+          freeRunReduced: share.freeRunReduced,
         })),
       }),
       fileName: payoffReportFileName(event.name),
@@ -5187,9 +5218,9 @@ function RunDesk({
           <div>
             <h4>Rider shares</h4>
             {payoffRiderShares.length ? payoffRiderShares.map((share) => (
-              <div className="payoff-row" key={share.contestantId}>
-                <span className="payoff-row-main"><strong>{rider(share.contestantId)}</strong><small>{share.places.join(", ")}</small></span>
-                <span className="payoff-row-amount"><strong>{payoffMoney(share.amount)}</strong></span>
+              <div className={`payoff-row ${share.freeRunReduced ? "free-run-row" : ""}`} key={share.contestantId}>
+                <span className="payoff-row-main"><strong>{rider(share.contestantId)} {share.freeRunReduced && <b className="free-run-symbol" title="Free run — paid 50% of the regular share">FR</b>}</strong><small>{share.places.join(", ")}{share.freeRunReduced ? " · 50% pay (free run)" : ""}</small></span>
+                <span className="payoff-row-amount"><strong>{payoffMoney(share.amount)}</strong>{share.freeRunReduced && <small>Reduced — free run</small>}</span>
               </div>
             )) : <p className="payoff-empty">Rider shares appear once winners are known.</p>}
           </div>

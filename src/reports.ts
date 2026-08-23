@@ -694,15 +694,31 @@ export function contestantFinancials(
         (team) =>
           team.round === 1 && teamEntryKey(team) === standing.key,
       );
-      const recipients = sourceTeam?.headerFreeRun
-        ? [standing.heelerId]
-        : sourceTeam?.heelerFreeRun
-          ? [standing.headerId]
-          : [...new Set([standing.headerId, standing.heelerId])];
-      const share = payout.amount / Math.max(recipients.length, 1);
-      recipients.forEach((contestantId) => {
+      // A free-run winner receives 50% of his regular half-share.
+      const halfShare = payout.amount / 2;
+      const recipients =
+        standing.headerId === standing.heelerId
+          ? [
+              {
+                contestantId: standing.headerId,
+                amount:
+                  halfShare * (sourceTeam?.headerFreeRun ? 0.5 : 1) +
+                  halfShare * (sourceTeam?.heelerFreeRun ? 0.5 : 1),
+              },
+            ]
+          : [
+              {
+                contestantId: standing.headerId,
+                amount: halfShare * (sourceTeam?.headerFreeRun ? 0.5 : 1),
+              },
+              {
+                contestantId: standing.heelerId,
+                amount: halfShare * (sourceTeam?.heelerFreeRun ? 0.5 : 1),
+              },
+            ];
+      recipients.forEach(({ contestantId, amount }) => {
         const summary = ensureSummary(contestantId);
-        summary.earnings += share;
+        summary.earnings += amount;
         summary.places.push(`${event.name}: #${payout.place}`);
       });
     });
@@ -720,15 +736,32 @@ export function contestantFinancials(
       const sourceTeam = eventTeams.find(
         (team) => teamEntryKey(team) === standing.key,
       );
-      const recipients = sourceTeam?.headerFreeRun
-        ? [standing.heelerId]
-        : sourceTeam?.heelerFreeRun
-          ? [standing.headerId]
-          : [...new Set([standing.headerId, standing.heelerId])];
-      const share = award.amount / Math.max(recipients.length, 1);
-      recipients.forEach((contestantId) => {
+      // Incentive money follows the same free-run rule: 50% of the
+      // regular half-share for the free-run rider.
+      const halfAward = award.amount / 2;
+      const recipients =
+        standing.headerId === standing.heelerId
+          ? [
+              {
+                contestantId: standing.headerId,
+                amount:
+                  halfAward * (sourceTeam?.headerFreeRun ? 0.5 : 1) +
+                  halfAward * (sourceTeam?.heelerFreeRun ? 0.5 : 1),
+              },
+            ]
+          : [
+              {
+                contestantId: standing.headerId,
+                amount: halfAward * (sourceTeam?.headerFreeRun ? 0.5 : 1),
+              },
+              {
+                contestantId: standing.heelerId,
+                amount: halfAward * (sourceTeam?.heelerFreeRun ? 0.5 : 1),
+              },
+            ];
+      recipients.forEach(({ contestantId, amount }) => {
         const summary = ensureSummary(contestantId);
-        summary.earnings += share;
+        summary.earnings += amount;
         summary.places.push(`${event.name} incentive: #${award.place}`);
       });
     });
