@@ -853,6 +853,7 @@ main { grid-column: 2; min-width: 0; }
 .app-shell .round-tabs button.active { color: #fff8eb; background: #8d5a3b; border-color: #a66c43; }
 .app-shell .round-tabs button.active small { color: #ead5c0; }
 .app-shell :is(.active-team div,.run-handicap,.photo-field,.toggle-row,.payout-places > div,.entry-totals span,.penalty-buttons button,.payoff-stats > div,.payoff-row) { color: #d6c4af; background: #211812; border-color: #443225; }
+.app-shell .penalty-buttons button.active { color: #7be3a8; background: #1d3a29; border-color: #3f7a56; }
 .app-shell .payout-formula-chart { background: #211812; border-color: #443225; }
 .app-shell .payout-formula-row { color: #d6c4af; background: #171009; }
 .app-shell .payout-formula-row.payout-formula-head { background: transparent; }

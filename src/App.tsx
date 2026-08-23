@@ -5173,7 +5173,7 @@ function RunDesk({
                 <input type="number" min="0" step="0.01" value={rawTime} onChange={(e) => setRawTime(e.target.value)} placeholder="0.00" />
               </div>
               <div className="penalty-buttons">
-                <span>Penalty</span>
+                <span>Penalty{Number(penalties) > 0 && rawTime ? ` · ${(Number(rawTime) + Number(penalties)).toFixed(2)}s total` : ""}</span>
                 {["0", "5", "10", "15"].map((value) => <button className={penalties === value ? "active" : ""} key={value} onClick={() => setPenalties(value)}>{value === "0" ? "Clean" : `+${value}s`}</button>)}
               </div>
               <Field label="Run notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional note" /></Field>
