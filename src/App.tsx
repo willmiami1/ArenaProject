@@ -5107,7 +5107,6 @@ function RunDesk({
       heelerEntryNumber: pairingRun,
     };
     onAddRideIn(rideInTeam);
-    selectActiveRunDeferred(rideInTeam.id, 1);
     setShowRideInForm(false);
     setRideInMessage(
       `Ride-in team added as Draw #${team.drawPosition} in Round 1.`,
