@@ -1092,6 +1092,12 @@ export function useArenaData() {
                 saveIdleWaiters.current.push(resolve);
               });
             }
+            if (localDirty.current) {
+              // Flush pending workspace changes (for example a just-added
+              // ride-in team) so Wix knows the run before it becomes
+              // Roping Now.
+              await saveImmediately(dataRef.current);
+            }
             activeRunSaveInFlight.current = true;
             try {
               return await setActiveRun({
@@ -1121,7 +1127,7 @@ export function useArenaData() {
         });
       });
     },
-    [],
+    [saveImmediately],
   );
 
   useEffect(
