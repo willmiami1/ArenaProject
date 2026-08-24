@@ -571,6 +571,7 @@ export function reorderDraftDrawTeams(
   return reordered.map((team, index) => ({
     ...team,
     drawPosition: index + 1,
+    originalTeamNumber: index + 1,
   }));
 }
 
@@ -770,6 +771,7 @@ function pickAndDrawTeams(
   ].map((team, index) => ({
     ...team,
     drawPosition: index + 1,
+    originalTeamNumber: index + 1,
   }));
 }
 
@@ -871,6 +873,7 @@ export function generateCompetitionDraw(
     return [...drawTeams, ...fixedTeams].map((team, index) => ({
       ...team,
       drawPosition: index + 1,
+      originalTeamNumber: index + 1,
     }));
   }
   return fixedTeams;

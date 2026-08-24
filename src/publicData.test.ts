@@ -1433,6 +1433,7 @@ describe("online signup", () => {
       status: "ready",
       rawTime: null,
       drawPosition: 0,
+      originalTeamNumber: 1,
     });
     const registrations = [
       {
@@ -1468,6 +1469,7 @@ describe("online signup", () => {
 
     expect(draw.map((team) => team.generated)).toEqual([true, false]);
     expect(draw.map((team) => team.drawPosition)).toEqual([1, 2]);
+    expect(draw.map((team) => team.originalTeamNumber)).toEqual([1, 2]);
     expect(draw[draw.length - 1]?.id).toBe("picked-team");
   });
 
@@ -1537,6 +1539,7 @@ describe("online signup", () => {
 
     expect(draw.map((team) => team.generated)).toEqual([true, false]);
     expect(draw.map((team) => team.drawPosition)).toEqual([1, 2]);
+    expect(draw.map((team) => team.originalTeamNumber)).toEqual([1, 2]);
   });
 
   it("accepts individual draw entries for Slide competitions", () => {
@@ -1567,12 +1570,12 @@ describe("online signup", () => {
 
     expect(
       reorderDraftDrawTeams(teams, "generated-2", "generated-1").map(
-        (team) => [team.id, team.drawPosition],
+        (team) => [team.id, team.drawPosition, team.originalTeamNumber],
       ),
     ).toEqual([
-      ["generated-2", 1],
-      ["generated-1", 2],
-      ["picked", 3],
+      ["generated-2", 1, 1],
+      ["generated-1", 2, 2],
+      ["picked", 3, 3],
     ]);
     expect(reorderDraftDrawTeams(teams, "picked", "generated-1")).toBe(teams);
   });
