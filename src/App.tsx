@@ -1079,6 +1079,12 @@ function StaffApp() {
                   teams: [...current.teams, team],
                 }))
               }
+              onDeleteRideIn={(teamId) =>
+                setData((current) => ({
+                  ...current,
+                  teams: current.teams.filter((team) => team.id !== teamId),
+                }))
+              }
               onRollTeam={(teamId, rolled) =>
                 setData((current) => ({
                   ...current,
@@ -4392,6 +4398,7 @@ function RunDesk({
   onUpdateEvent,
   onSave,
   onAddRideIn,
+  onDeleteRideIn,
   onRollTeam,
   onReorderTeams,
   onSetPredictionCutoff,
@@ -4406,6 +4413,7 @@ function RunDesk({
   onUpdateEvent: (event: ArenaEvent) => void;
   onSave: (teamId: string, update: Partial<Team>) => void;
   onAddRideIn: (team: Team) => void;
+  onDeleteRideIn: (teamId: string) => void;
   onRollTeam: (teamId: string, rolled: boolean) => void;
   onReorderTeams: (movingTeamId: string, targetTeamId: string) => void;
   onSetPredictionCutoff: (teamId: string, predictionClosesAt?: string) => void;
@@ -5112,6 +5120,42 @@ function RunDesk({
       `Ride-in team added as Draw #${team.drawPosition} in Round 1.`,
     );
   };
+  const deleteRideInTeam = (team: Team) => {
+    if (
+      !window.confirm(
+        `Delete ride-in team ${rider(team.headerId)} & ${rider(team.heelerId)} (Draw #${team.drawPosition})? The team${
+          team.status === "ready" ? "" : ", including its recorded result,"
+        } is removed from the run order and any Cowboys × Steer picks on it are cleared.`,
+      )
+    ) {
+      return;
+    }
+    if (selected?.id === team.id) {
+      const followingTeam =
+        eventTeams.find(
+          (candidate) =>
+            candidate.id !== team.id &&
+            candidate.status === "ready" &&
+            !candidate.rolled &&
+            candidate.drawPosition > team.drawPosition,
+        ) ??
+        eventTeams.find(
+          (candidate) =>
+            candidate.id !== team.id &&
+            candidate.status === "ready" &&
+            !candidate.rolled,
+        );
+      selectActiveRunDeferred(followingTeam?.id ?? null);
+      setRawTime("");
+      setPenalties("0");
+      setNotes("");
+    }
+    onClearTeamPredictions(team.id);
+    onDeleteRideIn(team.id);
+    setRideInMessage(
+      `Ride-in team ${rider(team.headerId)} & ${rider(team.heelerId)} deleted.`,
+    );
+  };
 
   return (
     <>
@@ -5373,6 +5417,16 @@ function RunDesk({
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>
                     {team.rolled ? "Unroll" : selected?.id === team.id && team.status === "ready" ? "Next" : "Roll"}
+                  </button>
+                )}
+                {team.rideIn && (
+                  <button
+                    className="ride-in-delete-button"
+                    title="Delete ride-in team"
+                    aria-label={`Delete ride-in team ${rider(team.headerId)} & ${rider(team.heelerId)}`}
+                    onClick={() => deleteRideInTeam(team)}
+                  >
+                    <Trash2 size={14} />
                   </button>
                 )}
                 <span className={`status-dot ${team.status}`} />

@@ -460,6 +460,8 @@ main { grid-column: 2; min-width: 0; }
 .queue-row.rolled small { color: #9a651a; font-weight: 800; }
 .roll-team-button { padding: 6px 9px; color: #8b641f; background: #fff9ed; border: 1px solid #e6cc9e; border-radius: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .roll-team-button.active { color: #fff; background: #a87324; border-color: #a87324; }
+.ride-in-delete-button { display: inline-flex; align-items: center; justify-content: center; padding: 6px; color: #a5493f; background: #fdf0ee; border: 1px solid #e6bab4; border-radius: 6px; }
+.ride-in-delete-button:hover { color: #fff; background: #a5493f; border-color: #a5493f; }
 .status-dot { width: 8px; height: 8px; background: #b6bdb9; border-radius: 50%; }
 .status-dot.complete { background: #4b9a6c; }
 .status-dot.no-time { background: #bf6159; }
