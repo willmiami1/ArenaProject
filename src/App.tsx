@@ -98,9 +98,11 @@ import {
   loadContestantSignedWaiver,
   loadContestantWaiverStatuses,
   loadPublicArenaData,
+  loadRegistrationDeskData,
   logoutAdmin,
   resetSpectatorScoreboard,
   setContestantPin,
+  submitRegistrationDeskWaiver,
   type ContestantSignedWaiverEvidence,
   type ContestantPortalData,
 } from "./wixBridge";
@@ -143,6 +145,13 @@ import {
   type ContestantWaiverStatusesResponse,
   type ContestantWaiverStatusesState,
 } from "./contestantWaiverStatus";
+import { RegistrationDeskWaiverDialog } from "./RegistrationDeskWaiverDialog";
+import {
+  normalizeRegistrationDeskData,
+  type RegistrationDeskEvent,
+  type RegistrationDeskWaiverDocument,
+} from "./registrationDeskData";
+import { contestantWaiverSigningEvent } from "./registrationDeskWaiver";
 import { sortWorkspaceMeets } from "./workspaceEventOrder";
 import {
   assertRoundRobinRoleCapacity,
@@ -2500,12 +2509,16 @@ function ContestantWaiverStatus({
   contestantId,
   state,
   viewing,
+  signing,
   onViewSignedWaiver,
+  onSignWaiver,
 }: {
   contestantId: string;
   state: ContestantWaiverStatusesState;
   viewing?: boolean;
+  signing?: boolean;
   onViewSignedWaiver?: (contestantId: string) => void;
+  onSignWaiver?: (contestantId: string) => void;
 }) {
   const status = contestantWaiverStatusPresentation(state, contestantId);
   if (status.kind === "signed") {
@@ -2542,6 +2555,26 @@ function ContestantWaiverStatus({
         title={status.message}
       >
         {status.label}
+      </span>
+    );
+  }
+  if (status.kind === "not-signed") {
+    return (
+      <span className="contestant-waiver-state not-signed">
+        <span className="contestant-waiver-badge not-signed">
+          {status.label}
+        </span>
+        {onSignWaiver && (
+          <button
+            type="button"
+            className="contestant-waiver-view"
+            disabled={signing}
+            onClick={() => onSignWaiver(contestantId)}
+          >
+            <ClipboardPen size={12} aria-hidden="true" />
+            {signing ? "Opening…" : "Sign waiver"}
+          </button>
+        )}
       </span>
     );
   }
@@ -2593,6 +2626,15 @@ function Contestants({
     useState<ContestantSignedWaiverEvidence | null>(null);
   const [waiverEvidenceBusyId, setWaiverEvidenceBusyId] = useState("");
   const [waiverEvidenceError, setWaiverEvidenceError] = useState("");
+  const [waiverSigning, setWaiverSigning] = useState<{
+    contestant: Contestant;
+    event: RegistrationDeskEvent;
+    document: RegistrationDeskWaiverDocument;
+  } | null>(null);
+  const [waiverSignLoadingId, setWaiverSignLoadingId] = useState("");
+  const [waiverSignBusy, setWaiverSignBusy] = useState(false);
+  const [waiverSignError, setWaiverSignError] = useState("");
+  const [waiverSignMessage, setWaiverSignMessage] = useState("");
   const refreshWaiverStatuses = useCallback(async () => {
     const request = waiverRequestRef.current + 1;
     waiverRequestRef.current = request;
@@ -2730,6 +2772,91 @@ function Contestants({
   const closeSignedWaiver = () => {
     setWaiverEvidence(null);
     setWaiverEvidenceError("");
+  };
+  const launchWaiverSigning = async (contestantId: string) => {
+    const contestant = contestants.find(({ id }) => id === contestantId);
+    if (!contestant) return;
+    setWaiverSignMessage("");
+    setWaiverSignError("");
+    setWaiverSignLoadingId(contestantId);
+    try {
+      if (!embedded) {
+        throw new Error(
+          "Waiver signing is available only in the authenticated Wix workspace.",
+        );
+      }
+      const deskResponse = await loadRegistrationDeskData();
+      if (!deskResponse) {
+        throw new Error("The waiver document could not be loaded from Wix.");
+      }
+      const desk = normalizeRegistrationDeskData(deskResponse);
+      if (!desk.waiverDocument.available) {
+        throw new Error(
+          "Waiver signing is unavailable until the authoritative legal document is configured.",
+        );
+      }
+      const signEvent = contestantWaiverSigningEvent(desk.events);
+      if (!signEvent) {
+        throw new Error(
+          "Waivers can be signed only while a competition is live or upcoming.",
+        );
+      }
+      setWaiverSigning({
+        contestant,
+        event: signEvent,
+        document: desk.waiverDocument,
+      });
+    } catch (error) {
+      setWaiverSignMessage(
+        error instanceof Error && error.message
+          ? error.message
+          : "The waiver could not be opened.",
+      );
+    } finally {
+      setWaiverSignLoadingId("");
+    }
+  };
+  const signContestantWaiver = async ({
+    signerName,
+    signatureDataUrl,
+  }: {
+    signerName: string;
+    signatureDataUrl: string;
+  }) => {
+    if (!waiverSigning) return;
+    setWaiverSignBusy(true);
+    setWaiverSignError("");
+    try {
+      const result = await submitRegistrationDeskWaiver({
+        eventId: waiverSigning.event.id,
+        contestantId: waiverSigning.contestant.id,
+        signerName,
+        signatureDataUrl,
+        accepted: true,
+      });
+      if (!result) throw new Error("The waiver signature was not saved.");
+      setWaiverSigning(null);
+      setWaiverSignMessage(
+        `Waiver signed for ${result.signature.contestantName} at ${new Date(
+          result.signature.signedAt,
+        ).toLocaleString()}.`,
+      );
+      void refreshWaiverStatuses();
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "The waiver signature could not be saved.";
+      setWaiverSignError(message);
+      throw new Error(message);
+    } finally {
+      setWaiverSignBusy(false);
+    }
+  };
+  const cancelWaiverSigning = () => {
+    if (waiverSignBusy) return;
+    setWaiverSigning(null);
+    setWaiverSignError("");
   };
   const deleteContestant = (contestant: Contestant) => {
     if (
@@ -2894,6 +3021,11 @@ function Contestants({
                 {waiverEvidenceError}
               </p>
             )}
+            {waiverSignMessage && (
+              <p className="waiver-load-message" role="status">
+                {waiverSignMessage}
+              </p>
+            )}
           </div>
           <div className="roster-actions">
             <label className="search"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search riders" /></label>
@@ -2932,7 +3064,11 @@ function Contestants({
                 contestantId={contestant.id}
                 state={waiverStatuses}
                 viewing={waiverEvidenceBusyId === contestant.id}
+                signing={waiverSignLoadingId === contestant.id}
                 onViewSignedWaiver={viewSignedWaiver}
+                onSignWaiver={(id) => {
+                  void launchWaiverSigning(id);
+                }}
               />
               {contestantActions(contestant)}
             </div>
@@ -2962,7 +3098,11 @@ function Contestants({
                       contestantId={contestant.id}
                       state={waiverStatuses}
                       viewing={waiverEvidenceBusyId === contestant.id}
+                      signing={waiverSignLoadingId === contestant.id}
                       onViewSignedWaiver={viewSignedWaiver}
+                      onSignWaiver={(id) => {
+                        void launchWaiverSigning(id);
+                      }}
                     />
                   </dd>
                 </div>
@@ -2975,6 +3115,17 @@ function Contestants({
         <SignedWaiverEvidenceDialog
           evidence={waiverEvidence}
           onClose={closeSignedWaiver}
+        />
+      )}
+      {waiverSigning && (
+        <RegistrationDeskWaiverDialog
+          contestantName={waiverSigning.contestant.name}
+          eventName={waiverSigning.event.name}
+          waiverDocument={waiverSigning.document}
+          busy={waiverSignBusy}
+          error={waiverSignError}
+          onCancel={cancelWaiverSigning}
+          onSubmit={signContestantWaiver}
         />
       )}
     </>
