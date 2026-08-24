@@ -8,6 +8,7 @@ import {
   type RegistrationDeskData,
 } from "./registrationDeskData";
 import {
+  contestantWaiverSigningEvent,
   registrationDeskOutstandingWaiverParticipants,
   registrationDeskWaiverParticipants,
   registrationDeskWaiverStatus,
@@ -383,5 +384,44 @@ describe("Registration Desk tablet waiver", () => {
     );
     expect(JSON.stringify(publicData)).not.toContain("waiver");
     expect(JSON.stringify(publicData)).not.toContain("iVBORw0KGgo");
+  });
+});
+
+describe("contestant waiver signing event", () => {
+  const eventWithSchedule = (
+    id: string,
+    status: "Live" | "Upcoming" | "Complete",
+    date: string,
+    startTime = "18:00",
+  ) => ({ ...event(id), status, date, startTime });
+
+  it("prefers the live competition over earlier upcoming ones", () => {
+    const chosen = contestantWaiverSigningEvent([
+      eventWithSchedule("upcoming-early", "Upcoming", "2026-08-10"),
+      eventWithSchedule("live-now", "Live", "2026-08-14"),
+      eventWithSchedule("upcoming-late", "Upcoming", "2026-08-20"),
+    ]);
+    expect(chosen?.id).toBe("live-now");
+  });
+
+  it("falls back to the next upcoming competition by start time", () => {
+    const chosen = contestantWaiverSigningEvent([
+      eventWithSchedule("upcoming-late", "Upcoming", "2026-08-20"),
+      eventWithSchedule("upcoming-early", "Upcoming", "2026-08-10", "08:00"),
+      eventWithSchedule("finished", "Complete", "2026-08-01"),
+    ]);
+    expect(chosen?.id).toBe("upcoming-early");
+  });
+
+  it("returns undefined when every competition is complete", () => {
+    expect(
+      contestantWaiverSigningEvent([
+        eventWithSchedule("finished", "Complete", "2026-08-01"),
+      ]),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for an empty schedule", () => {
+    expect(contestantWaiverSigningEvent([])).toBeUndefined();
   });
 });

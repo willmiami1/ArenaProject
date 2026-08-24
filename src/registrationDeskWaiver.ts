@@ -6,9 +6,31 @@ import type {
   RegistrationDeskWaiverStatus,
 } from "./registrationDeskData";
 import type { RegistrationDeskRosterEntry } from "./registrationDeskRoster";
-import { registrationDeskIsVisible } from "./registrationWindow";
+import {
+  competitionStartTime,
+  registrationDeskIsVisible,
+} from "./registrationWindow";
+import type { ArenaEvent } from "./types";
 
 const pngDataUrlPattern = /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/**
+ * The competition a workspace waiver signature should be recorded against:
+ * the live competition if one is running, otherwise the next upcoming one.
+ * Returns undefined when no competition can accept a waiver.
+ */
+export function contestantWaiverSigningEvent<
+  T extends Pick<ArenaEvent, "status" | "date" | "startTime">,
+>(events: readonly T[]): T | undefined {
+  return [...events]
+    .filter((event) => registrationDeskIsVisible(event))
+    .sort(
+      (left, right) =>
+        Number(right.status === "Live") - Number(left.status === "Live") ||
+        competitionStartTime(left).getTime() -
+          competitionStartTime(right).getTime(),
+    )[0];
+}
 
 export interface RegistrationDeskWaiverParticipant {
   contestantId: string;
