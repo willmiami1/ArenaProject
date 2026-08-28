@@ -122,6 +122,7 @@ import {
   competitionName,
   competitionTypes,
   contestantEligibleForRole,
+  contestantHasDrawRegistration,
   defaultCompetitionSettings,
   entryClearedForDraw,
   generateCompetitionDraw,
@@ -5102,6 +5103,21 @@ function RunDesk({
       );
       return;
     }
+    if (event.competitionType === "pick-and-draw") {
+      const missingFromDraw = pickedTeamRidersMissingFromDraw(
+        registrations,
+        event.id,
+        team,
+      );
+      if (missingFromDraw.length) {
+        setRideInMessage(
+          `${missingFromDraw
+            .map((contestantId) => rider(contestantId))
+            .join(" and ")} must be entered in the draw before riding in.`,
+        );
+        return;
+      }
+    }
     const pairingRun =
       allEventTeams.filter(
         (existing) =>
@@ -5269,7 +5285,17 @@ function RunDesk({
       {event && event.drawApproved === true && activeRound === 1 && showRideInForm && (
         <TeamForm
           event={event}
-          contestants={contestants}
+          contestants={
+            event.competitionType === "pick-and-draw"
+              ? contestants.filter((contestant) =>
+                  contestantHasDrawRegistration(
+                    registrations,
+                    event.id,
+                    contestant.id,
+                  ),
+                )
+              : contestants
+          }
           drawPosition={
             Math.max(
               0,
