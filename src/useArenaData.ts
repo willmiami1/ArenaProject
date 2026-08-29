@@ -114,6 +114,7 @@ export function normalizeData(parsed: ArenaData): ArenaData {
           ? Number(event.maxHeelers)
           : undefined,
       slideNumber: event.slideNumber ?? 10,
+      slideRulesEnabled: event.slideRulesEnabled ?? false,
       shortGoTeams: event.shortGoTeams ?? 0,
       incentiveHandicapTotal: event.incentiveHandicapTotal ?? 7,
       incentiveTeams:

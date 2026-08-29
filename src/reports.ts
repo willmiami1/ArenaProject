@@ -4,6 +4,7 @@ import {
   competitionName,
   eventPayoutPercentages,
   officialRunTime,
+  slideRulesActive,
   slideTimeAdjustment,
   teamHandicapTotal,
 } from "./competition";
@@ -195,7 +196,7 @@ function slideReportDetails(
   heelerId: string,
   contestants: Contestant[],
 ) {
-  if (event?.competitionType !== "slide") {
+  if (!event || !slideRulesActive(event)) {
     return {
       header: contestantName(contestants, headerId),
       heeler: contestantName(contestants, heelerId),

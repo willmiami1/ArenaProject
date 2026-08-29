@@ -953,6 +953,35 @@ describe("aggregate public standings", () => {
         .officialTotal,
     ).toBe(15);
   });
+
+  it("applies the Slide adjustment to a Round Robin only when slide rules are enabled", () => {
+    const handicapNine = [
+      { ...contestants[0], headerHandicap: 4.5 },
+      { ...contestants[1], heelerHandicap: 4.5 },
+    ];
+    const roundTwo = run({ id: "round-2", round: 2, rawTime: 8, penalties: 0 });
+    const plainRoundRobin = event({
+      competitionType: "round-robin",
+      slideNumber: 10,
+    });
+    const slideRoundRobin = event({
+      competitionType: "round-robin",
+      slideNumber: 10,
+      slideRulesEnabled: true,
+    });
+
+    expect(slideTimeAdjustment(plainRoundRobin, roundTwo, handicapNine)).toBe(0);
+    expect(officialRunTime(plainRoundRobin, roundTwo, handicapNine)).toBe(8);
+    expect(slideTimeAdjustment(slideRoundRobin, roundTwo, handicapNine)).toBe(-1);
+    expect(officialRunTime(slideRoundRobin, roundTwo, handicapNine)).toBe(7);
+    expect(
+      slideTimeAdjustment(
+        slideRoundRobin,
+        run({ round: 1, rawTime: 8, penalties: 0 }),
+        handicapNine,
+      ),
+    ).toBe(0);
+  });
 });
 
 describe("render-time final classification", () => {

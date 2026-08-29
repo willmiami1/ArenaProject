@@ -3001,6 +3001,7 @@ export const loadPublicSchedule = webMethod(Permissions.Anyone, async () => {
     allowRepeatPartners: Boolean(event.allowRepeatPartners),
     handicapTotal: scheduleNumber(event.handicapTotal),
     slideNumber: scheduleNumber(event.slideNumber, 10),
+    slideRulesEnabled: Boolean(event.slideRulesEnabled),
     maxContestantHandicap: scheduleNumber(event.maxContestantHandicap, 10),
     timeLimit: scheduleNumber(event.timeLimit),
     rounds: scheduleNumber(event.rounds, 1),
