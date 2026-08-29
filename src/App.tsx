@@ -133,6 +133,7 @@ import {
   reorderDraftDrawTeams,
   reorderRunOrderTeams,
   repeatPairingBlockMessage,
+  slideRulesActive,
   slideTimeAdjustment,
   teamEligibleForCompetition,
   teamHandicapTotal,
@@ -2131,6 +2132,7 @@ function EventForm({
     allowSamePartnerDrawAndPick: event?.allowSamePartnerDrawAndPick ?? false,
     handicapTotal: (event?.handicapTotal ?? 20).toString(),
     slideNumber: (event?.slideNumber ?? 10).toString(),
+    slideRulesEnabled: event?.slideRulesEnabled ?? false,
     maxContestantHandicap: (event?.maxContestantHandicap ?? 10).toString(),
     timeLimit: (event?.timeLimit ?? 30).toString(),
     rounds: (event?.rounds ?? 1).toString(),
@@ -2179,6 +2181,8 @@ function EventForm({
       allowSamePartnerDrawAndPick: form.allowSamePartnerDrawAndPick,
       handicapTotal: Number(form.handicapTotal) || 0,
       slideNumber: Number(form.slideNumber) || 10,
+      slideRulesEnabled:
+        form.competitionType === "round-robin" && form.slideRulesEnabled,
       maxContestantHandicap: Number(form.maxContestantHandicap) || 0,
       timeLimit: Number(form.timeLimit) || 0,
       rounds: Number(form.rounds) || 1,
@@ -2223,13 +2227,14 @@ function EventForm({
           <>
             <Field label="Maximum registered Headers"><input type="number" min="1" step="1" value={form.maxHeaders} onChange={(e) => setForm({ ...form, maxHeaders: e.target.value })} placeholder="Unlimited" /><small>Leave blank for no Header capacity limit.</small></Field>
             <Field label="Maximum registered Heelers"><input type="number" min="1" step="1" value={form.maxHeelers} onChange={(e) => setForm({ ...form, maxHeelers: e.target.value })} placeholder="Unlimited" /><small>Leave blank for no Heeler capacity limit.</small></Field>
+            <label className="toggle-row"><input type="checkbox" checked={form.slideRulesEnabled} onChange={(e) => setForm({ ...form, slideRulesEnabled: e.target.checked })} /><span><strong>Apply slide rules</strong><small>Round 2 times adjust 0.5 seconds per 0.5 team handicap above or below the slide number, capped at 4 seconds.</small></span></label>
           </>
         )}
         {form.competitionType === "pick-and-draw" && (
           <Field label="Minimum draws required"><input required type="number" min="0" max={form.entriesAllowed} value={form.minDrawsAllowed} onChange={(e) => setForm({ ...form, minDrawsAllowed: e.target.value })} /><small>Minimum draw entries required before picked teams may be added.</small></Field>
         )}
         <Field label="Max Team Handicap"><input required type="number" min="0" step="0.5" value={form.handicapTotal} onChange={(e) => setForm({ ...form, handicapTotal: e.target.value })} placeholder="10.5" /></Field>
-        {form.competitionType === "slide" && (
+        {(form.competitionType === "slide" || (form.competitionType === "round-robin" && form.slideRulesEnabled)) && (
           <Field label="Slide number"><input required type="number" min="0" max="40" step="0.5" value={form.slideNumber} onChange={(e) => setForm({ ...form, slideNumber: e.target.value })} /><small>In Round 2, each 0.5 handicap above or below this number adds or subtracts 0.5 seconds, capped at 4 seconds.</small></Field>
         )}
         <Field label="Highest contestant handicap"><input required type="number" min="0" step="0.5" value={form.maxContestantHandicap} onChange={(e) => setForm({ ...form, maxContestantHandicap: e.target.value })} /><small>Contestants above this handicap in their entered position cannot participate.</small></Field>
@@ -4633,7 +4638,7 @@ function RunDesk({
   const heelerHandicap = (team: Team) =>
     contestant(team.heelerId)?.heelerHandicap ?? 0;
   const slideAdjustmentLabel = (team: Team) => {
-    if (event?.competitionType !== "slide") return "";
+    if (!event || !slideRulesActive(event)) return "";
     const adjustment = slideTimeAdjustment(
       event,
       { ...team, round: 2 },
@@ -5365,7 +5370,7 @@ function RunDesk({
                 {repeatedRunDeskTeamKeys.has(`${selected.headerId}|${selected.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}
               </div>
               <div className="run-handicap"><span>Combined team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
-              {event?.competitionType === "slide" && (
+              {event && slideRulesActive(event) && (
                <div className="run-handicap"><span>Round 2 slide adjustment</span><strong>{slideAdjustmentLabel(selected)} · Slide #{event.slideNumber ?? 10}</strong></div>
               )}
               {selected.status === "ready" && (
@@ -5438,7 +5443,7 @@ function RunDesk({
               >
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{eventTeams.length > 1 && <GripVertical className="draw-drag-handle" size={14} />}{team.originalTeamNumber ?? team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.competitionType === "slide" ? ` · R2 ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.reRun ? "PENDING RE-RUN · Picks cleared" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event && slideRulesActive(event) ? ` · R2 ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.reRun ? "PENDING RE-RUN · Picks cleared" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>
@@ -5477,7 +5482,7 @@ function RunDesk({
           {standings.map((team, index) => (
             <div className="table-row" key={team.id}>
               <span><b className={`place place-${index + 1}`}>{index + 1}</b></span>
-              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong>{event?.competitionType === "slide" && <small>Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)} · R2 {slideAdjustmentLabel(team)}</small>}<small>Team #{team.originalTeamNumber ?? team.drawPosition}{activeRound > 1 ? ` · Draw #${team.drawPosition}` : ""}{team.round === activeRound && activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
+              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong>{event && slideRulesActive(event) && <small>Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)} · R2 {slideAdjustmentLabel(team)}</small>}<small>Team #{team.originalTeamNumber ?? team.drawPosition}{activeRound > 1 ? ` · Draw #${team.drawPosition}` : ""}{team.round === activeRound && activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
               <span>{entryRuns(team).filter((run) => run.status === "complete" && run.rawTime !== null).length} / {roundCount}</span>
               <span><b className="total-time">{qualifiedTotal(team, activeRound + 1).toFixed(2)}</b></span>
             </div>

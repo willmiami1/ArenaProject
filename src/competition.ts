@@ -88,6 +88,7 @@ export const defaultCompetitionSettings = {
   allowSamePartnerDrawAndPick: false,
   handicapTotal: 20,
   slideNumber: 10,
+  slideRulesEnabled: false,
   maxContestantHandicap: 10,
   timeLimit: 30,
   rounds: 1,
@@ -143,12 +144,23 @@ export function eventPayoutPercentages(
   return event.payoutPercentages ?? [50, 30, 20];
 }
 
+// Slide rules apply to Slide competitions and to Round Robins that opt in.
+export const slideRulesActive = (
+  event: Pick<ArenaEvent, "competitionType" | "slideRulesEnabled">,
+) =>
+  event.competitionType === "slide" ||
+  (event.competitionType === "round-robin" &&
+    event.slideRulesEnabled === true);
+
 export function slideTimeAdjustment(
-  event: Pick<ArenaEvent, "competitionType" | "slideNumber">,
+  event: Pick<
+    ArenaEvent,
+    "competitionType" | "slideNumber" | "slideRulesEnabled"
+  >,
   team: Pick<Team, "round" | "headerId" | "heelerId">,
   contestants: Contestant[],
 ) {
-  if (event.competitionType !== "slide" || team.round !== 2) return 0;
+  if (!slideRulesActive(event) || team.round !== 2) return 0;
   const difference =
     teamHandicapTotal(team.headerId, team.heelerId, contestants) -
     Number(event.slideNumber ?? 10);
@@ -156,7 +168,10 @@ export function slideTimeAdjustment(
 }
 
 export function officialRunTime(
-  event: Pick<ArenaEvent, "competitionType" | "slideNumber">,
+  event: Pick<
+    ArenaEvent,
+    "competitionType" | "slideNumber" | "slideRulesEnabled"
+  >,
   team: Pick<
     Team,
     "round" | "headerId" | "heelerId" | "rawTime" | "penalties"

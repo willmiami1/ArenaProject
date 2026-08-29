@@ -54,6 +54,7 @@ export interface ArenaEvent {
   allowSamePartnerDrawAndPick?: boolean;
   handicapTotal: number;
   slideNumber?: number;
+  slideRulesEnabled?: boolean;
   maxContestantHandicap: number;
   timeLimit: number;
   rounds: number;
