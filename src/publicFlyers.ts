@@ -12,6 +12,10 @@ export const futureEventFlyers: PublicFlyer[] = [
     src: "./september-25-friday-night-roping-flyer.png",
     alt: "Destiny Ranch Arena September 25 Friday Night Roping flyer — Drawpot capped at 5.5, 8:00 PM",
   },
+  {
+    src: "./october-3-round-robin-9-slide-flyer.png",
+    alt: "Destiny Ranch Arena Saturday, October 3 Team Roping flyer — Round Robin #9 Slide, 15x15, roping at 9:00 AM",
+  },
 ];
 
 export const pastEventWinnerFlyers: PublicFlyer[] = [
