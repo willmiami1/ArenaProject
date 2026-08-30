@@ -25,6 +25,10 @@ describe("public flyer categories", () => {
   it("keeps the winners flyers in the past winners category, newest first", () => {
     expect(pastEventWinnerFlyers).toEqual([
       {
+        src: "./august-30-winners-flyer.jpg",
+        alt: "Destiny Ranch Arena August 30 Round Robin winners — Harrison Teixeira with Kadu Amaral, Marco Machado, and Tony Lazo",
+      },
+      {
         src: "./august-21-winners-flyer.jpg",
         alt: "Destiny Ranch Arena August 21 Round Robin winners",
       },
