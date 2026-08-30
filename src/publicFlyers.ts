@@ -6,7 +6,7 @@ export interface PublicFlyer {
 export const futureEventFlyers: PublicFlyer[] = [
   {
     src: "./september-11-round-robin-2026-flyer.png",
-    alt: "Destiny Ranch Arena September 11 Round Robin event flyer",
+    alt: "Destiny Ranch Arena September 11 Friday Night Round Robin flyer — gates 6 PM, rope 8 PM, 20 best teams to short round",
   },
   {
     src: "./september-25-friday-night-roping-flyer.png",
