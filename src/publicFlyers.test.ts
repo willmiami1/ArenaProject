@@ -17,7 +17,7 @@ describe("public flyer categories", () => {
       },
       {
         src: "./october-3-round-robin-9-slide-flyer.png",
-        alt: "Destiny Ranch Arena Saturday, October 3 Team Roping flyer — Round Robin #9 Slide, 15x15, roping at 9:00 AM",
+        alt: "Destiny Ranch Arena Saturday, October 3 Team Roping flyer — Round Robin #9 Slide, 15x15, roping at 8:00 PM",
       },
     ]);
   });
