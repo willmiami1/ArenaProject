@@ -1137,6 +1137,122 @@ describe("multi-round Run Desk results", () => {
     ).toHaveLength(1);
   });
 
+  it("advances a no-time team to Round 2 when the event is not progressive", () => {
+    const competition = event({
+      competitionType: "round-robin",
+      rounds: 2,
+      shortGoTeams: 0,
+      progressiveAfterRound: 0,
+    });
+    const roundOne = [
+      run({ id: "np-team-1", status: "complete", rawTime: 8, penalties: 0 }),
+      run({
+        id: "np-team-2",
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+        drawPosition: 2,
+        status: "ready",
+        rawTime: null,
+        penalties: 0,
+      }),
+    ];
+    const advanced = applyRunResult(
+      roundOne,
+      "np-team-2",
+      { status: "no-time", rawTime: null, penalties: 0 },
+      2,
+      0,
+      competition,
+      contestants,
+    );
+    const roundTwo = advanced.filter((team) => team.round === 2);
+    expect(roundTwo).toHaveLength(2);
+    expect(roundTwo.every((team) => team.status === "ready")).toBe(true);
+    const noTimeEntry = roundTwo.find(
+      (team) => (team.headerEntryNumber ?? 1) === 2,
+    );
+    expect(noTimeEntry).toMatchObject({ drawPosition: 1, rawTime: null });
+  });
+
+  it("still blocks no-time teams when the event is progressive", () => {
+    const competition = event({
+      rounds: 2,
+      shortGoTeams: 0,
+      progressiveAfterRound: 1,
+    });
+    const roundOne = [
+      run({ id: "p-team-1", status: "complete", rawTime: 8, penalties: 0 }),
+      run({
+        id: "p-team-2",
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+        drawPosition: 2,
+        status: "ready",
+        rawTime: null,
+        penalties: 0,
+      }),
+    ];
+    const advanced = applyRunResult(
+      roundOne,
+      "p-team-2",
+      { status: "no-time", rawTime: null, penalties: 0 },
+      2,
+      0,
+      competition,
+      contestants,
+    );
+    const roundTwo = advanced.filter((team) => team.round === 2);
+    expect(roundTwo).toHaveLength(1);
+    expect(roundTwo[0]?.headerEntryNumber ?? 1).toBe(1);
+  });
+
+  it("restores blocked no-time teams into a started final round on reconcile", () => {
+    const competition = event({
+      competitionType: "round-robin",
+      rounds: 2,
+      shortGoTeams: 0,
+      progressiveAfterRound: 0,
+    });
+    const teams = [
+      run({ id: "r1-fast", status: "complete", rawTime: 8, penalties: 0 }),
+      run({
+        id: "r1-no-time",
+        headerEntryNumber: 2,
+        heelerEntryNumber: 2,
+        drawPosition: 2,
+        status: "no-time",
+        rawTime: null,
+        penalties: 0,
+      }),
+      run({
+        id: "r2-fast",
+        round: 2,
+        status: "complete",
+        rawTime: 7,
+        penalties: 0,
+        generated: true,
+      }),
+    ];
+    const reconciled = reconcileQualifiedAdvancements(
+      teams,
+      [competition],
+      contestants,
+    );
+    const roundTwo = reconciled.filter((team) => team.round === 2);
+    expect(roundTwo).toHaveLength(2);
+    expect(
+      reconciled.find((team) => team.id === "r2-fast"),
+    ).toMatchObject({ status: "complete", rawTime: 7 });
+    const restored = roundTwo.find(
+      (team) => (team.headerEntryNumber ?? 1) === 2,
+    );
+    expect(restored).toMatchObject({
+      status: "ready",
+      rawTime: null,
+      drawPosition: 2,
+    });
+  });
+
   it("repairs inherited gates and saves Pick Only 11 Round 2 scores", () => {
     const competition = event({
       name: "Pick Only 11",

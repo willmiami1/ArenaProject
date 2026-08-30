@@ -934,6 +934,15 @@ export function calculatePayouts(
   }));
 }
 
+export function qualificationRequiredForAdvancement(
+  event: ArenaEvent | undefined,
+  fromRound: number,
+) {
+  if (!event) return true;
+  const progressiveAfter = event.progressiveAfterRound ?? 0;
+  return progressiveAfter > 0 && fromRound >= progressiveAfter;
+}
+
 export function applyRunResult(
   teams: Team[],
   teamId: string,
@@ -950,6 +959,11 @@ export function applyRunResult(
     team.id === teamId ? { ...team, ...update } : team,
   );
   const qualified = update.status === "complete";
+  const resultRecorded = qualified || update.status === "no-time";
+  const advances =
+    qualified ||
+    (resultRecorded &&
+      !qualificationRequiredForAdvancement(event, source.round));
   const sameTeam = (team: Team) =>
     team.eventId === source.eventId &&
     team.headerId === source.headerId &&
@@ -957,10 +971,12 @@ export function applyRunResult(
     (team.headerEntryNumber ?? 1) === (source.headerEntryNumber ?? 1) &&
     (team.heelerEntryNumber ?? 1) === (source.heelerEntryNumber ?? 1);
 
-  if (!qualified) {
-    nextTeams = nextTeams.filter(
-      (team) => !(sameTeam(team) && team.round > source.round),
-    );
+  if (!advances) {
+    if (qualificationRequiredForAdvancement(event, source.round)) {
+      nextTeams = nextTeams.filter(
+        (team) => !(sameTeam(team) && team.round > source.round),
+      );
+    }
     return syncShortGoFinalists(
       nextTeams,
       source.eventId,
@@ -1076,14 +1092,23 @@ function syncShortGoFinalists(
   );
   if (
     !qualifierTeams.length ||
-    qualifierTeams.some((team) => team.status === "ready") ||
-    finalTeams.some((team) => team.status !== "ready" || team.rawTime !== null)
+    qualifierTeams.some((team) => team.status === "ready")
   ) {
     return teams;
   }
+  const finalRoundStarted = finalTeams.some(
+    (team) => team.status !== "ready" || team.rawTime !== null,
+  );
+  const requireQualified =
+    shortGoTeams > 0 ||
+    qualificationRequiredForAdvancement(event, qualifierRound);
 
   const finalists = qualifierTeams
-    .filter((team) => team.status === "complete" && team.rawTime !== null)
+    .filter((team) =>
+      requireQualified
+        ? team.status === "complete" && team.rawTime !== null
+        : team.status === "complete" || team.status === "no-time",
+    )
     .map((qualifier) => {
       const key = entryKey(qualifier);
       const completedRounds = teams.filter(
@@ -1095,6 +1120,8 @@ function syncShortGoFinalists(
       );
       return {
         qualifier,
+        // Teams with a no-time round are out of the average; they rope first.
+        qualifiedForAverage: completedRounds.length >= qualifierRound,
         total: completedRounds.reduce(
           (sum, team) =>
             sum +
@@ -1107,15 +1134,52 @@ function syncShortGoFinalists(
     })
     .sort(
       (a, b) =>
+        Number(b.qualifiedForAverage) - Number(a.qualifiedForAverage) ||
         a.total - b.total ||
         a.qualifier.drawPosition - b.qualifier.drawPosition,
     )
     .slice(0, shortGoTeams > 0 ? shortGoTeams : undefined)
     .sort(
       (a, b) =>
+        Number(a.qualifiedForAverage) - Number(b.qualifiedForAverage) ||
         b.total - a.total ||
         a.qualifier.drawPosition - b.qualifier.drawPosition,
     );
+
+  if (finalRoundStarted) {
+    if (requireQualified) return teams;
+    // The final round is underway; only append teams that are still missing
+    // (e.g. no-time teams blocked before non-progressive advancement existed).
+    const existingKeys = new Set(finalTeams.map((team) => entryKey(team)));
+    const missing = finalists.filter(
+      ({ qualifier }) => !existingKeys.has(entryKey(qualifier)),
+    );
+    if (!missing.length) return teams;
+    const maxDrawPosition = finalTeams.reduce(
+      (max, team) => Math.max(max, team.drawPosition),
+      0,
+    );
+    return [
+      ...teams,
+      ...missing.map(({ qualifier }, index) => ({
+        ...qualifier,
+        id: `team-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+        drawPosition: maxDrawPosition + index + 1,
+        originalTeamNumber:
+          qualifier.originalTeamNumber ?? qualifier.drawPosition,
+        round: finalRound,
+        status: "ready" as const,
+        rawTime: null,
+        penalties: 0,
+        notes: "",
+        checkedIn: false,
+        generated: true,
+        points: 0,
+        predictionClosesAt: undefined,
+        rolled: undefined,
+      })),
+    ];
+  }
 
   const withoutReadyFinalists = teams.filter(
     (team) =>
@@ -1167,8 +1231,10 @@ export function reconcileQualifiedAdvancements(
       .filter(
         (team) =>
           team.eventId === event.id &&
-          team.status === "complete" &&
-          team.rawTime !== null,
+          ((team.status === "complete" && team.rawTime !== null) ||
+            (team.status === "no-time" &&
+              !team.scratched &&
+              !qualificationRequiredForAdvancement(event, team.round))),
       )
       .sort((a, b) => a.round - b.round);
 
