@@ -9,6 +9,10 @@ export const publicProfilePhoto = (photo) => {
   return photo;
 };
 
+// Open-tab entries are cleared for public view, matching entryClearedForDraw.
+const entryClearedForPublicView = (entry) =>
+  entry.paid !== false || entry.paymentMethod === "tab";
+
 export const publicRegisteredRiders = (
   eventId,
   registrations,
@@ -29,7 +33,7 @@ export const publicRegisteredRiders = (
       (registration) =>
         registration.eventId === eventId &&
         registration.status !== "scratched" &&
-        registration.paid !== false,
+        entryClearedForPublicView(registration),
     )
     .forEach((registration) => {
       addEntry(
@@ -45,7 +49,7 @@ export const publicRegisteredRiders = (
         Number(team.round) === 1 &&
         !team.generated &&
         !team.scratched &&
-        team.paid !== false,
+        entryClearedForPublicView(team),
     )
     .forEach((team) => {
       addEntry(headerEntries, team.headerId, team.headerHorseName);
@@ -107,14 +111,14 @@ export const publicRoundRobinRoleCapacities = (event, registrations) => {
 export const spectatorPicksAreOpen = (team, now = Date.now()) =>
   !team.scratched &&
   !team.rolled &&
-  team.paid !== false &&
+  entryClearedForPublicView(team) &&
   team.status === "ready" &&
   (!team.predictionClosesAt || Date.parse(team.predictionClosesAt) > now);
 
 const publicPredictionRunIsEligible = (team) =>
   !team.scratched &&
   !team.rolled &&
-  team.paid !== false &&
+  entryClearedForPublicView(team) &&
   team.status === "ready";
 
 export const effectivePublicPredictionState = (event, teams) => {

@@ -70,6 +70,33 @@ describe("Wix public registered rider projection", () => {
     expect(JSON.stringify(projected)).not.toContain("private@example.com");
     expect(JSON.stringify(projected)).not.toContain("Profile Horse");
   });
+
+  it("shows open-tab riders but hides fully unpaid entries", () => {
+    const contestants = new Map([
+      ["tab-rider", { id: "tab-rider", name: "Harrison Teixeira" }],
+      ["unpaid-rider", { id: "unpaid-rider", name: "Unpaid Rider" }],
+      ["heeler", { id: "heeler", name: "Bo Heeler" }],
+    ]);
+    const registrations = [
+      { eventId: "event", contestantId: "tab-rider", role: "Header", status: "entered", paid: false, paymentMethod: "tab" },
+      { eventId: "event", contestantId: "unpaid-rider", role: "Header", status: "entered", paid: false, paymentMethod: "cash" },
+    ];
+    const teams = [
+      { eventId: "event", round: 1, headerId: "tab-rider", heelerId: "heeler", generated: false, scratched: false, paid: false, paymentMethod: "tab" },
+    ];
+
+    const projected = publicRegisteredRiders(
+      "event",
+      registrations,
+      teams,
+      contestants,
+    );
+
+    expect(projected.headers.map(({ name }) => name)).toEqual([
+      "Harrison Teixeira",
+    ]);
+    expect(projected.heelers.map(({ name }) => name)).toEqual(["Bo Heeler"]);
+  });
 });
 
 describe("Wix public Round Robin capacities", () => {
