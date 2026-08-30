@@ -194,6 +194,33 @@ const shuffle = <T,>(items: T[]) =>
 
 const pairKey = (headerId: string, heelerId: string) => `${headerId}|${heelerId}`;
 
+// Expands a side's entry pool to `count` slots. Extra slots become free runs
+// spread as evenly as possible across distinct riders: no rider receives a
+// second free run until every rider on that side has one.
+const expandPoolWithFreeRuns = <T extends { contestantId: string }>(
+  pool: T[],
+  count: number,
+): (T & { freeRun: boolean })[] => {
+  const base = shuffle(pool).map((entry) => ({ ...entry, freeRun: false }));
+  const extra = count - base.length;
+  if (extra <= 0) return base;
+  const entriesByContestant = new Map<string, typeof base>();
+  base.forEach((entry) => {
+    const list = entriesByContestant.get(entry.contestantId) ?? [];
+    list.push(entry);
+    entriesByContestant.set(entry.contestantId, list);
+  });
+  const contestantOrder = shuffle([...entriesByContestant.keys()]);
+  const freeRuns = Array.from({ length: extra }, (_, index) => {
+    const contestantId = contestantOrder[index % contestantOrder.length];
+    const entries = entriesByContestant.get(contestantId)!;
+    const source =
+      entries[Math.floor(index / contestantOrder.length) % entries.length];
+    return { ...source, freeRun: true };
+  });
+  return [...base, ...freeRuns];
+};
+
 function spacingQuality(teams: Team[]) {
   const lastRiderPosition = new Map<string, number>();
   const lastPairPosition = new Map<string, number>();
@@ -432,7 +459,6 @@ function drawPotTeams(
         Array.from({ length: entry.entries }, (_, index) => ({
           contestantId: entry.contestantId,
           entryNumber: index + 1,
-          freeRun: false,
           horseName: entry.horseName,
         })),
       );
@@ -443,7 +469,6 @@ function drawPotTeams(
         Array.from({ length: entry.entries }, (_, index) => ({
           contestantId: entry.contestantId,
           entryNumber: index + 1,
-          freeRun: false,
           horseName: entry.horseName,
         })),
       );
@@ -452,26 +477,18 @@ function drawPotTeams(
   const used = new Set<string>();
   const teams: Team[] = [];
   type DrawPair = {
-    header: (typeof headerEntries)[number];
-    heeler: (typeof heelerEntries)[number];
+    header: (typeof headerEntries)[number] & { freeRun: boolean };
+    heeler: (typeof heelerEntries)[number] & { freeRun: boolean };
   };
 
   for (let roundIndex = 0; roundIndex < 1; roundIndex += 1) {
     const count = Math.max(headerEntries.length, heelerEntries.length);
-    const expandPool = <T extends { freeRun: boolean }>(pool: T[]) => {
-      const shuffled = shuffle([...pool]);
-      return Array.from({ length: count }, (_, index) =>
-        index < shuffled.length
-          ? shuffled[index]
-          : { ...shuffled[index % shuffled.length], freeRun: true },
-      );
-    };
     let completedPairs: DrawPair[] | null = null;
     let bestPairs: DrawPair[] = [];
 
     for (let attempt = 0; attempt < 100 && !completedPairs; attempt += 1) {
-      const headers = shuffle(expandPool(headerEntries));
-      const heelers = shuffle(expandPool(heelerEntries));
+      const headers = shuffle(expandPoolWithFreeRuns(headerEntries, count));
+      const heelers = shuffle(expandPoolWithFreeRuns(heelerEntries, count));
       const roundUsed = new Set(used);
       const pairs: DrawPair[] = [];
       let failed = false;
@@ -699,25 +716,11 @@ function pickAndDrawTeams(
     const count = Math.max(headers.length, heelers.length);
     type DrawEntry = (typeof headers)[number] & { freeRun: boolean };
     type DrawPair = { header: DrawEntry; heeler: DrawEntry };
-    const expandPool = (pool: (typeof headers)[number][]) => {
-      const randomized = shuffle(pool).map((entry) => ({
-        ...entry,
-        freeRun: false,
-      }));
-      return Array.from({ length: count }, (_, index) =>
-        index < randomized.length
-          ? randomized[index]
-          : {
-              ...randomized[index % randomized.length],
-              freeRun: true,
-            },
-      );
-    };
     let completedPairs: DrawPair[] | null = null;
 
     for (let attempt = 0; attempt < 250 && !completedPairs; attempt += 1) {
-      const availableHeaders = shuffle(expandPool(headers));
-      const availableHeelers = shuffle(expandPool(heelers));
+      const availableHeaders = shuffle(expandPoolWithFreeRuns(headers, count));
+      const availableHeelers = shuffle(expandPoolWithFreeRuns(heelers, count));
       const attemptUsed = new Set(used);
       const pairs: DrawPair[] = [];
 
