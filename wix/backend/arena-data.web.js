@@ -684,6 +684,55 @@ function workspaceAfterCommittedWrites(
 const teamEntryKey = (team) =>
   `${team.headerId}|${team.heelerId}|${team.headerEntryNumber || 1}|${team.heelerEntryNumber || 1}`;
 
+// Standard payoff chart: the paying-team count sets how many places pay.
+const PAYOUT_FORMULA_TIERS = [
+  { minTeams: 1, percentages: [60, 40] },
+  { minTeams: 50, percentages: [50, 30, 20] },
+  { minTeams: 100, percentages: [40, 30, 20, 10] },
+  { minTeams: 125, percentages: [33, 26, 20, 14, 7] },
+  { minTeams: 150, percentages: [30, 24, 18, 12, 9, 7] },
+  { minTeams: 200, percentages: [25, 20, 15, 12, 10, 8, 6, 4] },
+  { minTeams: 250, percentages: [20, 16, 14, 10, 9, 8, 7, 6, 5, 4] },
+];
+
+const eventPayoutPercentages = (event, payingTeams) => {
+  if (event.payoutMode === "formula") {
+    return (
+      [...PAYOUT_FORMULA_TIERS]
+        .reverse()
+        .find((tier) => payingTeams >= tier.minTeams) ||
+      PAYOUT_FORMULA_TIERS[0]
+    ).percentages;
+  }
+  return event.payoutPercentages || [50, 30, 20];
+};
+
+// Same place count as the payoff screen's calculatePayouts.
+const paidPlacesCount = (event, payingTeams, resultTeams) => {
+  if (resultTeams <= 0) return 0;
+  const configured = eventPayoutPercentages(event, payingTeams)
+    .filter((percentage) => percentage > 0)
+    .slice(0, resultTeams);
+  return resultTeams === 1 || configured.length === 0 ? 1 : configured.length;
+};
+
+// Slide rules apply to Slide competitions and to Round Robins that opt in.
+const slideRulesActive = (event) =>
+  event.competitionType === "slide" ||
+  (event.competitionType === "round-robin" &&
+    event.slideRulesEnabled === true);
+
+const slideTimeAdjustment = (event, run, contestantsById) => {
+  if (!slideRulesActive(event) || Number(run.round) !== 2) return 0;
+  const header = contestantsById.get(run.headerId);
+  const heeler = contestantsById.get(run.heelerId);
+  const difference =
+    Number(header?.headerHandicap || 0) +
+    Number(heeler?.heelerHandicap || 0) -
+    Number(event.slideNumber ?? 10);
+  return Math.max(-4, Math.min(4, Math.round(difference * 2) / 2));
+};
+
 function publishedResults(event, teams, contestants) {
     if (event.resultsPublished !== true) return [];
     const grouped = new Map();
@@ -694,16 +743,24 @@ function publishedResults(event, teams, contestants) {
         grouped.set(key, [...(grouped.get(key) || []), team]);
       });
     const names = new Map(contestants.map((contestant) => [contestant.id, contestant.name]));
-    // Published results carry the same final classification as the bottom of
-    // the Run Desk: every team that caught at least one steer, grouped by
-    // rounds caught (most first) and ranked fastest-to-slowest in each group.
-    return [...grouped.values()]
+    const contestantsById = new Map(
+      contestants.map((contestant) => [contestant.id, contestant]),
+    );
+    // Published results mirror the payoff screen's Winners list: the same
+    // classification (most rounds caught first, fastest slide-adjusted total
+    // inside each group), cut to the number of paid places — without the
+    // money.
+    const classified = [...grouped.values()]
       .map((runs) => {
         const completed = runs.filter(
           (run) => run.status === "complete" && run.rawTime !== null,
         );
         const total = completed.reduce(
-          (sum, run) => sum + Number(run.rawTime || 0) + Number(run.penalties || 0),
+          (sum, run) =>
+            sum +
+            Number(run.rawTime || 0) +
+            Number(run.penalties || 0) +
+            slideTimeAdjustment(event, run, contestantsById),
           0,
         );
         const qualified =
@@ -735,6 +792,16 @@ function publishedResults(event, teams, contestants) {
         place: index + 1,
         ...result,
       }));
+    const payingTeams = teams.filter(
+      (team) =>
+        team.eventId === event.id &&
+        Number(team.round) === 1 &&
+        !team.scratched,
+    ).length;
+    return classified.slice(
+      0,
+      paidPlacesCount(event, payingTeams, classified.length),
+    );
 }
 
 const predictionOutcome = (team) =>

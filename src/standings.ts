@@ -1,5 +1,9 @@
 import type { ArenaEvent, Contestant, Team } from "./types";
-import { officialRunTime } from "./competition";
+import {
+  calculatePayouts,
+  eventPayoutPercentages,
+  officialRunTime,
+} from "./competition";
 import { ledQualifiedRunsThroughRound, sortLedStandings } from "./ledDisplay";
 
 export interface AggregateStanding {
@@ -68,9 +72,9 @@ export function publicStandingRows(
 ) {
   if (!event.resultsPublished) return [];
   const names = new Map(contestants.map((contestant) => [contestant.id, contestant.name]));
-  // Published results carry the same final classification as the bottom of
-  // the Run Desk: every team that caught at least one steer, grouped by
-  // rounds caught (most first) and ranked fastest-to-slowest in each group.
+  // Published results mirror the payoff screen's Winners list: the same
+  // classification (most rounds caught first, fastest total inside each
+  // group), cut to the number of paid places — without the money.
   const finalRound = teams
     .filter(
       (team) =>
@@ -90,7 +94,16 @@ export function publicStandingRows(
     (team) => aggregates.get(teamEntryKey(team))?.total ?? 0,
     (team) => aggregates.get(teamEntryKey(team))?.rounds ?? 0,
   );
-  return finalists.map((team, index) => {
+  const payingTeams = teams.filter(
+    (team) =>
+      team.eventId === event.id && team.round === 1 && !team.scratched,
+  ).length;
+  const paidPlaces = calculatePayouts(
+    0,
+    finalists.length,
+    eventPayoutPercentages(event, payingTeams),
+  ).length;
+  return finalists.slice(0, paidPlaces).map((team, index) => {
     const aggregate = aggregates.get(teamEntryKey(team));
     return {
       place: index + 1,
