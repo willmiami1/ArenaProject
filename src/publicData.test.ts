@@ -888,6 +888,24 @@ describe("aggregate public standings", () => {
     expect(rows[1]).toMatchObject({ place: 2, rounds: 1, officialTotal: 9 });
   });
 
+  it("cuts published results to the paid places like the payoff screen", () => {
+    const competition = event({
+      resultsPublished: true,
+      rounds: 2,
+      payoutPercentages: [60, 40],
+    });
+    const teams = [
+      run(),
+      run({ id: "round-2", round: 2, rawTime: 7, penalties: 0 }),
+      run({ id: "entry-2", headerEntryNumber: 2, heelerEntryNumber: 2, rawTime: 9, penalties: 0 }),
+      run({ id: "entry-3", headerEntryNumber: 3, heelerEntryNumber: 3, rawTime: 10, penalties: 0 }),
+    ];
+    const rows = publicStandingRows(competition, teams, contestants);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ place: 1, rounds: 2, officialTotal: 20 });
+    expect(rows[1]).toMatchObject({ place: 2, rounds: 1, officialTotal: 9 });
+  });
+
   it("drops a no-timed team into the fewer-rounds group with its earlier total", () => {
     const competition = event({ resultsPublished: true, rounds: 2 });
     const teams = [
