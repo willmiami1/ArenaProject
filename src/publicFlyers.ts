@@ -20,6 +20,10 @@ export const futureEventFlyers: PublicFlyer[] = [
 
 export const pastEventWinnerFlyers: PublicFlyer[] = [
   {
+    src: "./august-30-winners-flyer.jpg",
+    alt: "Destiny Ranch Arena August 30 Round Robin winners — Harrison Teixeira with Kadu Amaral, Marco Machado, and Tony Lazo",
+  },
+  {
     src: "./august-21-winners-flyer.jpg",
     alt: "Destiny Ranch Arena August 21 Round Robin winners",
   },
