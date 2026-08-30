@@ -13,7 +13,7 @@ describe("public flyer categories", () => {
       },
       {
         src: "./september-25-friday-night-roping-flyer.png",
-        alt: "Destiny Ranch Arena September 25 Friday Night Roping flyer — Drawpot capped at 5.5, 8:00 PM",
+        alt: "Destiny Ranch Arena September 25 Friday Night Roping flyer — Drawpot capped at 5.5, gates 6 PM, rope 8 PM",
       },
       {
         src: "./october-3-round-robin-9-slide-flyer.png",
