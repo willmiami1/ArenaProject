@@ -299,6 +299,7 @@ export interface PublicMeet {
   id: string;
   name: string;
   date: string;
+  endDate?: string;
   startTime: string;
   location: string;
   producer: string;
@@ -461,6 +462,7 @@ export function projectPublicArenaData(
           id: meet.id,
           name: meet.name,
           date: meet.date,
+          endDate: meet.endDate,
           startTime: meet.startTime,
           location: meet.location,
           producer: meet.producer ?? "",

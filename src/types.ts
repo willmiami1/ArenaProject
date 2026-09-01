@@ -25,6 +25,7 @@ export interface ArenaMeet {
   id: string;
   name: string;
   date: string;
+  endDate?: string;
   startTime: string;
   location: string;
   producer?: string;

@@ -928,6 +928,7 @@ function publicProjection(workspace) {
           id: meet.id,
           name: meet.name,
           date: meet.date,
+          endDate: meet.endDate || "",
           startTime: meet.startTime,
           location: meet.location,
           producer: meet.producer || "",
