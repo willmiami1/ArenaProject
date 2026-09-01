@@ -1353,7 +1353,7 @@ function EventPage({ meet }: { meet?: PublicMeet }) {
         <ReturnToEventsLink />
         <h1>{meet.name}</h1>
         <div className="public-page-meta">
-          <span><CalendarDays /> {formatDate(meet.date)}</span>
+          <span><CalendarDays /> {meet.endDate ? `${formatDate(meet.date)} – ${formatDate(meet.endDate)}` : formatDate(meet.date)}</span>
           <span><Clock3 /> {formatTime(meet.startTime)}</span>
           <span><MapPin /> {meet.location}</span>
         </div>
@@ -1362,7 +1362,9 @@ function EventPage({ meet }: { meet?: PublicMeet }) {
       <section className="public-detail-section">
         <div className="public-section-heading"><h2>Competition schedule</h2><span>{meet.competitions.length} on the card</span></div>
         <div className="public-competition-list">
-          {meet.competitions.map((competition) => <CompetitionRow competition={competition} key={competition.id} />)}
+          {[...meet.competitions]
+            .sort((left, right) => left.date.localeCompare(right.date))
+            .map((competition) => <CompetitionRow competition={competition} key={competition.id} />)}
           {!meet.competitions.length && <p className="public-empty">Competition details are coming soon.</p>}
         </div>
       </section>

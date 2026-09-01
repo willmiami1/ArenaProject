@@ -606,6 +606,16 @@ describe("public grouping and privacy", () => {
     expect(projected.meets[0].competitions).toHaveLength(0);
   });
 
+  it("projects a multi-day event's last day and each roping's own day", () => {
+    const data = workspace(event({ date: "2026-09-06" }));
+    data.meets[0].endDate = "2026-09-06";
+    data.meets[0].date = "2026-09-05";
+    const projected = projectPublicArenaData(data, today);
+    expect(projected.meets[0].date).toBe("2026-09-05");
+    expect(projected.meets[0].endDate).toBe("2026-09-06");
+    expect(projected.meets[0].competitions[0].date).toBe("2026-09-06");
+  });
+
   it("projects only public fields and gates unpublished results", () => {
     const data = workspace(
       event({ description: "Open to all eligible teams.", resultsPublished: false, maxContestantHandicap: 5 }),

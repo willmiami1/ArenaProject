@@ -807,20 +807,32 @@ function StaffApp() {
                 }))
               }
               onUpdateMeet={(meet) =>
-                setData((current) => ({
-                  ...current,
-                  meets: current.meets.map((item) => item.id === meet.id ? meet : item),
-                  events: current.events.map((event) =>
-                    event.parentEventId === meet.id
-                      ? {
-                          ...event,
-                          date: meet.date,
-                          startTime: meet.startTime,
-                          location: meet.location,
-                        }
-                      : event,
-                  ),
-                }))
+                setData((current) => {
+                  const previous = current.meets.find((item) => item.id === meet.id);
+                  const lastDay =
+                    meet.endDate && meet.endDate > meet.date ? meet.endDate : meet.date;
+                  return {
+                    ...current,
+                    meets: current.meets.map((item) => item.id === meet.id ? meet : item),
+                    events: current.events.map((event) =>
+                      event.parentEventId === meet.id
+                        ? {
+                            ...event,
+                            // Keep a roping on its chosen day when it still fits the
+                            // event's date range; otherwise snap it to the first day.
+                            date:
+                              event.date !== previous?.date &&
+                              event.date >= meet.date &&
+                              event.date <= lastDay
+                                ? event.date
+                                : meet.date,
+                            startTime: meet.startTime,
+                            location: meet.location,
+                          }
+                        : event,
+                    ),
+                  };
+                })
               }
               onDeleteMeet={(meetId) =>
                 setData((current) => {
@@ -1911,12 +1923,15 @@ function Events({
       <div className="meet-list">
         {sortWorkspaceMeets(meets).map((meet) => {
           const competitions = events.filter((event) => event.parentEventId === meet.id);
+          const monthOf = (value: string) =>
+            new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { month: "short" });
+          const dayOf = (value: string) => new Date(`${value}T12:00:00`).getDate();
           return (
             <section className="meet-card" key={meet.id}>
               <div className="meet-header">
                 <div className="event-date">
-                  <strong>{new Date(`${meet.date}T12:00:00`).getDate()}</strong>
-                  <span>{new Date(`${meet.date}T12:00:00`).toLocaleDateString("en-US", { month: "short" })}</span>
+                  <strong>{dayOf(meet.date)}{meet.endDate ? `–${dayOf(meet.endDate)}` : ""}</strong>
+                  <span>{monthOf(meet.date)}{meet.endDate && monthOf(meet.endDate) !== monthOf(meet.date) ? `–${monthOf(meet.endDate)}` : ""}</span>
                 </div>
                 <div className="meet-title">
                   <span className="eyebrow">Arena event</span>
@@ -1970,7 +1985,7 @@ function Events({
                   <article className={`competition-row ${event.id === activeEventId ? "selected" : ""}`} key={event.id}>
                     <span className="competition-icon">{event.competitionType === "draw-pot" ? <Dices size={20} /> : event.competitionType === "pick-only" ? <Handshake size={20} /> : event.competitionType === "pick-and-draw" ? <GitFork size={20} /> : event.competitionType === "slide" ? <Gauge size={20} /> : <Repeat2 size={20} />}</span>
                     <div className="competition-row-main">
-                      <div className="event-card-tags"><span className={`tag ${event.status.toLowerCase()}`}>{eventStatusLabel(event.status)}</span><span className="tag neutral">{competitionName(event.competitionType)}</span></div>
+                      <div className="event-card-tags"><span className={`tag ${event.status.toLowerCase()}`}>{eventStatusLabel(event.status)}</span><span className="tag neutral">{competitionName(event.competitionType)}</span>{meet.endDate && <span className="tag neutral">{new Date(`${event.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}</div>
                       <div className="competition-name-actions">
                         <h3>{event.name}</h3>
                         <button
@@ -2032,13 +2047,19 @@ function MeetForm({
   const [form, setForm] = useState({
     name: meet?.name ?? "",
     date: meet?.date ?? "",
+    endDate: meet?.endDate ?? "",
     startTime: meet?.startTime ?? "18:00",
     location: meet?.location ?? "",
     producer: meet?.producer ?? "",
   });
   const submit = (formEvent: FormEvent) => {
     formEvent.preventDefault();
-    onSubmit({ ...form, id: meet?.id ?? uid("meet") });
+    onSubmit({
+      ...form,
+      endDate:
+        form.endDate && form.endDate > form.date ? form.endDate : undefined,
+      id: meet?.id ?? uid("meet"),
+    });
   };
   return (
     <form className="form-panel" onSubmit={submit}>
@@ -2048,6 +2069,7 @@ function MeetForm({
         <Field label="Arena"><input required value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Arena name" /></Field>
         <Field label="Producer"><input value={form.producer} onChange={(e) => setForm({ ...form, producer: e.target.value })} placeholder="Producer or organization" /></Field>
         <Field label="Event date"><input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
+        <Field label="Last day (multi-day events)"><input type="date" min={form.date || undefined} value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} /><small>Leave blank for a one-day event. Set it to schedule ropings on each day.</small></Field>
         <Field label="Start time"><input required type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></Field>
       </div>
       <FormActions onCancel={onCancel} submitLabel={meet ? "Save event" : "Create event"} />
@@ -2120,6 +2142,7 @@ function EventForm({
   const [form, setForm] = useState({
     name: event?.name ?? "",
     description: event?.description ?? "",
+    date: event?.date ?? parent.date,
     status: event?.status ?? "Upcoming" as EventStatus,
     entryFee: event?.entryFee.toString() ?? "50",
     competitionType: initialCompetitionType,
@@ -2149,6 +2172,8 @@ function EventForm({
     payoutPercentages: (event?.payoutPercentages ?? [50, 30, 20]).join(", "),
     payoutMode: (event?.payoutMode ?? "custom") as "custom" | "formula",
   });
+  const meetLastDay =
+    parent.endDate && parent.endDate > parent.date ? parent.endDate : parent.date;
   const submit = (formEvent: FormEvent) => {
     formEvent.preventDefault();
     onSubmit({
@@ -2157,7 +2182,10 @@ function EventForm({
       pickDrawRole: "both",
       id: event?.id ?? uid("event"),
       parentEventId: parent.id,
-      date: parent.date,
+      date:
+        form.date >= parent.date && form.date <= meetLastDay
+          ? form.date
+          : parent.date,
       startTime: parent.startTime,
       location: parent.location,
       entryFee: Number(form.entryFee) || 0,
@@ -2216,6 +2244,9 @@ function EventForm({
       <div className="form-grid">
         <Field label="Roping name"><input required autoCapitalize="characters" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value.toUpperCase() })} placeholder="#10.5 Draw Pot" /></Field>
         <Field label="Front page status"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EventStatus })}><option value="Upcoming">Future</option><option value="Live">Live</option><option value="Complete">Past</option></select></Field>
+        {meetLastDay > parent.date && (
+          <Field label="Roping day"><input required type="date" min={parent.date} max={meetLastDay} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /><small>Pick which day of this event the roping runs.</small></Field>
+        )}
         <label className="field roping-description"><span>Roping information</span><textarea maxLength={2000} rows={5} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Add public details, schedule notes, eligibility information, or anything contestants and spectators should know." /></label>
       </div>
       <h4 className="form-section-title">Competition rules</h4>
