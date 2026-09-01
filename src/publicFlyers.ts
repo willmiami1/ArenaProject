@@ -16,6 +16,10 @@ export const futureEventFlyers: PublicFlyer[] = [
     src: "./october-3-round-robin-9-slide-flyer.png",
     alt: "Destiny Ranch Arena Saturday, October 3 Team Roping flyer — Round Robin #9 Slide, 15x15, roping at 8:00 PM",
   },
+  {
+    src: "./january-9-10-arena-farewell-flyer.png",
+    alt: "Destiny Ranch Arena Farewell flyer — Saturday and Sunday January 9th and 10th, 5.5 drawpot both days, draw 5 for $300, LED screen for best ranked roper under #4.5, saddle for highest money earner, buckles 1st to 3rd both days",
+  },
 ];
 
 export const pastEventWinnerFlyers: PublicFlyer[] = [
