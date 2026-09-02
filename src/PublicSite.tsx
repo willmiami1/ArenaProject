@@ -26,12 +26,10 @@ import {
   competitionGroup,
   normalizePublicArenaData,
   parsePublicRoute,
-  publicHorseNamesLabel,
   projectPublicArenaData,
   type PublicArenaData,
   type PublicCompetition,
   type PublicMeet,
-  type PublicRegisteredRider,
   type PublicRoute,
   type PublicSpectatorLeaderboardRow,
 } from "./publicData";
@@ -68,10 +66,6 @@ import {
   publicRefreshInterval,
   submissionMatchesCurrentRun,
 } from "./publicSpectatorSync";
-import {
-  publicRoleCapacityLabel,
-  type PublicRopingRole,
-} from "./publicRoleCapacity";
 import {
   futureEventFlyers,
   pastEventWinnerFlyers,
@@ -342,23 +336,6 @@ function RopingCard({
             {registrationLinkLabel}
           </a>
         )}
-        <div className="public-registered-roster homepage">
-          <h4 className="public-registered-title">Registered Riders</h4>
-          <RiderRoleRoster
-            label="Headers"
-            riders={competition.registeredRiders?.headers ?? []}
-            capacity={competition.roleCapacities?.find(
-              ({ role }) => role === "Header",
-            )}
-          />
-          <RiderRoleRoster
-            label="Heelers"
-            riders={competition.registeredRiders?.heelers ?? []}
-            capacity={competition.roleCapacities?.find(
-              ({ role }) => role === "Heeler",
-            )}
-          />
-        </div>
       </div>
       {competition.status === "Live" && (
         <aside className="public-live-actions">
@@ -1273,75 +1250,7 @@ function CompetitionRow({ competition }: { competition: PublicCompetition }) {
         {competition.resultsPublished && <a href={href("competition", competition.id)}>View results</a>}
         {!competition.resultsPublished && competition.status === "Complete" && <span>Results pending</span>}
       </div>
-      <div className="public-registered-roster">
-        <RiderRoleRoster
-          label="Headers"
-          riders={competition.registeredRiders?.headers ?? []}
-          capacity={competition.roleCapacities?.find(
-            ({ role }) => role === "Header",
-          )}
-        />
-        <RiderRoleRoster
-          label="Heelers"
-          riders={competition.registeredRiders?.heelers ?? []}
-          capacity={competition.roleCapacities?.find(
-            ({ role }) => role === "Heeler",
-          )}
-        />
-      </div>
     </article>
-  );
-}
-
-function RiderRoleRoster({
-  label,
-  riders,
-  capacity,
-}: {
-  label: "Headers" | "Heelers";
-  riders: PublicRegisteredRider[];
-  capacity?: {
-    role: PublicRopingRole;
-    registered: number;
-    maximum: number;
-    full: boolean;
-  };
-}) {
-  const capacityLabel = publicRoleCapacityLabel(capacity);
-  return (
-    <section
-      className="public-rider-role"
-      aria-label={`${label} registered riders`}
-    >
-      <h4>
-        {label}
-        {capacity && <span> · {capacity.registered} registered</span>}
-        {capacityLabel && <span> · {capacityLabel}</span>}
-      </h4>
-      {riders.length ? (
-        <ul aria-label={`Registered ${label.toLowerCase()}`}>
-          {riders.map((rider) => (
-            <li key={rider.id}>
-              {rider.photo ? (
-                <img src={rider.photo} alt="" />
-              ) : (
-                <span className="public-rider-initials" aria-hidden="true">
-                  {initials(rider.name)}
-                </span>
-              )}
-              <span className="public-rider-copy">
-                <strong>{rider.name}</strong>
-                {publicHorseNamesLabel(rider.horseNames ?? []) && (
-                  <small>{publicHorseNamesLabel(rider.horseNames ?? [])}</small>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>No {label.toLowerCase()} registered yet.</p>
-      )}
-    </section>
   );
 }
 
