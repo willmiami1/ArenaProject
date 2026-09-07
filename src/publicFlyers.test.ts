@@ -12,12 +12,8 @@ describe("public flyer categories", () => {
         alt: "Destiny Ranch Arena September 11 Friday Night Round Robin flyer — gates 6 PM, rope 8 PM, 20 best teams to short round",
       },
       {
-        src: "./september-25-friday-night-roping-flyer.png",
-        alt: "Destiny Ranch Arena September 25 Friday Night Roping flyer — Drawpot capped at 5.5, gates 6 PM, rope 8 PM",
-      },
-      {
-        src: "./october-3-round-robin-9-slide-flyer.png",
-        alt: "Destiny Ranch Arena Saturday, October 3 Team Roping flyer — Round Robin #9 Slide, 15x15, roping at 8:00 PM",
+        src: "./september-25-round-robin-9-slide-flyer.png",
+        alt: "Destiny Ranch Arena Friday September 25 Team Roping flyer — Round Robin #9 Slide, 3 sec up/down, 15x15, 2 heads, 20 to short round, capped at #6, $300, gate 6 PM, books 7 PM, rope 8 PM",
       },
       {
         src: "./january-9-10-arena-farewell-flyer.png",
