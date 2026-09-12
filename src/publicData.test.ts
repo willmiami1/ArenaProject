@@ -930,7 +930,7 @@ describe("aggregate public standings", () => {
     expect(rows[1]).toMatchObject({ place: 2, rounds: 1, officialTotal: 6, status: "no-time" });
   });
 
-  it("applies the Slide adjustment only in Round 2 and caps it at four seconds", () => {
+  it("applies the Slide adjustment from Round 1 and caps it at four seconds", () => {
     const slide = event({
       competitionType: "slide",
       slideNumber: 10,
@@ -943,7 +943,8 @@ describe("aggregate public standings", () => {
     const roundOne = run({ round: 1, rawTime: 8, penalties: 0 });
     const roundTwo = run({ id: "round-2", round: 2, rawTime: 8, penalties: 0 });
 
-    expect(slideTimeAdjustment(slide, roundOne, handicapNine)).toBe(0);
+    expect(slideTimeAdjustment(slide, roundOne, handicapNine)).toBe(-1);
+    expect(officialRunTime(slide, roundOne, handicapNine)).toBe(7);
     expect(slideTimeAdjustment(slide, roundTwo, handicapNine)).toBe(-1);
     expect(officialRunTime(slide, roundTwo, handicapNine)).toBe(7);
     expect(
@@ -979,7 +980,7 @@ describe("aggregate public standings", () => {
     expect(
       publicStandingRows(slide, [roundOne, roundTwo], handicapNine)[0]
         .officialTotal,
-    ).toBe(15);
+    ).toBe(14);
   });
 
   it("applies the Slide adjustment to a Round Robin only when slide rules are enabled", () => {
@@ -1008,7 +1009,7 @@ describe("aggregate public standings", () => {
         run({ round: 1, rawTime: 8, penalties: 0 }),
         handicapNine,
       ),
-    ).toBe(0);
+    ).toBe(-1);
   });
 });
 
