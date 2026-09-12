@@ -1616,6 +1616,29 @@ function LedLeaderboard({
     );
   };
   const meet = data.meets.find((item) => item.id === event.parentEventId);
+  const ledSlideActive = slideRulesActive(event);
+  // Total team handicap plus the slide addition/deduction, shown in front of
+  // every team name when slide rules are active.
+  const ledHandicapBadge = (team: Team) => {
+    if (!ledSlideActive) return null;
+    const adjustment = slideTimeAdjustment(event, team, data.contestants);
+    return (
+      <span
+        className={`led-handicap${adjustment > 0 ? " added" : adjustment < 0 ? " deducted" : ""}`}
+      >
+        <strong>
+          HC {teamHandicapTotal(team.headerId, team.heelerId, data.contestants)}
+        </strong>
+        <small>
+          {adjustment > 0
+            ? `+${adjustment.toFixed(1)}s`
+            : adjustment < 0
+              ? `-${Math.abs(adjustment).toFixed(1)}s`
+              : "±0.0s"}
+        </small>
+      </span>
+    );
+  };
   const enterFullscreen = () => {
     if (document.fullscreenElement) return;
     void document.documentElement.requestFullscreen().catch((error) => {
@@ -1670,6 +1693,7 @@ function LedLeaderboard({
         {currentTeam && (
           <>
             <div className="led-current-riders">
+              {ledHandicapBadge(currentTeam)}
               {ledRider(currentTeam.headerId, currentTeam.headerHorseName)}
               <i>&</i>
               {ledRider(currentTeam.heelerId, currentTeam.heelerHorseName)}
@@ -1721,7 +1745,7 @@ function LedLeaderboard({
             return (
               <div className={`led-row led-place-${index + 1}`} key={team.id}>
                 <span className="led-place">{index + 1}</span>
-                <span className="led-team">{ledRider(team.headerId, team.headerHorseName)}<i>&</i>{ledRider(team.heelerId, team.heelerHorseName)}</span>
+                <span className="led-team">{ledHandicapBadge(team)}{ledRider(team.headerId, team.headerHorseName)}<i>&</i>{ledRider(team.heelerId, team.heelerHorseName)}</span>
                 <span className="led-rounds">{completedRounds} / {event.rounds}</span>
                 <span className="led-total">{teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants).toFixed(2)}</span>
               </div>
@@ -1739,7 +1763,7 @@ function LedLeaderboard({
         {nextTeam ? (
           <>
             <span className="led-next-draw">Team #{nextTeam.originalTeamNumber ?? nextTeam.drawPosition}</span>
-            <span className="led-next-team">{ledRider(nextTeam.headerId, nextTeam.headerHorseName)}<i>&</i>{ledRider(nextTeam.heelerId, nextTeam.heelerHorseName)}</span>
+            <span className="led-next-team">{ledHandicapBadge(nextTeam)}{ledRider(nextTeam.headerId, nextTeam.headerHorseName)}<i>&</i>{ledRider(nextTeam.heelerId, nextTeam.heelerHorseName)}</span>
             {nextTeam.rolled && <span className="led-rolled">Rolled</span>}
           </>
         ) : <span className="led-next-team">Round complete</span>}
@@ -2258,7 +2282,7 @@ function EventForm({
           <>
             <Field label="Maximum registered Headers"><input type="number" min="1" step="1" value={form.maxHeaders} onChange={(e) => setForm({ ...form, maxHeaders: e.target.value })} placeholder="Unlimited" /><small>Leave blank for no Header capacity limit.</small></Field>
             <Field label="Maximum registered Heelers"><input type="number" min="1" step="1" value={form.maxHeelers} onChange={(e) => setForm({ ...form, maxHeelers: e.target.value })} placeholder="Unlimited" /><small>Leave blank for no Heeler capacity limit.</small></Field>
-            <label className="toggle-row"><input type="checkbox" checked={form.slideRulesEnabled} onChange={(e) => setForm({ ...form, slideRulesEnabled: e.target.checked })} /><span><strong>Apply slide rules</strong><small>Round 2 times adjust 0.5 seconds per 0.5 team handicap above or below the slide number, capped at 4 seconds.</small></span></label>
+            <label className="toggle-row"><input type="checkbox" checked={form.slideRulesEnabled} onChange={(e) => setForm({ ...form, slideRulesEnabled: e.target.checked })} /><span><strong>Apply slide rules</strong><small>Every run, starting in Round 1, adjusts 0.5 seconds per 0.5 team handicap above or below the slide number, capped at 4 seconds.</small></span></label>
           </>
         )}
         {form.competitionType === "pick-and-draw" && (
@@ -2266,7 +2290,7 @@ function EventForm({
         )}
         <Field label="Max Team Handicap"><input required type="number" min="0" step="0.5" value={form.handicapTotal} onChange={(e) => setForm({ ...form, handicapTotal: e.target.value })} placeholder="10.5" /></Field>
         {(form.competitionType === "slide" || (form.competitionType === "round-robin" && form.slideRulesEnabled)) && (
-          <Field label="Slide number"><input required type="number" min="0" max="40" step="0.5" value={form.slideNumber} onChange={(e) => setForm({ ...form, slideNumber: e.target.value })} /><small>In Round 2, each 0.5 handicap above or below this number adds or subtracts 0.5 seconds, capped at 4 seconds.</small></Field>
+          <Field label="Slide number"><input required type="number" min="0" max="40" step="0.5" value={form.slideNumber} onChange={(e) => setForm({ ...form, slideNumber: e.target.value })} /><small>On every run, each 0.5 handicap above or below this number adds or subtracts 0.5 seconds, capped at 4 seconds.</small></Field>
         )}
         <Field label="Highest contestant handicap"><input required type="number" min="0" step="0.5" value={form.maxContestantHandicap} onChange={(e) => setForm({ ...form, maxContestantHandicap: e.target.value })} /><small>Contestants above this handicap in their entered position cannot participate.</small></Field>
         <Field label="Time limit (seconds)"><input required type="number" min="1" value={form.timeLimit} onChange={(e) => setForm({ ...form, timeLimit: e.target.value })} /></Field>
@@ -4670,11 +4694,7 @@ function RunDesk({
     contestant(team.heelerId)?.heelerHandicap ?? 0;
   const slideAdjustmentLabel = (team: Team) => {
     if (!event || !slideRulesActive(event)) return "";
-    const adjustment = slideTimeAdjustment(
-      event,
-      { ...team, round: 2 },
-      contestants,
-    );
+    const adjustment = slideTimeAdjustment(event, team, contestants);
     if (adjustment > 0) return `${adjustment.toFixed(1)}s added`;
     if (adjustment < 0) {
       return `${Math.abs(adjustment).toFixed(1)}s subtracted`;
@@ -5402,7 +5422,7 @@ function RunDesk({
               </div>
               <div className="run-handicap"><span>Combined team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
               {event && slideRulesActive(event) && (
-               <div className="run-handicap"><span>Round 2 slide adjustment</span><strong>{slideAdjustmentLabel(selected)} · Slide #{event.slideNumber ?? 10}</strong></div>
+               <div className="run-handicap"><span>Slide adjustment (every round)</span><strong>{slideAdjustmentLabel(selected)} · Slide #{event.slideNumber ?? 10}</strong></div>
               )}
               {selected.status === "ready" && (
                 <button
@@ -5474,7 +5494,7 @@ function RunDesk({
               >
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{eventTeams.length > 1 && <GripVertical className="draw-drag-handle" size={14} />}{team.originalTeamNumber ?? team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event && slideRulesActive(event) ? ` · R2 ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.reRun ? "PENDING RE-RUN · Picks cleared" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event && slideRulesActive(event) ? ` · Slide ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.reRun ? "PENDING RE-RUN · Picks cleared" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>
@@ -5513,7 +5533,7 @@ function RunDesk({
           {standings.map((team, index) => (
             <div className="table-row" key={team.id}>
               <span><b className={`place place-${index + 1}`}>{index + 1}</b></span>
-              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong>{event && slideRulesActive(event) && <small>Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)} · R2 {slideAdjustmentLabel(team)}</small>}<small>Team #{team.originalTeamNumber ?? team.drawPosition}{activeRound > 1 ? ` · Draw #${team.drawPosition}` : ""}{team.round === activeRound && activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
+              <span><strong>{rider(team.headerId)} & {rider(team.heelerId)}</strong>{event && slideRulesActive(event) && <small>Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)} · Slide {slideAdjustmentLabel(team)}</small>}<small>Team #{team.originalTeamNumber ?? team.drawPosition}{activeRound > 1 ? ` · Draw #${team.drawPosition}` : ""}{team.round === activeRound && activeRound < roundCount ? ` · Advances to Round ${activeRound + 1}` : ""}</small></span>
               <span>{entryRuns(team).filter((run) => run.status === "complete" && run.rawTime !== null).length} / {roundCount}</span>
               <span><b className="total-time">{qualifiedTotal(team, activeRound + 1).toFixed(2)}</b></span>
             </div>

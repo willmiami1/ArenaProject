@@ -723,7 +723,8 @@ const slideRulesActive = (event) =>
     event.slideRulesEnabled === true);
 
 const slideTimeAdjustment = (event, run, contestantsById) => {
-  if (!slideRulesActive(event) || Number(run.round) !== 2) return 0;
+  // The slide adjustment applies to every run, starting with Round 1.
+  if (!slideRulesActive(event)) return 0;
   const header = contestantsById.get(run.headerId);
   const heeler = contestantsById.get(run.heelerId);
   const difference =
