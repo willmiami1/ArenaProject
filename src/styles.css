@@ -508,6 +508,9 @@ main { grid-column: 2; min-width: 0; }
 .payoff-row-amount { text-align: right; white-space: nowrap; }
 .payoff-row strong { font-family: "Manrope", sans-serif; font-size: 12px; }
 .payoff-empty { color: var(--muted); font-size: 10px; }
+.payoff-incentive-heading { margin-top: 14px !important; }
+.place-incentive { color: #2f6b46; background: #ddeee3; }
+.payoff-incentive-row { background: #f2f8f4; }
 .payout-formula-chart { grid-column: 1 / -1; display: grid; gap: 4px; padding: 12px; background: #f7f9f7; border: 1px solid var(--line); border-radius: 8px; }
 .payout-formula-row { display: grid; grid-template-columns: 1.2fr 1fr .6fr 2fr; gap: 10px; padding: 6px 9px; background: #fff; border-radius: 6px; font-size: 10px; }
 .payout-formula-row.payout-formula-head { background: transparent; color: var(--muted); font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }

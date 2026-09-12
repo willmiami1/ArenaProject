@@ -77,6 +77,8 @@ import {
   payoffReportFileName,
   payoffReportHtml,
 } from "./payoffReport";
+import { incentiveAwards } from "./reports";
+import { aggregateStandings, teamEntryKey } from "./standings";
 import {
   positionCheckFileName,
   positionCheckHtml,
@@ -4842,6 +4844,78 @@ function RunDesk({
       },
     ];
   });
+  // Incentive money is paid by the producer on top of the jackpot — it never
+  // reduces the percentage split of the competition purse.
+  const payoffIncentives = event
+    ? incentiveAwards(
+        event,
+        aggregateStandings(event, allEventTeams, contestants),
+        contestants,
+        allEventTeams,
+      )
+    : {
+        eligible: [],
+        awards: new Map<string, { place: number; amount: number }>(),
+      };
+  const payoffIncentiveWinners = [...payoffIncentives.awards.entries()]
+    .flatMap(([standingKey, award]) => {
+      const standing = payoffIncentives.eligible.find(
+        (item) => item.key === standingKey,
+      );
+      if (!standing) return [];
+      const source = roundOneTeams.find(
+        (run) => teamEntryKey(run) === standingKey,
+      );
+      // Incentive money follows the same free-run rule: a free-run winner
+      // receives 50% of his regular half-share.
+      const halfAward = award.amount / 2;
+      const recipients =
+        standing.headerId === standing.heelerId
+          ? [
+              {
+                contestantId: standing.headerId,
+                amount:
+                  halfAward * (source?.headerFreeRun ? 0.5 : 1) +
+                  halfAward * (source?.heelerFreeRun ? 0.5 : 1),
+                freeRunReduced: Boolean(
+                  source?.headerFreeRun || source?.heelerFreeRun,
+                ),
+              },
+            ]
+          : [
+              {
+                contestantId: standing.headerId,
+                amount: halfAward * (source?.headerFreeRun ? 0.5 : 1),
+                freeRunReduced: Boolean(source?.headerFreeRun),
+              },
+              {
+                contestantId: standing.heelerId,
+                amount: halfAward * (source?.heelerFreeRun ? 0.5 : 1),
+                freeRunReduced: Boolean(source?.heelerFreeRun),
+              },
+            ];
+      return [
+        {
+          place: award.place,
+          amount: award.amount,
+          headerId: standing.headerId,
+          heelerId: standing.heelerId,
+          time: standing.total,
+          recipients,
+          note: [
+            source?.headerFreeRun ? "Header FR · 50% pay" : "",
+            source?.heelerFreeRun ? "Heeler FR · 50% pay" : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        },
+      ];
+    })
+    .sort((a, b) => a.place - b.place);
+  const payoffIncentiveTotal = payoffIncentiveWinners.reduce(
+    (sum, winner) => sum + winner.amount,
+    0,
+  );
   const payoffRiderShares = (() => {
     const shares = new Map<
       string,
@@ -4862,6 +4936,20 @@ function RunDesk({
         };
         current.amount += amount;
         current.places.push(ordinal(winner.payout.place));
+        current.freeRunReduced = current.freeRunReduced || freeRunReduced;
+        shares.set(contestantId, current);
+      });
+    });
+    payoffIncentiveWinners.forEach((winner) => {
+      winner.recipients.forEach(({ contestantId, amount, freeRunReduced }) => {
+        const current = shares.get(contestantId) ?? {
+          contestantId,
+          amount: 0,
+          places: [],
+          freeRunReduced: false,
+        };
+        current.amount += amount;
+        current.places.push(`Incentive ${ordinal(winner.place)}`);
         current.freeRunReduced = current.freeRunReduced || freeRunReduced;
         shares.set(contestantId, current);
       });
@@ -4908,6 +4996,17 @@ function RunDesk({
           amount: share.amount,
           freeRunReduced: share.freeRunReduced,
         })),
+        incentiveTotal: payoffIncentiveTotal,
+        incentiveWinners: event.incentivePayouts
+          ? payoffIncentiveWinners.map((winner) => ({
+              place: winner.place,
+              header: rider(winner.headerId),
+              heeler: rider(winner.heelerId),
+              time: winner.time.toFixed(2),
+              amount: winner.amount,
+              note: winner.note,
+            }))
+          : undefined,
       }),
       fileName: payoffReportFileName(event.name),
     });
@@ -5557,6 +5656,7 @@ function RunDesk({
           <div><span>Total free runs</span><strong>{payoffFreeRuns}</strong></div>
           <div><span>Free run deductions</span><strong>{payoffMoney(payoffFreeRunDeduction)}</strong></div>
           <div><span>Total jackpot money</span><strong>{payoffMoney(purse)}</strong></div>
+          {event?.incentivePayouts && <div><span>Incentive · producer money</span><strong>{payoffMoney(payoffIncentiveTotal)}</strong></div>}
         </div>
         <div className="payoff-columns">
           <div>
@@ -5568,6 +5668,18 @@ function RunDesk({
                 <span className="payoff-row-amount"><strong>{payoffMoney(winner.payout.amount)}</strong><small>{Math.round(winner.payout.percentage * 100)}% to split</small></span>
               </div>
             )) : <p className="payoff-empty">Qualified runs will populate the winners.</p>}
+            {event?.incentivePayouts && (
+              <>
+                <h4 className="payoff-incentive-heading">Incentive <small className="payoff-note">paid by producer · not part of the jackpot split</small></h4>
+                {payoffIncentiveWinners.length ? payoffIncentiveWinners.map((winner) => (
+                  <div className="payoff-row payoff-incentive-row" key={`incentive-${winner.place}`}>
+                    <span><b className="place place-incentive">{winner.place}</b></span>
+                    <span className="payoff-row-main"><strong>{rider(winner.headerId)} x {rider(winner.heelerId)}</strong><small>Fastest Round 1 · {winner.time.toFixed(2)}s · Team HC {teamHandicapTotal(winner.headerId, winner.heelerId, contestants)} (limit {event.incentiveHandicapTotal ?? 7}){winner.note ? ` · ${winner.note}` : ""}</small></span>
+                    <span className="payoff-row-amount"><strong>{payoffMoney(winner.amount)}</strong><small>Producer money</small></span>
+                  </div>
+                )) : <p className="payoff-empty">No Round 1 team at or below HC {event.incentiveHandicapTotal ?? 7} has qualified yet.</p>}
+              </>
+            )}
           </div>
           <div>
             <h4>Rider shares <small className="payoff-note">rounded to the nearest $20</small></h4>

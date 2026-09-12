@@ -225,7 +225,7 @@ function slideReportDetails(
   };
 }
 
-function incentiveAwards(
+export function incentiveAwards(
   event: ArenaEvent,
   standings: AggregateStanding[],
   contestants: Contestant[],

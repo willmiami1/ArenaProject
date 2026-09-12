@@ -29,6 +29,15 @@ export interface PayoffRiderShareRow {
   freeRunReduced?: boolean;
 }
 
+export interface PayoffIncentiveWinnerRow {
+  place: number;
+  header: string;
+  heeler: string;
+  time: string;
+  amount: number;
+  note: string;
+}
+
 export interface PayoffReportPayload {
   eventName: string;
   eventDate: string;
@@ -43,6 +52,8 @@ export interface PayoffReportPayload {
   jackpot: number;
   winners: PayoffWinnerRow[];
   riderShares: PayoffRiderShareRow[];
+  incentiveTotal?: number;
+  incentiveWinners?: PayoffIncentiveWinnerRow[];
 }
 
 export function payoffReportFileName(eventName: string) {
@@ -64,6 +75,14 @@ export function payoffReportHtml(payload: PayoffReportPayload) {
     ["Total free runs", String(payload.freeRuns)],
     ["Total money deducted from free runs", money(payload.freeRunDeduction)],
     ["Total jackpot money", money(payload.jackpot)],
+    ...(payload.incentiveWinners
+      ? ([
+          [
+            "Incentive money (paid by producer)",
+            money(payload.incentiveTotal ?? 0),
+          ],
+        ] as [string, string][])
+      : []),
   ];
 
   const statRows = stats
@@ -95,6 +114,26 @@ export function payoffReportHtml(payload: PayoffReportPayload) {
       </tr>`,
     )
     .join("");
+
+  const incentiveRows = (payload.incentiveWinners ?? [])
+    .map(
+      (winner) => `<tr>
+        <td class="place">${winner.place}</td>
+        <td>${escapeHtml(winner.header)} x ${escapeHtml(winner.heeler)}${winner.note ? `<small>${escapeHtml(winner.note)}</small>` : ""}</td>
+        <td>${escapeHtml(winner.time)}s</td>
+        <td class="value">${money(winner.amount)}</td>
+      </tr>`,
+    )
+    .join("");
+  const incentiveSection = payload.incentiveWinners
+    ? `<h2>Incentive <span class="note">Paid by the producer — not deducted from the jackpot split</span></h2>
+  <table>
+    <thead>
+      <tr><th>Place</th><th>Team</th><th>Round 1 Time</th><th>Producer Money</th></tr>
+    </thead>
+    <tbody>${incentiveRows || '<tr><td colspan="4">No qualifying incentive team yet.</td></tr>'}</tbody>
+  </table>`
+    : "";
 
   return `<!doctype html>
 <html>
@@ -141,6 +180,7 @@ export function payoffReportHtml(payload: PayoffReportPayload) {
     </thead>
     <tbody>${winnerRows || '<tr><td colspan="6">No qualified winners yet.</td></tr>'}</tbody>
   </table>
+  ${incentiveSection}
   <h2>Rider Shares <span class="note">Rounded to the nearest $20</span></h2>
   <table>
     <thead>
