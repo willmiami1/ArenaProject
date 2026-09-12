@@ -8,12 +8,8 @@ describe("public flyer categories", () => {
   it("lists the upcoming event flyers soonest first", () => {
     expect(futureEventFlyers).toEqual([
       {
-        src: "./september-11-round-robin-2026-flyer.png",
-        alt: "Destiny Ranch Arena September 11 Friday Night Round Robin flyer — gates 6 PM, rope 8 PM, 20 best teams to short round",
-      },
-      {
-        src: "./september-25-round-robin-9-slide-flyer.png",
-        alt: "Destiny Ranch Arena Friday September 25 Team Roping flyer — Round Robin #9 Slide, 3 sec up/down, 15x15, 2 heads, 20 to short round, capped at #6, $300, gate 6 PM, books 7 PM, rope 8 PM",
+        src: "./september-25-round-robin-9-slide-flyer.jpg",
+        alt: "Destiny Ranch Arena Friday September 25 Team Roping flyer — Round Robin #9 Slide, 3 sec up/down, 15x15, 2 heads, 20 to short round, capped at #6, $300, gate 6 PM, books 7 PM, rope 8 PM, payouts based on 30 riders, buckles to first place, Tomahawk ropes and $100 Home Depot gift cards to all winners",
       },
       {
         src: "./january-9-10-arena-farewell-flyer.png",
