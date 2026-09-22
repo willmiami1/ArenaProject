@@ -1729,14 +1729,25 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                     <article className={`public-roping-choice ${selection ? "selected" : ""}${full ? " full" : ""}`} key={roping.id}>
                       <label className="public-roping-toggle">
                         <input type="checkbox" checked={Boolean(selection)} disabled={full} onChange={() => toggleCompetition(roping.id)} />
-                        <span><strong>{formatSignupRopingLabel(roping.name, roping.date, roping.startTime)}</strong>{full && <small>Registration full</small>}</span>
+                        <span><strong>{formatSignupRopingLabel(roping.name, roping.date, roping.startTime)}</strong>{full && <small className="public-roping-full-note">FULL — no spots available</small>}</span>
                       </label>
                       {roping.roleCapacities?.length ? (
-                        <p className="public-payment-note">
-                          {roping.roleCapacities.map((capacity) =>
-                            `${capacity.role}: ${capacity.registered} of ${capacity.maximum}${capacity.full ? " - FULL" : ""}`,
-                          ).join(" · ")}
-                        </p>
+                        <ul className="public-spots-list" aria-label="Spots available">
+                          {roping.roleCapacities.map((capacity) => {
+                            const spotsLeft = Math.max(0, capacity.maximum - capacity.registered);
+                            return (
+                              <li className={`public-spots${capacity.full ? " full" : spotsLeft <= 3 ? " low" : ""}`} key={capacity.role}>
+                                <span className="public-spots-role">{capacity.role}</span>
+                                {capacity.full ? (
+                                  <strong>FULL — no spots available</strong>
+                                ) : (
+                                  <strong>{spotsLeft} {spotsLeft === 1 ? "spot" : "spots"} available</strong>
+                                )}
+                                <small>{capacity.registered} of {capacity.maximum} filled</small>
+                              </li>
+                            );
+                          })}
+                        </ul>
                       ) : null}
                       {selection && (
                         <div className="public-roping-options">
@@ -1747,7 +1758,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                               return (
                               <label className="public-radio" key={role}>
                                 <input type="radio" name={`role-${roping.id}`} disabled={roleFull} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role })} />
-                                {role}{roleFull ? " - FULL" : ""}
+                                {role}{roleFull ? " — FULL" : ""}
                               </label>
                               );
                             })}

@@ -201,6 +201,17 @@
 .public-roping-toggle span { display: grid; gap: 4px; }
 .public-roping-toggle strong { font-family: "Manrope",sans-serif; font-size: 18px; }
 .public-roping-toggle small { color: var(--public-muted); font-size: 11px; }
+.public-roping-toggle small.public-roping-full-note { color: #f2a7a0; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.public-roping-choice.full { opacity: .85; border-color: #6a3a35; }
+.public-spots-list { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0 18px 16px 51px; }
+.public-spots { display: grid; gap: 2px; min-width: 150px; padding: 10px 14px; border: 1px solid #80674f; background: #17130f; }
+.public-spots-role { color: var(--public-tan); font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .14em; }
+.public-spots strong { font-family: "Manrope",sans-serif; font-size: 15px; color: var(--public-cream); }
+.public-spots small { color: var(--public-muted); font-size: 11px; }
+.public-spots.low { border-color: #e0b56a; }
+.public-spots.low strong { color: #f2d6a2; }
+.public-spots.full { border-color: #8a3b34; background: #2a1411; }
+.public-spots.full strong { color: #f2a7a0; text-transform: uppercase; letter-spacing: .06em; font-size: 13px; }
 .public-roping-toggle b { color: var(--public-tan); font-size: 17px; }
 .public-roping-options { display: grid; grid-template-columns: minmax(220px,.8fr) minmax(240px,1.2fr); gap: 15px; padding: 0 18px 18px 51px; }
 .public-roping-options fieldset { margin: 0; }
@@ -420,6 +431,8 @@
   .public-signup fieldset { flex-direction: column; gap: 14px; }
   .public-signup .public-payment-method { grid-template-columns: 1fr; }
   .public-roping-options { grid-template-columns: 1fr; padding: 0 14px 14px; }
+  .public-spots-list { padding: 0 14px 14px; }
+  .public-spots { flex: 1 1 140px; }
   .public-roping-toggle { grid-template-columns: auto minmax(0,1fr)!important; padding: 14px; }
   .public-roping-toggle b { grid-column: 2; }
   .public-cart-total { align-items: flex-start; flex-direction: column; }
