@@ -8,6 +8,7 @@ import {
 } from "react";
 import { CheckCircle2, Eraser, X } from "lucide-react";
 import type { RegistrationDeskWaiverDocument } from "./registrationDeskData";
+import { isWixEmbed } from "./wixBridge";
 import {
   drawSignatureStrokes,
   signatureCanvasPngDataUrl,
@@ -66,6 +67,10 @@ export function RegistrationDeskWaiverDialog({
 }: RegistrationDeskWaiverDialogProps) {
   const dialogRef = useRef<HTMLFormElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  // Inside the Wix embed the iframe has a fixed height taller than a tablet
+  // screen, so a viewport-fixed overlay can't be scrolled to its bottom. Render
+  // the waiver in-flow instead and let the host page scroll through it.
+  const embedded = isWixEmbed();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trackerRef = useRef(new SignatureStrokeTracker());
   const pixelRatioRef = useRef(1);
@@ -131,7 +136,13 @@ export function RegistrationDeskWaiverDialog({
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    cancelButtonRef.current?.focus();
+    if (embedded) {
+      window.scrollTo(0, 0);
+      dialogRef.current?.scrollIntoView({ block: "start" });
+      cancelButtonRef.current?.focus({ preventScroll: true });
+    } else {
+      cancelButtonRef.current?.focus();
+    }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !busyRef.current) {
@@ -400,7 +411,9 @@ export function RegistrationDeskWaiverDialog({
   };
 
   return (
-    <div className="registration-waiver-overlay">
+    <div
+      className={`registration-waiver-overlay${embedded ? " registration-waiver-overlay-embedded" : ""}`}
+    >
       <form
         ref={dialogRef}
         className="registration-waiver-dialog"

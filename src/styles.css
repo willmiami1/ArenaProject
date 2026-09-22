@@ -1110,6 +1110,14 @@ main { grid-column: 2; min-width: 0; }
 .registration-waiver-unavailable strong { font-family: "Manrope",sans-serif; font-size: clamp(22px,3vw,34px); }
 .registration-waiver-unavailable p { max-width: 100%; margin: 14px 0 0; overflow-wrap: anywhere; color: #d4b98f; font-size: 14px; line-height: 1.7; }
 .registration-waiver-unavailable-cancel { max-width: 100%; min-width: 0; margin-top: 22px; padding-inline: 22px; }
+/* Wix embed: the iframe is a fixed height taller than a tablet screen, so the waiver flows in-page and grows with its content instead of pinning to the iframe viewport. */
+.registration-desk { position: relative; }
+.registration-desk:has(.registration-waiver-overlay-embedded) { overflow: visible; }
+.registration-waiver-overlay-embedded { position: absolute; inset: auto; top: 0; left: 0; right: 0; height: auto; min-height: 100%; max-height: none; overflow: visible; overflow-x: hidden; }
+.registration-waiver-overlay-embedded .registration-waiver-dialog { height: auto; min-height: 100%; max-height: none; grid-template-rows: auto auto; overflow: visible; overflow-x: hidden; }
+.registration-waiver-overlay-embedded .registration-waiver-content { overflow-y: visible; }
+.registration-waiver-overlay-embedded .registration-waiver-canvas { height: clamp(190px,25vh,260px); }
+.registration-waiver-overlay-embedded .registration-waiver-unavailable { max-height: none; margin: 40px auto; }
 
 @media (max-width: 1100px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
