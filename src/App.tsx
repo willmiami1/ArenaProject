@@ -82,6 +82,8 @@ import { aggregateStandings, teamEntryKey } from "./standings";
 import {
   positionCheckFileName,
   positionCheckHtml,
+  reservedSpotsFileName,
+  reservedSpotsHtml,
   riderPostingFileName,
   riderPostingHtml,
 } from "./drawReports";
@@ -2380,6 +2382,12 @@ function ReservedSpotsView({
   // Phone value last filled from a rider profile, so a manual entry is never
   // overwritten when the rider name changes.
   const [autoPhone, setAutoPhone] = useState("");
+  const [printPreview, setPrintPreview] = useState<{
+    title: string;
+    html: string;
+    fileName: string;
+  } | null>(null);
+  const printFrame = useRef<HTMLIFrameElement | null>(null);
   const event =
     sortedEvents.find((item) => item.id === selectedEventId) ?? sortedEvents[0];
   const spots = event?.reservedSpots ?? [];
@@ -2436,12 +2444,33 @@ function ReservedSpotsView({
       reservedSpots: spots.filter((spot) => spot.id !== spotId),
     });
   };
+  const openPrintList = () => {
+    if (!event) return;
+    setPrintPreview({
+      title: "Reserved spots — headers & heelers",
+      html: reservedSpotsHtml(event),
+      fileName: reservedSpotsFileName(event.name),
+    });
+  };
+  const downloadPrintList = () => {
+    if (!printPreview) return;
+    const url = URL.createObjectURL(
+      new Blob([printPreview.html], { type: "text/html;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = printPreview.fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   return (
     <section className="reserved-spots">
       <div className="panel">
         <PanelHeading
           title="Reserved spots"
           subtitle="Internal will-call list of riders who called in or reserved online"
+          action={spots.length ? "Print list" : undefined}
+          onAction={openPrintList}
         />
         <div className="reserved-controls">
           <Field label="Roping">
@@ -2570,6 +2599,46 @@ function ReservedSpotsView({
           </div>
         )}
       </div>
+      {printPreview && (
+        <div className="time-sheet-preview-overlay" role="presentation">
+          <section
+            className="time-sheet-preview-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reserved-print-preview-title"
+          >
+            <div className="time-sheet-preview-toolbar">
+              <div>
+                <strong id="reserved-print-preview-title">{printPreview.title}</strong>
+                <small>Headers on the left, heelers on the right. Preview before printing.</small>
+              </div>
+              <span />
+              <button className="secondary" onClick={downloadPrintList}>
+                <Download size={16} /> Download
+              </button>
+              <button
+                className="primary"
+                onClick={() => printFrame.current?.contentWindow?.print()}
+              >
+                <Printer size={16} /> Print
+              </button>
+              <button
+                className="icon-button"
+                aria-label="Close preview"
+                onClick={() => setPrintPreview(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <iframe
+              ref={printFrame}
+              className="time-sheet-preview-frame"
+              srcDoc={printPreview.html}
+              title={`${printPreview.title} preview`}
+            />
+          </section>
+        </div>
+      )}
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import type { ArenaEvent, Contestant, Team } from "./types";
+import type { ArenaEvent, Contestant, ReservedSpot, Team } from "./types";
 import { teamHandicapTotal } from "./competition";
 
 const escapeHtml = (value: unknown) =>
@@ -215,6 +215,74 @@ export function riderPostingHtml(
   </header>
   <div class="riders">${riderBlocks || "<p>No teams in the draw.</p>"}</div>
   <footer><span>Destiny Ranch Arena · Post at the arena. Free runs are shown in bold.</span><span>${riders.length} riders · ${included.length} teams</span></footer>
+</body>
+</html>`;
+}
+
+export const reservedSpotsFileName = (eventName: string) =>
+  reportFileName(eventName, "reserved-spots");
+
+export function reservedSpotsHtml(event: ArenaEvent) {
+  const spots = event.reservedSpots ?? [];
+  const byName = (left: ReservedSpot, right: ReservedSpot) =>
+    left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+  // "Both" riders appear on each side, matching the Headers/Heelers counters.
+  const headers = spots.filter((spot) => spot.position !== "Heeler").sort(byName);
+  const heelers = spots.filter((spot) => spot.position !== "Header").sort(byName);
+  const sideRows = (entries: ReservedSpot[]) =>
+    entries
+      .map(
+        (spot, index) => `<tr>
+        <td class="num">${index + 1}</td>
+        <td class="name">${escapeHtml(spot.name)}${spot.position === "Both" ? ' <b class="both">BOTH</b>' : ""}</td>
+        <td class="phone">${escapeHtml(spot.phone || "")}</td>
+        <td class="notes">${escapeHtml(spot.notes || "")}</td>
+        <td class="check"></td>
+      </tr>`,
+      )
+      .join("");
+  const sideTable = (title: string, entries: ReservedSpot[]) => `<div class="side">
+      <h2>${title} (${entries.length})</h2>
+      <table>
+        <thead><tr><th>#</th><th>Rider</th><th>Phone</th><th>Notes</th><th>Paid</th></tr></thead>
+        <tbody>${sideRows(entries) || '<tr><td colspan="5">No reservations.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(event.name)} - Reserved Spots</title>
+  <style>${reportShellStyles}
+    @page { size: landscape; }
+    .sides { display: flex; gap: 24px; margin-top: 14px; align-items: flex-start; }
+    .side { flex: 1; }
+    .side h2 { margin: 0 0 8px; padding-bottom: 4px; font-size: 16px; color: #285f46; border-bottom: 2px solid #285f46; }
+    table { width: 100%; border-collapse: collapse; }
+    th { padding: 6px; color: #fff; background: #285f46; border: 1px solid #285f46; font-size: 10px; text-align: left; text-transform: uppercase; }
+    td { padding: 6px; border: 1px solid #9fa8a2; vertical-align: top; }
+    .num { width: 8%; text-align: center; }
+    .name { font-size: 14px; font-weight: 600; }
+    .phone { width: 24%; white-space: nowrap; }
+    .notes { font-size: 11px; color: #58645d; }
+    .check { width: 10%; }
+    .both { color: #285f46; font-size: 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>${escapeHtml(event.name)}</h1>
+      <p>${escapeHtml(event.date)} · ${escapeHtml(event.location)}</p>
+    </div>
+    <strong>Reserved Spots — Will-Call List</strong>
+  </header>
+  <div class="sides">
+    ${sideTable("Headers", headers)}
+    ${sideTable("Heelers", heelers)}
+  </div>
+  <footer><span>Destiny Ranch Arena · Riders who called in or reserved online. Check off as they pay at the desk.</span><span>${spots.length} reserved · printed ${escapeHtml(new Date().toLocaleDateString())}</span></footer>
 </body>
 </html>`;
 }
