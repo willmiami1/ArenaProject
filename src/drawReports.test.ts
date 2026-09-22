@@ -3,6 +3,7 @@ import { defaultCompetitionSettings } from "./competition";
 import {
   positionCheckFileName,
   positionCheckHtml,
+  reservedSpotsHtml,
   riderPostingFileName,
   riderPostingHtml,
 } from "./drawReports";
@@ -145,5 +146,29 @@ describe("rider posting report", () => {
     expect(riderPostingFileName("Tuesday Roping #4")).toBe(
       "tuesday-roping-4-rider-posting.html",
     );
+  });
+});
+
+describe("reserved spots list", () => {
+  it("prints each rider's handicap for the side they reserved", () => {
+    const html = reservedSpotsHtml(
+      {
+        ...event,
+        reservedSpots: [
+          { id: "s1", name: "ADA <HEADER>", position: "Header", source: "staff", createdAt: "" },
+          { id: "s2", name: "Bo", position: "Heeler", source: "online", contestantId: "bo", createdAt: "" },
+          { id: "s3", name: "Cy Both", position: "Both", source: "staff", createdAt: "" },
+          { id: "s4", name: "Walk Up", position: "Header", source: "staff", createdAt: "" },
+        ],
+      },
+      contestants,
+    );
+    const [headersSide, heelersSide] = html.split('<h2>Heelers');
+    expect(headersSide).toContain("<td class=\"hc\">4</td>");
+    expect(headersSide).toContain("<td class=\"hc\">3</td>");
+    expect(headersSide).toContain("<td class=\"hc\"></td>");
+    expect(heelersSide).toContain("<td class=\"hc\">5</td>");
+    expect(heelersSide).toContain("<td class=\"hc\">2</td>");
+    expect(html).toContain("<th>HC</th>");
   });
 });

@@ -222,30 +222,55 @@ export function riderPostingHtml(
 export const reservedSpotsFileName = (eventName: string) =>
   reportFileName(eventName, "reserved-spots");
 
-export function reservedSpotsHtml(event: ArenaEvent) {
+export function reservedSpotsHtml(
+  event: ArenaEvent,
+  contestants: Contestant[] = [],
+) {
   const spots = event.reservedSpots ?? [];
   const byName = (left: ReservedSpot, right: ReservedSpot) =>
     left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
   // "Both" riders appear on each side, matching the Headers/Heelers counters.
   const headers = spots.filter((spot) => spot.position !== "Heeler").sort(byName);
   const heelers = spots.filter((spot) => spot.position !== "Header").sort(byName);
-  const sideRows = (entries: ReservedSpot[]) =>
+  const contestantFor = (spot: ReservedSpot) =>
+    (spot.contestantId &&
+      contestants.find((item) => item.id === spot.contestantId)) ||
+    contestants.find(
+      (item) =>
+        item.name.trim().toUpperCase() === spot.name.trim().toUpperCase(),
+    );
+  // Headers print their heading handicap; heelers print their heeling handicap.
+  const handicapFor = (spot: ReservedSpot, side: "Header" | "Heeler") => {
+    const contestant = contestantFor(spot);
+    if (!contestant) return "";
+    const value =
+      side === "Header"
+        ? contestant.headerHandicap
+        : contestant.heelerHandicap;
+    return Number.isFinite(value) && value > 0 ? String(value) : "";
+  };
+  const sideRows = (entries: ReservedSpot[], side: "Header" | "Heeler") =>
     entries
       .map(
         (spot, index) => `<tr>
         <td class="num">${index + 1}</td>
         <td class="name">${escapeHtml(spot.name)}${spot.position === "Both" ? ' <b class="both">BOTH</b>' : ""}</td>
+        <td class="hc">${escapeHtml(handicapFor(spot, side))}</td>
         <td class="phone">${escapeHtml(spot.phone || "")}</td>
         <td class="notes">${escapeHtml(spot.notes || "")}</td>
         <td class="check"></td>
       </tr>`,
       )
       .join("");
-  const sideTable = (title: string, entries: ReservedSpot[]) => `<div class="side">
+  const sideTable = (
+    title: string,
+    entries: ReservedSpot[],
+    side: "Header" | "Heeler",
+  ) => `<div class="side">
       <h2>${title} (${entries.length})</h2>
       <table>
-        <thead><tr><th>#</th><th>Rider</th><th>Phone</th><th>Notes</th><th>Paid</th></tr></thead>
-        <tbody>${sideRows(entries) || '<tr><td colspan="5">No reservations.</td></tr>'}</tbody>
+        <thead><tr><th>#</th><th>Rider</th><th>HC</th><th>Phone</th><th>Notes</th><th>Paid</th></tr></thead>
+        <tbody>${sideRows(entries, side) || '<tr><td colspan="6">No reservations.</td></tr>'}</tbody>
       </table>
     </div>`;
 
@@ -264,7 +289,8 @@ export function reservedSpotsHtml(event: ArenaEvent) {
     td { padding: 6px; border: 1px solid #9fa8a2; vertical-align: top; }
     .num { width: 8%; text-align: center; }
     .name { font-size: 14px; font-weight: 600; }
-    .phone { width: 24%; white-space: nowrap; }
+    .hc { width: 8%; text-align: center; font-size: 14px; font-weight: 700; }
+    .phone { width: 22%; white-space: nowrap; }
     .notes { font-size: 11px; color: #58645d; }
     .check { width: 10%; }
     .both { color: #285f46; font-size: 10px; }
@@ -279,8 +305,8 @@ export function reservedSpotsHtml(event: ArenaEvent) {
     <strong>Reserved Spots — Will-Call List</strong>
   </header>
   <div class="sides">
-    ${sideTable("Headers", headers)}
-    ${sideTable("Heelers", heelers)}
+    ${sideTable("Headers", headers, "Header")}
+    ${sideTable("Heelers", heelers, "Heeler")}
   </div>
   <footer><span>Destiny Ranch Arena · Riders who called in or reserved online. Check off as they pay at the desk.</span><span>${spots.length} reserved · printed ${escapeHtml(new Date().toLocaleDateString())}</span></footer>
 </body>

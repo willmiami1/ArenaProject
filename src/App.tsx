@@ -2448,7 +2448,7 @@ function ReservedSpotsView({
     if (!event) return;
     setPrintPreview({
       title: "Reserved spots — headers & heelers",
-      html: reservedSpotsHtml(event),
+      html: reservedSpotsHtml(event, contestants),
       fileName: reservedSpotsFileName(event.name),
     });
   };
