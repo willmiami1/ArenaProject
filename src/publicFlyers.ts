@@ -9,6 +9,10 @@ export const futureEventFlyers: PublicFlyer[] = [
     alt: "Destiny Ranch Arena Friday September 25 Team Roping flyer — Round Robin #9 Slide, 3 sec up/down, 15x15, 2 heads, 20 to short round, capped at #6, $300, gate 6 PM, books 7 PM, rope 8 PM, payouts based on 30 riders, $600 incentive on #7, buckles to all winners",
   },
   {
+    src: "./october-17-bad-boy-roping-flyer.png",
+    alt: "Destiny Ranch Arena Saturday October 17 Team Roping flyer — #10.5 Bad Boy Roping, draw 2 $200, add pick or draw $100, 3 heads, 70% payback, buckles to 1-3 winners, Bad Boy lawn mower to high point roper with 150 paying teams, gates 7:30 AM, books 8:30 AM, rope 9:30 AM, Brazilian food truck",
+  },
+  {
     src: "./january-9-10-arena-farewell-flyer.png",
     alt: "Destiny Ranch Arena Farewell flyer — Saturday and Sunday January 9th and 10th, 5.5 drawpot both days, draw 5 for $300, LED screen for best ranked roper under #4.5, saddle for highest money earner, buckles 1st to 3rd both days",
   },
