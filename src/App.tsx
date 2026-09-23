@@ -5621,6 +5621,27 @@ function RunDesk({
                 {["0", "5", "10", "15"].map((value) => <button className={penalties === value ? "active" : ""} key={value} onClick={() => setPenalties(value)}>{value === "0" ? "Clean" : `+${value}s`}</button>)}
               </div>
               <Field label="Run notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional note" /></Field>
+              {event && rawTime && Number(rawTime) > 0 && (() => {
+                const raw = Number(rawTime);
+                const penalty = Number(penalties) || 0;
+                const slide = slideRulesActive(event)
+                  ? slideTimeAdjustment(event, selected, contestants)
+                  : 0;
+                const finalTime = raw + penalty + slide;
+                return (
+                  <div className="final-time-preview" aria-live="polite">
+                    <div>
+                      <span>Final time</span>
+                      <strong>{finalTime.toFixed(2)}s</strong>
+                    </div>
+                    <small>
+                      {raw.toFixed(2)} raw
+                      {penalty > 0 ? ` + ${penalty} penalty` : ""}
+                      {slide !== 0 ? ` ${slide > 0 ? "+" : "−"} ${Math.abs(slide).toFixed(1)} slide` : slideRulesActive(event) ? " · no slide" : ""}
+                    </small>
+                  </div>
+                );
+              })()}
               <div className={`desk-actions${isEditingResult ? " editing" : ""}`}>
                 {isEditingResult && <button className="clear-result-button" onClick={clearRunResult}>Clear result / Not run yet</button>}
                 <button className="no-time-button" onClick={() => saveRun("no-time")}>Mark no time</button>

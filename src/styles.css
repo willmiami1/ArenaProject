@@ -423,6 +423,14 @@ main { grid-column: 2; min-width: 0; }
 .time-entry label span { display: block; margin-top: 3px; color: #9ba29e; font-size: 9px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .time-entry input { width: 100%; padding: 10px 12px; color: var(--ink); background: #fcfcfa; border: 1px solid #d8ddd9; border-radius: 7px; font-family: "Manrope", sans-serif; font-size: 25px; font-weight: 800; text-align: right; outline: 0; }
 .penalty-buttons { display: grid; grid-template-columns: 1fr repeat(4, auto); align-items: center; gap: 7px; margin-bottom: 15px; }
+.final-time-preview { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 15px; padding: 12px 16px; background: #f7f2e8; border: 1px solid #ead8b7; border-radius: 8px; }
+.final-time-preview span, .final-time-preview strong { display: block; }
+.final-time-preview span { color: #8c7449; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.final-time-preview strong { margin-top: 2px; color: #654718; font-family: "Manrope", sans-serif; font-size: 26px; line-height: 1.1; }
+.final-time-preview small { color: #8c7449; font-size: 11px; font-weight: 700; text-align: right; }
+.app-shell .final-time-preview { background: #2a1e13; border-color: #624528; }
+.app-shell .final-time-preview strong { color: #e2b778; }
+.app-shell .final-time-preview span, .app-shell .final-time-preview small { color: #b99a6f; }
 .penalty-buttons button { padding: 7px 10px; color: #747e78; background: #f4f5f3; border: 1px solid transparent; border-radius: 6px; font-size: 10px; font-weight: 700; }
 .penalty-buttons button.active { color: var(--green); background: #eaf3ed; border-color: #bbd4c4; }
 .result-preview { display: flex; align-items: center; justify-content: space-between; margin-top: 17px; padding: 13px 15px; color: #fff; background: #253c31; border-radius: 7px; }
