@@ -2286,7 +2286,7 @@ function EventForm({
           <>
             <Field label="Maximum registered Headers"><input type="number" min="1" step="1" value={form.maxHeaders} onChange={(e) => setForm({ ...form, maxHeaders: e.target.value })} placeholder="Unlimited" /><small>Leave blank for no Header capacity limit.</small></Field>
             <Field label="Maximum registered Heelers"><input type="number" min="1" step="1" value={form.maxHeelers} onChange={(e) => setForm({ ...form, maxHeelers: e.target.value })} placeholder="Unlimited" /><small>Leave blank for no Heeler capacity limit.</small></Field>
-            <label className="toggle-row"><input type="checkbox" checked={form.slideRulesEnabled} onChange={(e) => setForm({ ...form, slideRulesEnabled: e.target.checked })} /><span><strong>Apply slide rules</strong><small>Every run, starting in Round 1, adjusts 0.5 seconds per 0.5 team handicap above or below the slide number, capped at 4 seconds.</small></span></label>
+            <label className="toggle-row"><input type="checkbox" checked={form.slideRulesEnabled} onChange={(e) => setForm({ ...form, slideRulesEnabled: e.target.checked })} /><span><strong>Apply slide rules</strong><small>Round 1 only: each run adjusts 0.5 seconds per 0.5 team handicap above or below the slide number, capped at 4 seconds. Later rounds run straight up.</small></span></label>
           </>
         )}
         {form.competitionType === "pick-and-draw" && (
@@ -5590,7 +5590,7 @@ function RunDesk({
               </div>
               <div className="run-handicap"><span>Combined team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
               {event && slideRulesActive(event) && (
-               <div className="run-handicap"><span>Slide adjustment (every round)</span><strong>{slideAdjustmentLabel(selected)} · Slide #{event.slideNumber ?? 10}</strong></div>
+               <div className="run-handicap"><span>Slide adjustment ({event.competitionType === "round-robin" ? "round 1 only" : "every round"})</span><strong>{slideAdjustmentLabel(selected)} · Slide #{event.slideNumber ?? 10}</strong></div>
               )}
               {selected.status === "ready" && (
                 <button

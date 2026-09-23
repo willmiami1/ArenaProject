@@ -1404,7 +1404,7 @@ function CompetitionPage({ competition, meet }: { competition?: PublicCompetitio
             <div><dt>Rounds</dt><dd>{competition.rounds}</dd></div>
             <div><dt>Time limit</dt><dd>{competition.timeLimit} seconds</dd></div>
             {(competition.competitionType === "slide" || competition.slideRulesEnabled) && (
-              <div><dt>Slide rule</dt><dd>#{competition.slideNumber} · Every round adjusts 0.5 seconds per 0.5 handicap, up to ±4 seconds</dd></div>
+              <div><dt>Slide rule</dt><dd>#{competition.slideNumber} · {competition.competitionType === "round-robin" ? "Round 1" : "Every round"} adjusts 0.5 seconds per 0.5 handicap, up to ±4 seconds</dd></div>
             )}
             {competition.incentivePayouts && (
               <div><dt>Incentive</dt><dd>Fastest {competition.incentiveTeams} Round 1 team{competition.incentiveTeams === 1 ? "" : "s"} with combined HC {competition.incentiveHandicapTotal} or lower · ${competition.incentiveAmountPerTeam.toLocaleString()} each</dd></div>

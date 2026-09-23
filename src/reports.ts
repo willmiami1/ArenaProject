@@ -209,7 +209,7 @@ function slideReportDetails(
   const heeler = contestants.find((contestant) => contestant.id === heelerId);
   const adjustment = slideTimeAdjustment(
     event,
-    { headerId, heelerId, round: 2 },
+    { headerId, heelerId, round: 1 },
     contestants,
   );
   return {

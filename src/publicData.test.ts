@@ -983,7 +983,7 @@ describe("aggregate public standings", () => {
     ).toBe(14);
   });
 
-  it("applies the Slide adjustment to a Round Robin only when slide rules are enabled", () => {
+  it("applies the Slide adjustment to a Round Robin only in Round 1 when slide rules are enabled", () => {
     const handicapNine = [
       { ...contestants[0], headerHandicap: 4.5 },
       { ...contestants[1], heelerHandicap: 4.5 },
@@ -1001,8 +1001,8 @@ describe("aggregate public standings", () => {
 
     expect(slideTimeAdjustment(plainRoundRobin, roundTwo, handicapNine)).toBe(0);
     expect(officialRunTime(plainRoundRobin, roundTwo, handicapNine)).toBe(8);
-    expect(slideTimeAdjustment(slideRoundRobin, roundTwo, handicapNine)).toBe(-1);
-    expect(officialRunTime(slideRoundRobin, roundTwo, handicapNine)).toBe(7);
+    expect(slideTimeAdjustment(slideRoundRobin, roundTwo, handicapNine)).toBe(0);
+    expect(officialRunTime(slideRoundRobin, roundTwo, handicapNine)).toBe(8);
     expect(
       slideTimeAdjustment(
         slideRoundRobin,

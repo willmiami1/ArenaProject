@@ -160,8 +160,10 @@ export function slideTimeAdjustment(
   team: Pick<Team, "round" | "headerId" | "heelerId">,
   contestants: Contestant[],
 ) {
-  // The slide adjustment applies to every run, starting with Round 1.
+  // Slide competitions adjust every run. A Round Robin with slide rules only
+  // adjusts Round 1; later rounds are run straight up.
   if (!slideRulesActive(event)) return 0;
+  if (event.competitionType === "round-robin" && team.round !== 1) return 0;
   const difference =
     teamHandicapTotal(team.headerId, team.heelerId, contestants) -
     Number(event.slideNumber ?? 10);
