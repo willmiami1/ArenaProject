@@ -152,6 +152,25 @@ export const slideRulesActive = (
   (event.competitionType === "round-robin" &&
     event.slideRulesEnabled === true);
 
+// Broadcast-style roping label, e.g. "#9 Slide Round Robin" or "#10 Draw Pot".
+export function ropingFormatLabel(
+  event: Pick<
+    ArenaEvent,
+    "competitionType" | "slideRulesEnabled" | "slideNumber" | "handicapTotal"
+  >,
+) {
+  const slide = slideRulesActive(event);
+  const number = slide
+    ? Number(event.slideNumber ?? 10)
+    : Number(event.handicapTotal ?? 0);
+  const parts = [
+    number > 0 ? `#${number}` : "",
+    slide ? "Slide" : "",
+    event.competitionType === "slide" ? "" : competitionName(event.competitionType),
+  ];
+  return parts.filter(Boolean).join(" ");
+}
+
 export function slideTimeAdjustment(
   event: Pick<
     ArenaEvent,

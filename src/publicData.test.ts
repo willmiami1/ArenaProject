@@ -8,6 +8,7 @@ import {
   repeatedTeamPairKeys,
   reorderDraftDrawTeams,
   resetInheritedPredictionCutoffs,
+  ropingFormatLabel,
   spaceDrawTeamsApart,
   slideTimeAdjustment,
 } from "./competition";
@@ -929,6 +930,17 @@ describe("aggregate public standings", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ place: 1, rounds: 2, officialTotal: 20 });
     expect(rows[1]).toMatchObject({ place: 2, rounds: 1, officialTotal: 6, status: "no-time" });
+  });
+
+  it("labels the roping by handicap number, slide, and format for broadcast screens", () => {
+    expect(ropingFormatLabel(event({ competitionType: "slide", slideNumber: 9 }))).toBe("#9 Slide");
+    expect(
+      ropingFormatLabel(event({ competitionType: "round-robin", slideRulesEnabled: true, slideNumber: 9 })),
+    ).toBe("#9 Slide Round Robin");
+    expect(
+      ropingFormatLabel(event({ competitionType: "round-robin", slideRulesEnabled: false, handicapTotal: 10 })),
+    ).toBe("#10 Round Robin");
+    expect(ropingFormatLabel(event({ competitionType: "draw-pot", handicapTotal: 0 }))).toBe("Draw Pot");
   });
 
   it("applies the Slide adjustment from Round 1 and caps it at four seconds", () => {

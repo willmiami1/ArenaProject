@@ -139,6 +139,7 @@ import {
   reorderRunOrderTeams,
   repeatPairingBlockMessage,
   slideRulesActive,
+  ropingFormatLabel,
   slideTimeAdjustment,
   teamEligibleForCompetition,
   teamHandicapTotal,
@@ -1592,7 +1593,7 @@ function LivestreamScreen({
             <img src="./destiny-ranch-arena-logo.png" alt="" />
             Destiny Ranch
           </span>
-          <h1>{event.name}</h1>
+          <h1>{ropingFormatLabel(event)}</h1>
           <h2>{finalResults ? "Final Results" : "Leader Board"}</h2>
         </header>
         <LedScrollingRows rowCount={standings.length}>
