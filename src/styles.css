@@ -731,6 +731,8 @@ html.livestream-page, html.livestream-page body { background: transparent; }
 .livestream-board { grid-row: 1 / -1; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: 2.5vh 1.4vw 1.5vh; background: linear-gradient(180deg, rgba(10,18,14,.96), rgba(6,11,9,.96)); border-right: 3px solid #b8893c; }
 .livestream-title { text-align: center; padding-bottom: 1.6vh; margin-bottom: 1.2vh; border-bottom: 2px solid rgba(184,137,60,.6); }
 .livestream-title span { display: block; color: #cfaa66; font-size: clamp(11px, 1.1vw, 20px); font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+.livestream-title .livestream-brand { display: flex; align-items: center; justify-content: center; gap: .8vw; }
+.livestream-brand img { height: clamp(28px, 4.2vh, 64px); width: auto; flex: none; }
 .livestream-title h1 { margin: .6vh 0 0; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.2vw, 42px); line-height: 1.1; text-transform: uppercase; overflow-wrap: anywhere; }
 .livestream-title h2 { margin: 1vh 0 0; color: #f4c972; font-family: "Manrope", sans-serif; font-size: clamp(14px, 1.4vw, 26px); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .livestream-board .led-rows { gap: .6vh; }

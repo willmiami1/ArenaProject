@@ -1588,7 +1588,10 @@ function LivestreamScreen({
     <div className="livestream">
       <aside className="livestream-board">
         <header className="livestream-title">
-          <span>Destiny Ranch</span>
+          <span className="livestream-brand">
+            <img src="./destiny-ranch-arena-logo.png" alt="" />
+            Destiny Ranch
+          </span>
           <h1>{event.name}</h1>
           <h2>{finalResults ? "Final Results" : "Leader Board"}</h2>
         </header>
