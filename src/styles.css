@@ -727,7 +727,7 @@ main { grid-column: 2; min-width: 0; }
 
 /* Livestream overlay: 16:9 broadcast layout, transparent stage for the camera feed. */
 html.livestream-page, html.livestream-page body { background: transparent; }
-.livestream { position: relative; width: 100vw; height: 100vh; height: 100dvh; display: grid; grid-template-columns: 30vw minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 24vh; color: #f7fbf8; background: transparent; overflow: hidden; font-family: "DM Sans", sans-serif; }
+.livestream { position: relative; width: 100vw; height: 100vh; height: 100dvh; display: grid; grid-template-columns: 36vw minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 24vh; color: #f7fbf8; background: transparent; overflow: hidden; font-family: "DM Sans", sans-serif; }
 .livestream-board { grid-row: 1 / -1; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: 2.5vh 1.4vw 1.5vh; background: linear-gradient(180deg, rgba(10,18,14,.96), rgba(6,11,9,.96)); border-right: 3px solid #b8893c; }
 .livestream-title { text-align: center; padding-bottom: 1.6vh; margin-bottom: 1.2vh; border-bottom: 2px solid rgba(184,137,60,.6); }
 .livestream-title span { display: block; color: #cfaa66; font-size: clamp(11px, 1.1vw, 20px); font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
@@ -736,17 +736,16 @@ html.livestream-page, html.livestream-page body { background: transparent; }
 .livestream-title h1 { margin: .6vh 0 0; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.2vw, 42px); line-height: 1.1; text-transform: uppercase; overflow-wrap: anywhere; }
 .livestream-title h2 { margin: 1vh 0 0; color: #f4c972; font-family: "Manrope", sans-serif; font-size: clamp(14px, 1.4vw, 26px); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .livestream-board .led-rows { gap: .6vh; }
-.livestream-row { min-height: 7.1vh; display: grid; grid-template-columns: 2.2vw minmax(0, 1fr) auto; align-items: center; gap: .6vw; padding: .4vh .8vw; background: rgba(31,56,45,.85); border: 1px solid rgba(121,157,138,.25); border-radius: 8px; box-shadow: inset 4px 0 #557363; }
+.livestream-row { min-height: 7.1vh; display: grid; grid-template-columns: 2vw minmax(0, 1fr) auto; align-items: center; gap: .5vw; padding: .4vh .7vw; background: rgba(31,56,45,.85); border: 1px solid rgba(121,157,138,.25); border-radius: 8px; box-shadow: inset 4px 0 #557363; }
 .livestream-row.livestream-place-1 { background: linear-gradient(90deg, #6a4c1c, #322817); border-color: #b78b42; box-shadow: inset 6px 0 #e2b65f; }
 .livestream-row.livestream-place-2 { box-shadow: inset 4px 0 #aab6af; }
 .livestream-row.livestream-place-3 { box-shadow: inset 4px 0 #a66d42; }
 .livestream-row b { font-family: "Manrope", sans-serif; font-size: clamp(14px, 1.5vw, 28px); font-weight: 900; text-align: center; }
-.livestream-team { min-width: 0; display: flex; align-items: center; gap: .4vw; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(13px, 1.25vw, 24px); font-weight: 700; text-transform: uppercase; white-space: nowrap; }
-.livestream-team > span { min-width: 0; flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; }
+.livestream-team { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .4vw; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(11px, 1vw, 20px); font-weight: 700; line-height: 1.1; text-transform: uppercase; }
+.livestream-team > span { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
 .livestream-team > span:last-child { text-align: right; }
-.livestream-team i { flex: 0 0 auto; color: #cfaa66; font-style: normal; font-weight: 400; }
-.livestream-row strong { color: #f4c972; font-family: "Manrope", sans-serif; font-size: clamp(16px, 1.7vw, 32px); font-weight: 900; white-space: nowrap; }
-.livestream-row strong::before { content: "= "; color: #cfaa66; font-weight: 400; }
+.livestream-team i { color: #cfaa66; font-style: normal; font-weight: 400; }
+.livestream-row strong { color: #f4c972; font-family: "Manrope", sans-serif; font-size: clamp(15px, 1.5vw, 30px); font-weight: 900; white-space: nowrap; }
 .livestream-waiting { min-height: 30vh; display: grid; place-items: center; color: #82958a; font-family: "Manrope", sans-serif; font-size: clamp(14px, 1.4vw, 26px); text-align: center; text-transform: uppercase; }
 .livestream-round { margin-top: 1vh; padding-top: 1vh; color: #b8c7bf; border-top: 1px solid rgba(121,157,138,.25); font-size: clamp(10px, .9vw, 16px); font-weight: 800; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
 .livestream-stage { background: transparent; }
