@@ -743,9 +743,9 @@ html.livestream-page, html.livestream-page body { background: transparent; }
 .livestream-row b { font-family: "Manrope", sans-serif; font-size: clamp(14px, 1.5vw, 28px); font-weight: 900; text-align: center; }
 .livestream-team { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .4vw; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(11px, 1vw, 20px); font-weight: 700; line-height: 1.1; text-transform: uppercase; }
 .livestream-team > span { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
-.livestream-team > span:last-child { text-align: right; }
+.livestream-team > span:last-child { text-align: left; }
 .livestream-team i { color: #cfaa66; font-style: normal; font-weight: 400; }
-.livestream-row strong { color: #f4c972; font-family: "Manrope", sans-serif; font-size: clamp(15px, 1.5vw, 30px); font-weight: 900; white-space: nowrap; }
+.livestream-row strong { color: #f4c972; font-family: "Manrope", sans-serif; font-size: clamp(15px, 1.5vw, 30px); font-weight: 900; white-space: nowrap; margin-left: 1vw; }
 .livestream-waiting { min-height: 30vh; display: grid; place-items: center; color: #82958a; font-family: "Manrope", sans-serif; font-size: clamp(14px, 1.4vw, 26px); text-align: center; text-transform: uppercase; }
 .livestream-round { margin-top: 1vh; padding-top: 1vh; color: #b8c7bf; border-top: 1px solid rgba(121,157,138,.25); font-size: clamp(10px, .9vw, 16px); font-weight: 800; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
 .livestream-stage { background: transparent; }

@@ -1602,7 +1602,7 @@ function LivestreamScreen({
               <b>{index + 1}</b>
               <span className="livestream-team">
                 <span>{riderName(team.headerId)}</span>
-                <i>x</i>
+                <i>&amp;</i>
                 <span>{riderName(team.heelerId)}</span>
               </span>
               <strong>{teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants).toFixed(2)}</strong>
