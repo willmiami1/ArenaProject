@@ -750,17 +750,16 @@ html.livestream-page, html.livestream-page body { background: transparent; }
 .livestream-waiting { min-height: 30vh; display: grid; place-items: center; color: #82958a; font-family: "Manrope", sans-serif; font-size: clamp(14px, 1.4vw, 26px); text-align: center; text-transform: uppercase; }
 .livestream-round { margin-top: 1vh; padding-top: 1vh; color: #b8c7bf; border-top: 1px solid rgba(121,157,138,.25); font-size: clamp(10px, .9vw, 16px); font-weight: 800; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
 .livestream-stage { background: transparent; }
-.livestream-now { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 2vw; padding: 2vh 2.5vw; background: linear-gradient(90deg, rgba(10,18,14,.96), rgba(6,11,9,.9)); border-top: 3px solid #b8893c; }
-.livestream-now-label { display: grid; grid-template-columns: auto auto; align-items: center; gap: .3vh .6vw; padding-right: 2vw; border-right: 1px solid rgba(255,255,255,.3); text-transform: uppercase; }
-.livestream-now-label .live-dot { width: 14px; height: 14px; background: #ff5a4e; border-radius: 50%; box-shadow: 0 0 14px rgba(255,90,78,.9); }
-.livestream-now-label strong { font-family: "Manrope", sans-serif; font-size: clamp(18px, 2vw, 40px); font-weight: 800; white-space: nowrap; }
-.livestream-now-label small { grid-column: 1 / -1; color: #cfaa66; font-size: clamp(10px, 1vw, 18px); font-weight: 800; letter-spacing: .12em; }
-.livestream-rider { min-width: 0; display: flex; align-items: center; gap: 1.2vw; overflow: hidden; }
-.livestream-photo { flex: 0 0 auto; width: 17vh; height: 17vh; display: grid; place-items: center; overflow: hidden; color: #fff3d7; background: #365545; border: 3px solid #e2b65f; border-radius: 18%; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.4vw, 46px); font-weight: 900; }
+.livestream-now { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 1.5vw; padding: 2vh 2vw; background: linear-gradient(90deg, rgba(10,18,14,.96), rgba(6,11,9,.9)); border-top: 3px solid #b8893c; }
+.livestream-now-label { display: flex; align-items: center; gap: .6vw; padding-right: 1.5vw; border-right: 1px solid rgba(255,255,255,.3); text-transform: uppercase; }
+.livestream-now-label .live-dot { flex: none; width: 12px; height: 12px; background: #ff5a4e; border-radius: 50%; box-shadow: 0 0 14px rgba(255,90,78,.9); }
+.livestream-now-label strong { color: #cfaa66; font-family: "Manrope", sans-serif; font-size: clamp(12px, 1.2vw, 22px); font-weight: 800; letter-spacing: .12em; line-height: 1.25; white-space: nowrap; }
+.livestream-rider { min-width: 0; display: flex; align-items: center; gap: 1vw; overflow: hidden; }
+.livestream-photo { flex: 0 0 auto; width: 15vh; height: 15vh; display: grid; place-items: center; overflow: hidden; color: #fff3d7; background: #365545; border: 3px solid #e2b65f; border-radius: 18%; font-family: "Manrope", sans-serif; font-size: clamp(18px, 2vw, 40px); font-weight: 900; }
 .livestream-photo img { width: 100%; height: 100%; object-fit: cover; }
-.livestream-rider-name { min-width: 0; display: grid; gap: .4vh; }
-.livestream-rider-name small { color: #cfaa66; font-size: clamp(10px, 1vw, 18px); font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
-.livestream-rider-name strong { overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.4vw, 46px); font-weight: 800; line-height: 1.05; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.livestream-rider-name { min-width: 0; flex: 1 1 auto; display: grid; gap: .4vh; }
+.livestream-rider-name small { color: #cfaa66; font-size: clamp(10px, .9vw, 16px); font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.livestream-rider-name strong { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-family: "Manrope", sans-serif; font-size: clamp(15px, 1.6vw, 32px); font-weight: 800; line-height: 1.05; overflow-wrap: anywhere; text-transform: uppercase; }
 .livestream-fullscreen { position: absolute; top: 1.5vh; right: 1vw; display: grid; place-items: center; width: 40px; height: 40px; color: #f8e6c5; background: rgba(6,11,9,.6); border: 1px solid #806839; border-radius: 8px; opacity: 0; transition: opacity .25s; }
 .livestream:hover .livestream-fullscreen { opacity: 1; }
 

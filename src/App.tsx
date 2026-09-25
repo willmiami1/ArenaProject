@@ -1618,10 +1618,7 @@ function LivestreamScreen({
       <section className="livestream-now">
         <div className="livestream-now-label">
           <span className="live-dot" />
-          <strong>{finalResults ? "Final" : "Roping Team"}</strong>
-          {currentTeam && (
-            <small>Team #{currentTeam.originalTeamNumber ?? currentTeam.drawPosition}</small>
-          )}
+          <strong>{finalResults ? <>Final<br />Results</> : <>Current<br />Team</>}</strong>
         </div>
         {currentTeam ? (
           <>
