@@ -43,6 +43,7 @@ import {
   Plus,
   Pencil,
   Printer,
+  Radio,
   RefreshCw,
   Repeat2,
   Search,
@@ -454,6 +455,17 @@ function StaffApp() {
       />
     );
   }
+  if (displayParams.get("display") === "livestream") {
+    return (
+      <LivestreamScreen
+        data={data}
+        eventId={displayParams.get("event") ?? activeEvent?.id}
+        requestedRound={Number(displayParams.get("round")) || undefined}
+        requestedTeamId={displayParams.get("team") ?? undefined}
+        usePublicRelay={displayParams.get("relay") === "wix"}
+      />
+    );
+  }
 
   const changeView = (next: View) => {
     setView(next);
@@ -463,7 +475,7 @@ function StaffApp() {
   const setActiveEvent = (eventId: string) => {
     setData((current) => ({ ...current, activeEventId: eventId }));
   };
-  const openActiveLedScreen = () => {
+  const openActiveDisplay = (display: "leaderboard" | "livestream") => {
     if (!activeEvent) return;
     const eventTeams = data.teams.filter(
       (team) => team.eventId === activeEvent.id && !team.scratched,
@@ -474,15 +486,19 @@ function StaffApp() {
     );
     const url = new URL(window.location.href);
     url.search = "";
-    url.searchParams.set("display", "leaderboard");
+    url.searchParams.set("display", display);
     url.searchParams.set("event", activeEvent.id);
     url.searchParams.set("round", String(latestRound));
     if (isWixEmbed()) url.searchParams.set("relay", "wix");
     const popup = openLedWindow(url.toString());
     if (!popup) {
-      window.alert("Allow pop-ups to open the LED screen in a new tab.");
+      window.alert(
+        `Allow pop-ups to open the ${display === "livestream" ? "livestream" : "LED"} screen in a new tab.`,
+      );
     }
   };
+  const openActiveLedScreen = () => openActiveDisplay("leaderboard");
+  const openActiveLivestream = () => openActiveDisplay("livestream");
   const openContestantPortal = () => {
     const url = new URL(window.location.href);
     const wixHostOrigin = url.searchParams.get("wixHostOrigin");
@@ -620,6 +636,10 @@ function StaffApp() {
           <button disabled={!activeEvent} onClick={openActiveLedScreen}>
             <MonitorUp size={19} />
             LED Screen
+          </button>
+          <button disabled={!activeEvent} onClick={openActiveLivestream}>
+            <Radio size={19} />
+            Livestream
           </button>
           <button onClick={openContestantPortal}>
             <LogIn size={19} />
@@ -1442,6 +1462,179 @@ function LedScrollingRows({
   );
 }
 
+function useRelayedWorkspaceData(
+  usePublicRelay: boolean,
+  screenLabel: string,
+) {
+  const [relayedData, setRelayedData] = useState<ArenaData | null>(null);
+  useEffect(() => {
+    if (!usePublicRelay) return;
+    let cancelled = false;
+    let timer = 0;
+    const refresh = async () => {
+      try {
+        const workspaceData = await requestWorkspaceDataFromOpener();
+        if (!cancelled && workspaceData) setRelayedData(workspaceData);
+      } catch (error) {
+        if (!cancelled) {
+          console.error(`Could not refresh the ${screenLabel} workspace data.`, error);
+        }
+      } finally {
+        if (!cancelled) timer = window.setTimeout(refresh, 1500);
+      }
+    };
+    void refresh();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [usePublicRelay, screenLabel]);
+  return relayedData;
+}
+
+// Broadcast overlay for the livestream: leaderboard down the left, an open
+// area for the camera feed, and the team now roping across the bottom. The
+// page background stays transparent so OBS/streaming software can key it.
+function LivestreamScreen({
+  data: fallbackData,
+  eventId,
+  requestedRound,
+  requestedTeamId,
+  usePublicRelay,
+}: {
+  data: ArenaData;
+  eventId?: string;
+  requestedRound?: number;
+  requestedTeamId?: string;
+  usePublicRelay: boolean;
+}) {
+  const relayedData = useRelayedWorkspaceData(usePublicRelay, "livestream");
+  const data = relayedData ?? fallbackData;
+  useEffect(() => {
+    document.documentElement.classList.add("livestream-page");
+    return () => document.documentElement.classList.remove("livestream-page");
+  }, []);
+
+  const event =
+    data.events.find((item) => item.id === eventId) ??
+    data.events.find((item) => item.id === data.activeEventId) ??
+    data.events[0];
+  if (!event) {
+    return <div className="led-leaderboard led-empty">No competition selected</div>;
+  }
+  const eventTeams = data.teams.filter(
+    (team) => team.eventId === event.id && !team.scratched,
+  );
+  const runDeskState = resolveLedRunDeskState(
+    event,
+    eventTeams,
+    requestedRound,
+    requestedTeamId,
+  );
+  const round = runDeskState.round;
+  const roundTeams = eventTeams
+    .filter((team) => team.round === round)
+    .sort((a, b) => a.drawPosition - b.drawPosition);
+  const completedRoundsFor = (team: Team) =>
+    eventTeams.filter(
+      (run) =>
+        sameTeamEntry(run, team) &&
+        run.round <= round &&
+        run.status === "complete" &&
+        run.rawTime !== null,
+    ).length;
+  const standings = sortLedStandings(
+    ledQualifiedRunsThroughRound(event.id, eventTeams, round),
+    (team) =>
+      teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants),
+    completedRoundsFor,
+  ).slice(0, 20);
+  const currentTeam =
+    roundTeams.find(
+      (team) =>
+        team.id === runDeskState.activeTeamId && team.status === "ready",
+    ) ??
+    roundTeams.find((team) => team.status === "ready" && !team.rolled) ??
+    roundTeams.find((team) => team.status === "ready");
+  const finalResults = ledShowsFinalResults(event, eventTeams, round);
+  const rider = (id: string) =>
+    data.contestants.find((contestant) => contestant.id === id);
+  const riderName = (id: string) => rider(id)?.name ?? "Unknown";
+  const riderCard = (id: string, role: "Header" | "Heeler") => {
+    const contestant = rider(id);
+    const name = contestant?.name ?? "Unknown";
+    return (
+      <div className="livestream-rider">
+        <span className="livestream-photo">
+          {contestant?.photo
+            ? <img src={contestant.photo} alt={`${name} profile`} />
+            : <span aria-hidden="true">{initials(name)}</span>}
+        </span>
+        <span className="livestream-rider-name">
+          <small>{role}</small>
+          <strong>{name}</strong>
+        </span>
+      </div>
+    );
+  };
+  const enterFullscreen = () => {
+    if (document.fullscreenElement) return;
+    void document.documentElement.requestFullscreen().catch((error) => {
+      console.error("Could not enter livestream fullscreen mode.", error);
+    });
+  };
+
+  return (
+    <div className="livestream">
+      <aside className="livestream-board">
+        <header className="livestream-title">
+          <span>Destiny Ranch</span>
+          <h1>{event.name}</h1>
+          <h2>{finalResults ? "Final Results" : "Leader Board"}</h2>
+        </header>
+        <LedScrollingRows rowCount={standings.length}>
+          {standings.map((team, index) => (
+            <div className={`livestream-row livestream-place-${index + 1}`} key={team.id}>
+              <b>{index + 1}</b>
+              <span className="livestream-team">
+                <span>{riderName(team.headerId)}</span>
+                <i>x</i>
+                <span>{riderName(team.heelerId)}</span>
+              </span>
+              <strong>{teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants).toFixed(2)}</strong>
+            </div>
+          ))}
+          {!standings.length && (
+            <div className="livestream-waiting">Waiting for qualified results</div>
+          )}
+        </LedScrollingRows>
+        <footer className="livestream-round">Round {round} of {event.rounds} · Unofficial</footer>
+      </aside>
+      <div className="livestream-stage" />
+      <section className="livestream-now">
+        <div className="livestream-now-label">
+          <span className="live-dot" />
+          <strong>{finalResults ? "Final" : "Roping Team"}</strong>
+          {currentTeam && (
+            <small>Team #{currentTeam.originalTeamNumber ?? currentTeam.drawPosition}</small>
+          )}
+        </div>
+        {currentTeam ? (
+          <>
+            {riderCard(currentTeam.headerId, "Header")}
+            {riderCard(currentTeam.heelerId, "Heeler")}
+          </>
+        ) : (
+          <div className="livestream-rider"><strong>{finalResults ? "Competition complete" : "Round complete"}</strong></div>
+        )}
+      </section>
+      <button className="livestream-fullscreen" onClick={enterFullscreen} title="Full screen">
+        <Maximize2 size={18} />
+      </button>
+    </div>
+  );
+}
+
 function LedLeaderboard({
   data: fallbackData,
   eventId,
@@ -1455,35 +1648,13 @@ function LedLeaderboard({
   requestedTeamId?: string;
   usePublicRelay: boolean;
 }) {
-  const [relayedData, setRelayedData] = useState<ArenaData | null>(null);
+  const relayedData = useRelayedWorkspaceData(usePublicRelay, "LED");
   const [clock, setClock] = useState(new Date());
   const data = relayedData ?? fallbackData;
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  useEffect(() => {
-    if (!usePublicRelay) return;
-    let cancelled = false;
-    let timer = 0;
-    const refresh = async () => {
-      try {
-        const workspaceData = await requestWorkspaceDataFromOpener();
-        if (!cancelled && workspaceData) setRelayedData(workspaceData);
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Could not refresh the LED workspace data.", error);
-        }
-      } finally {
-        if (!cancelled) timer = window.setTimeout(refresh, 1500);
-      }
-    };
-    void refresh();
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [usePublicRelay]);
 
   const event =
     data.events.find((item) => item.id === eventId) ??
@@ -5110,20 +5281,24 @@ function RunDesk({
     moneyCutoffTotal === undefined
       ? undefined
       : moneyCutoffTotal - selectedPriorTotal - 0.01;
-  const openLedLeaderboard = () => {
+  const openLedDisplay = (display: "leaderboard" | "livestream") => {
     if (!event) return;
     const url = new URL(window.location.href);
     url.search = "";
-    url.searchParams.set("display", "leaderboard");
+    url.searchParams.set("display", display);
     url.searchParams.set("event", event.id);
     url.searchParams.set("round", String(activeRound));
     if (selected) url.searchParams.set("team", selected.id);
     if (isWixEmbed()) url.searchParams.set("relay", "wix");
     const popup = openLedWindow(url.toString());
     if (!popup) {
-      window.alert("Allow pop-ups to open the LED screen in a new tab.");
+      window.alert(
+        `Allow pop-ups to open the ${display === "livestream" ? "livestream" : "LED"} screen in a new tab.`,
+      );
     }
   };
+  const openLedLeaderboard = () => openLedDisplay("leaderboard");
+  const openLivestream = () => openLedDisplay("livestream");
   const previewRoundTimeSheet = () => {
     if (!event || !eventTeams.length) return;
     setTimeSheetPreview({
@@ -5712,6 +5887,7 @@ function RunDesk({
           <div><h3>Results</h3><p>{standings.length} qualified average{standings.length === 1 ? "" : "s"} · {event?.resultsPublished ? "Published live" : "Draft results"}</p></div>
           <div className="toolbar-actions">
             <button className="secondary" disabled={!eventTeams.length || !event} onClick={openLedLeaderboard}><MonitorUp size={16} /> View LED leaderboard</button>
+            <button className="secondary" disabled={!eventTeams.length || !event} onClick={openLivestream}><Radio size={16} /> Livestream</button>
             <button className="secondary" disabled={!eventTeams.length || !event} onClick={() => event && exportResultsCsv(event, allEventTeams, contestants, activeRound)}><Download size={16} /> CSV / Excel</button>
             <button className="secondary" disabled={!eventTeams.length} onClick={() => window.print()}><Printer size={16} /> Print / PDF</button>
             {event && <button className="primary" onClick={() => onUpdateEvent({ ...event, resultsPublished: !event.resultsPublished })}>{event.resultsPublished ? "Unpublish" : "Publish live results"}</button>}

@@ -725,6 +725,43 @@ main { grid-column: 2; min-width: 0; }
   92%, 100% { transform: translateY(0); }
 }
 
+/* Livestream overlay: 16:9 broadcast layout, transparent stage for the camera feed. */
+html.livestream-page, html.livestream-page body { background: transparent; }
+.livestream { position: relative; width: 100vw; height: 100vh; height: 100dvh; display: grid; grid-template-columns: 30vw minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 24vh; color: #f7fbf8; background: transparent; overflow: hidden; font-family: "DM Sans", sans-serif; }
+.livestream-board { grid-row: 1 / -1; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: 2.5vh 1.4vw 1.5vh; background: linear-gradient(180deg, rgba(10,18,14,.96), rgba(6,11,9,.96)); border-right: 3px solid #b8893c; }
+.livestream-title { text-align: center; padding-bottom: 1.6vh; margin-bottom: 1.2vh; border-bottom: 2px solid rgba(184,137,60,.6); }
+.livestream-title span { display: block; color: #cfaa66; font-size: clamp(11px, 1.1vw, 20px); font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+.livestream-title h1 { margin: .6vh 0 0; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.2vw, 42px); line-height: 1.1; text-transform: uppercase; overflow-wrap: anywhere; }
+.livestream-title h2 { margin: 1vh 0 0; color: #f4c972; font-family: "Manrope", sans-serif; font-size: clamp(14px, 1.4vw, 26px); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.livestream-board .led-rows { gap: .6vh; }
+.livestream-row { min-height: 7.1vh; display: grid; grid-template-columns: 2.2vw minmax(0, 1fr) auto; align-items: center; gap: .6vw; padding: .4vh .8vw; background: rgba(31,56,45,.85); border: 1px solid rgba(121,157,138,.25); border-radius: 8px; box-shadow: inset 4px 0 #557363; }
+.livestream-row.livestream-place-1 { background: linear-gradient(90deg, #6a4c1c, #322817); border-color: #b78b42; box-shadow: inset 6px 0 #e2b65f; }
+.livestream-row.livestream-place-2 { box-shadow: inset 4px 0 #aab6af; }
+.livestream-row.livestream-place-3 { box-shadow: inset 4px 0 #a66d42; }
+.livestream-row b { font-family: "Manrope", sans-serif; font-size: clamp(14px, 1.5vw, 28px); font-weight: 900; text-align: center; }
+.livestream-team { min-width: 0; display: flex; align-items: center; gap: .4vw; overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(13px, 1.25vw, 24px); font-weight: 700; text-transform: uppercase; white-space: nowrap; }
+.livestream-team > span { min-width: 0; flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; }
+.livestream-team > span:last-child { text-align: right; }
+.livestream-team i { flex: 0 0 auto; color: #cfaa66; font-style: normal; font-weight: 400; }
+.livestream-row strong { color: #f4c972; font-family: "Manrope", sans-serif; font-size: clamp(16px, 1.7vw, 32px); font-weight: 900; white-space: nowrap; }
+.livestream-row strong::before { content: "= "; color: #cfaa66; font-weight: 400; }
+.livestream-waiting { min-height: 30vh; display: grid; place-items: center; color: #82958a; font-family: "Manrope", sans-serif; font-size: clamp(14px, 1.4vw, 26px); text-align: center; text-transform: uppercase; }
+.livestream-round { margin-top: 1vh; padding-top: 1vh; color: #b8c7bf; border-top: 1px solid rgba(121,157,138,.25); font-size: clamp(10px, .9vw, 16px); font-weight: 800; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
+.livestream-stage { background: transparent; }
+.livestream-now { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 2vw; padding: 2vh 2.5vw; background: linear-gradient(90deg, rgba(10,18,14,.96), rgba(6,11,9,.9)); border-top: 3px solid #b8893c; }
+.livestream-now-label { display: grid; grid-template-columns: auto auto; align-items: center; gap: .3vh .6vw; padding-right: 2vw; border-right: 1px solid rgba(255,255,255,.3); text-transform: uppercase; }
+.livestream-now-label .live-dot { width: 14px; height: 14px; background: #ff5a4e; border-radius: 50%; box-shadow: 0 0 14px rgba(255,90,78,.9); }
+.livestream-now-label strong { font-family: "Manrope", sans-serif; font-size: clamp(18px, 2vw, 40px); font-weight: 800; white-space: nowrap; }
+.livestream-now-label small { grid-column: 1 / -1; color: #cfaa66; font-size: clamp(10px, 1vw, 18px); font-weight: 800; letter-spacing: .12em; }
+.livestream-rider { min-width: 0; display: flex; align-items: center; gap: 1.2vw; overflow: hidden; }
+.livestream-photo { flex: 0 0 auto; width: 17vh; height: 17vh; display: grid; place-items: center; overflow: hidden; color: #fff3d7; background: #365545; border: 3px solid #e2b65f; border-radius: 18%; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.4vw, 46px); font-weight: 900; }
+.livestream-photo img { width: 100%; height: 100%; object-fit: cover; }
+.livestream-rider-name { min-width: 0; display: grid; gap: .4vh; }
+.livestream-rider-name small { color: #cfaa66; font-size: clamp(10px, 1vw, 18px); font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.livestream-rider-name strong { overflow: hidden; font-family: "Manrope", sans-serif; font-size: clamp(20px, 2.4vw, 46px); font-weight: 800; line-height: 1.05; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.livestream-fullscreen { position: absolute; top: 1.5vh; right: 1vw; display: grid; place-items: center; width: 40px; height: 40px; color: #f8e6c5; background: rgba(6,11,9,.6); border: 1px solid #806839; border-radius: 8px; opacity: 0; transition: opacity .25s; }
+.livestream:hover .livestream-fullscreen { opacity: 1; }
+
 @media (prefers-reduced-motion: reduce) {
   .led-rows.is-scrolling { animation: none; }
   .led-rows-viewport { overflow-y: auto; }

@@ -316,6 +316,7 @@ export function parsePublicRoute(search: string): PublicRoute {
   const params = new URLSearchParams(search);
   if (params.get("portal") === "contestant") return { kind: "contestant" };
   if (params.get("display") === "leaderboard") return { kind: "leaderboard" };
+  if (params.get("display") === "livestream") return { kind: "leaderboard" };
   if (params.get("app") === "command") return { kind: "staff" };
   if (params.get("app") === "registration") {
     return { kind: "registration-desk" };
