@@ -1630,7 +1630,7 @@ function LivestreamScreen({
         )}
       </section>
       <button className="livestream-fullscreen" onClick={enterFullscreen} title="Full screen">
-        <Maximize2 size={18} />
+        <Maximize2 size={18} /> Full screen
       </button>
     </div>
   );
