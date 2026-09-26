@@ -5,10 +5,6 @@ export interface PublicFlyer {
 
 export const futureEventFlyers: PublicFlyer[] = [
   {
-    src: "./september-25-round-robin-9-slide-flyer-v2.png",
-    alt: "Destiny Ranch Arena Friday September 25 Team Roping flyer — Round Robin #9 Slide, 3 sec up/down, 15x15, 2 heads, 20 to short round, capped at #6, $300, gate 6 PM, books 7 PM, rope 8 PM, payouts based on 30 riders, $600 incentive on #7, buckles to all winners",
-  },
-  {
     src: "./october-17-bad-boy-roping-flyer.png",
     alt: "Destiny Ranch Arena Saturday October 17 Team Roping flyer — #10.5 Bad Boy Roping, draw 2 $200, add pick or draw $100, 3 heads, 70% payback, buckles to 1-3 winners, Bad Boy lawn mower to high point roper with 150 paying teams, gates 7:30 AM, books 8:30 AM, rope 9:30 AM, Brazilian food truck",
   },
