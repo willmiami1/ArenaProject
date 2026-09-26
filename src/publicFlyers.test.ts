@@ -21,6 +21,10 @@ describe("public flyer categories", () => {
   it("keeps the winners flyers in the past winners category, newest first", () => {
     expect(pastEventWinnerFlyers).toEqual([
       {
+        src: "./september-25-winners-flyer.jpg",
+        alt: "Destiny Ranch Arena Friday September 25 Team Roping winners flyer — 9 Slide Round Robin, 1st Jerry Vandermaas & John Hudson, 2nd Tyle Upshaw & Michael Dudash, 3rd Doug Pence x Kadu Amaral, Incentive #7 Tyler Upshaw & Jason Bell, next roping Oct 17th",
+      },
+      {
         src: "./august-30-winners-flyer.png",
         alt: "Destiny Ranch Arena Sunday August 30 Team Roping winners flyer — 1st Harrison Teixeira x Kadu Amaral, 2nd Harrison Teixeira x Marcos Machado, 3rd Harrison Teixeira x Tony Lazo, next roping Sept 11",
       },
