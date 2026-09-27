@@ -43,6 +43,7 @@ export type ReportKind =
   | "payout"
   | "stock"
   | "roper-ranking"
+  | "high-point-roper"
   | "arena";
 
 export interface ReportDefinition {
@@ -144,6 +145,7 @@ export const reportDefinitions: ReportDefinition[] = [
   { id: "competition-incentive", title: "Incentive Report", description: "Incentive-eligible teams and payout tracking.", section: "competition", category: "Payout Reports", kind: "payout", roles: financialRoles },
   { id: "competition-team-stats", title: "Team Statistics", description: "Round count, averages, penalties, and performance.", section: "competition", category: "Statistics", kind: "standings", roles: allRoles },
   { id: "competition-roper-ranking", title: "Ropers Ranking", description: "Top 12 ropers by steers-roped percentage and average time.", section: "competition", category: "Statistics", kind: "roper-ranking", roles: allRoles },
+  { id: "competition-high-point-roper", title: "High Point Roper", description: "Headers and heelers scored 20 down to 1 from the top 20 final placings, then catch percentage and average time.", section: "competition", category: "Statistics", kind: "high-point-roper", roles: allRoles },
   { id: "competition-arena", title: "Arena Statistics", description: "Selected-competition run and time statistics.", section: "competition", category: "Statistics", kind: "arena", roles: allRoles },
   { id: "competition-judge", title: "Judge Report", description: "Barrier calls, penalties, no-times, and notes.", section: "competition", category: "Competition Reports", kind: "results", roles: operationsRoles },
   { id: "competition-scratch", title: "Scratch List", description: "Scratched teams and registration entries.", section: "competition", category: "Competition Reports", kind: "status", roles: financialRoles },
@@ -1097,6 +1099,139 @@ export function roperRankingRows(
     }));
 }
 
+export const HIGH_POINT_PLACES = 20;
+
+// Points paid to each rider of a team by its final placing: 1st = 20 … 20th = 1.
+export const highPointPlacePoints = (place: number) =>
+  place >= 1 && place <= HIGH_POINT_PLACES ? HIGH_POINT_PLACES + 1 - place : 0;
+
+export function highPointRoperRows(
+  data: ArenaData,
+  events: ArenaEvent[],
+  teams: Team[],
+  role: ReportFilters["role"] = "",
+) {
+  const eventMap = new Map(events.map((event) => [event.id, event]));
+  const stats = new Map<
+    string,
+    {
+      contestantId: string;
+      position: "Header" | "Heeler";
+      points: number;
+      placings: number[];
+      runs: number;
+      caught: number;
+      totalTime: number;
+    }
+  >();
+  const statFor = (contestantId: string, position: "Header" | "Heeler") => {
+    const key = `${contestantId}|${position}`;
+    const entry = stats.get(key) ?? {
+      contestantId,
+      position,
+      points: 0,
+      placings: [],
+      runs: 0,
+      caught: 0,
+      totalTime: 0,
+    };
+    stats.set(key, entry);
+    return entry;
+  };
+
+  teams
+    .filter(
+      (team) =>
+        !team.scratched &&
+        (team.status === "complete" || team.status === "no-time"),
+    )
+    .forEach((team) => {
+      const time =
+        team.status === "complete"
+          ? finalTime(eventMap.get(team.eventId), team, data.contestants)
+          : null;
+      (
+        [
+          [team.headerId, "Header"],
+          [team.heelerId, "Heeler"],
+        ] as const
+      ).forEach(([contestantId, position]) => {
+        const entry = statFor(contestantId, position);
+        entry.runs += 1;
+        if (time !== null) {
+          entry.caught += 1;
+          entry.totalTime += time;
+        }
+      });
+    });
+
+  // Final placings come from the same classification as the payoff Winners
+  // list: qualified teams only, most rounds caught first, fastest total.
+  events.forEach((event) => {
+    aggregateStandings(event, teams, data.contestants)
+      .filter((standing) => standing.qualified && standing.rounds > 0)
+      .slice(0, HIGH_POINT_PLACES)
+      .forEach((standing, index) => {
+        const place = index + 1;
+        const points = highPointPlacePoints(place);
+        const header = statFor(standing.headerId, "Header");
+        header.points += points;
+        header.placings.push(place);
+        const heeler = statFor(standing.heelerId, "Heeler");
+        heeler.points += points;
+        heeler.placings.push(place);
+      });
+  });
+
+  return [...stats.values()]
+    .filter((entry) => !role || entry.position === role)
+    .map((entry) => ({
+      ...entry,
+      roper:
+        data.contestants.find((item) => item.id === entry.contestantId)?.name ??
+        "Unknown",
+      percentageValue: entry.runs ? (entry.caught / entry.runs) * 100 : 0,
+      averageValue: entry.caught ? entry.totalTime / entry.caught : Infinity,
+    }))
+    .sort(
+      (a, b) =>
+        b.points - a.points ||
+        b.percentageValue - a.percentageValue ||
+        a.averageValue - b.averageValue ||
+        b.caught - a.caught ||
+        a.roper.localeCompare(b.roper),
+    )
+    .slice(0, HIGH_POINT_PLACES)
+    .map((entry, index) => ({
+      rank: index + 1,
+      roper: entry.roper,
+      position: entry.position,
+      points: entry.points,
+      placings: entry.placings.length
+        ? entry.placings
+            .sort((a, b) => a - b)
+            .map((place) => ordinalPlace(place))
+            .join(", ")
+        : "—",
+      runs: entry.runs,
+      caught: entry.caught,
+      percentage: `${Math.round(entry.percentageValue)}%`,
+      average:
+        entry.averageValue === Infinity
+          ? "—"
+          : entry.averageValue.toFixed(2),
+    }));
+}
+
+const ordinalPlace = (place: number) => {
+  const mod100 = place % 100;
+  const suffix =
+    mod100 >= 11 && mod100 <= 13
+      ? "th"
+      : ["th", "st", "nd", "rd"][place % 10] ?? "th";
+  return `${place}${suffix}`;
+};
+
 const columns = {
   summary: [
     ["event", "Event"],
@@ -1269,6 +1404,17 @@ const columns = {
   "roper-ranking": [
     ["rank", "Rank"],
     ["roper", "Roper"],
+    ["runs", "Runs"],
+    ["caught", "Steers Roped"],
+    ["percentage", "Catch %"],
+    ["average", "Average Time"],
+  ],
+  "high-point-roper": [
+    ["rank", "Rank"],
+    ["roper", "Roper"],
+    ["position", "Position"],
+    ["points", "Points"],
+    ["placings", "Team Placings"],
     ["runs", "Runs"],
     ["caught", "Steers Roped"],
     ["percentage", "Catch %"],
@@ -1490,6 +1636,8 @@ export function generateReport(
     rows = stockRows(data, events, teams);
   } else if (definition.kind === "roper-ranking") {
     rows = roperRankingRows(data, events, teams);
+  } else if (definition.kind === "high-point-roper") {
+    rows = highPointRoperRows(data, events, teams, filters.role);
   } else {
     rows = [
       { metric: "Total Runs", value: teams.length },

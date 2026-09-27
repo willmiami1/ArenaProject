@@ -4,6 +4,8 @@ import {
   contestantFinancials,
   emptyReportFilters,
   generateReport,
+  highPointPlacePoints,
+  highPointRoperRows,
   reportDefinitions,
   roperRankingRows,
 } from "./reports";
@@ -167,6 +169,60 @@ describe("ropers ranking", () => {
     expect(rows).toHaveLength(12);
     expect(rows[0].rank).toBe(1);
     expect(rows[11].rank).toBe(12);
+  });
+});
+
+describe("high point roper", () => {
+  const riders: Contestant[] = [
+    { id: "a", name: "Ada Header", role: "Header", headerHandicap: 4, heelerHandicap: 0, photo: "", phone: "", hometown: "", horses: [] },
+    { id: "b", name: "Bo Heeler", role: "Heeler", headerHandicap: 0, heelerHandicap: 4, photo: "", phone: "", hometown: "", horses: [] },
+    { id: "c", name: "Cal Catch", role: "Heeler", headerHandicap: 0, heelerHandicap: 4, photo: "", phone: "", hometown: "", horses: [] },
+    { id: "d", name: "Dee Fast", role: "Header", headerHandicap: 4, heelerHandicap: 0, photo: "", phone: "", hometown: "", horses: [] },
+  ];
+
+  it("pays 20 down to 1 by team placing and breaks ties on catch % then time", () => {
+    // Team d/c wins (5.00), team a/b is 2nd (8.00), team a/c no-times.
+    const workspace = {
+      ...data([
+        team({ id: "t1", headerId: "d", heelerId: "c", rawTime: 5 }),
+        team({ id: "t2", headerId: "a", heelerId: "b", drawPosition: 2, rawTime: 8 }),
+        team({ id: "t3", headerId: "a", heelerId: "c", drawPosition: 3, status: "no-time", rawTime: null, points: 0 }),
+      ]),
+      contestants: riders,
+    };
+
+    const rows = highPointRoperRows(workspace, [event], workspace.teams);
+
+    expect(rows.map((row) => [row.rank, row.roper, row.position, row.points, row.placings, row.percentage])).toEqual([
+      [1, "Dee Fast", "Header", 20, "1st", "100%"],
+      [2, "Cal Catch", "Heeler", 20, "1st", "50%"],
+      [3, "Bo Heeler", "Heeler", 19, "2nd", "100%"],
+      [4, "Ada Header", "Header", 19, "2nd", "50%"],
+    ]);
+  });
+
+  it("filters to a single position", () => {
+    const workspace = {
+      ...data([
+        team({ id: "t1", headerId: "d", heelerId: "c", rawTime: 5 }),
+        team({ id: "t2", headerId: "a", heelerId: "b", drawPosition: 2, rawTime: 8 }),
+      ]),
+      contestants: riders,
+    };
+
+    const rows = highPointRoperRows(workspace, [event], workspace.teams, "Heeler");
+
+    expect(rows.map((row) => [row.rank, row.roper, row.points])).toEqual([
+      [1, "Cal Catch", 20],
+      [2, "Bo Heeler", 19],
+    ]);
+  });
+
+  it("scores places 21 and beyond at zero points", () => {
+    expect(highPointPlacePoints(1)).toBe(20);
+    expect(highPointPlacePoints(10)).toBe(11);
+    expect(highPointPlacePoints(20)).toBe(1);
+    expect(highPointPlacePoints(21)).toBe(0);
   });
 });
 
