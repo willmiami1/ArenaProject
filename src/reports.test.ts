@@ -180,25 +180,44 @@ describe("high point roper", () => {
     { id: "d", name: "Dee Fast", role: "Header", headerHandicap: 4, heelerHandicap: 0, photo: "", phone: "", hometown: "", horses: [] },
   ];
 
-  it("pays 20 down to 1 by team placing and breaks ties on catch % then time", () => {
-    // Team d/c wins (5.00), team a/b is 2nd (8.00), team a/c no-times.
+  it("scores the final-round catchers from N down to 1 and breaks ties on catch % then time", () => {
+    // 2-round roping. Team d/c catches both (fastest), team a/b catches both,
+    // team a/c catches round 1 but no-times the final round → not scored.
     const workspace = {
       ...data([
         team({ id: "t1", headerId: "d", heelerId: "c", rawTime: 5 }),
+        team({ id: "t1b", headerId: "d", heelerId: "c", round: 2, rawTime: 5 }),
         team({ id: "t2", headerId: "a", heelerId: "b", drawPosition: 2, rawTime: 8 }),
-        team({ id: "t3", headerId: "a", heelerId: "c", drawPosition: 3, status: "no-time", rawTime: null, points: 0 }),
+        team({ id: "t2b", headerId: "a", heelerId: "b", drawPosition: 2, round: 2, rawTime: 8 }),
+        team({ id: "t3", headerId: "a", heelerId: "c", drawPosition: 3, rawTime: 6 }),
+        team({ id: "t3b", headerId: "a", heelerId: "c", drawPosition: 3, round: 2, status: "no-time", rawTime: null, points: 0 }),
       ]),
       contestants: riders,
     };
 
     const rows = highPointRoperRows(workspace, [event], workspace.teams);
 
+    // Two scored teams → 1st = 2 points, 2nd = 1 point.
     expect(rows.map((row) => [row.rank, row.roper, row.position, row.points, row.placings, row.percentage])).toEqual([
-      [1, "Dee Fast", "Header", 20, "1st", "100%"],
-      [2, "Cal Catch", "Heeler", 20, "1st", "50%"],
-      [3, "Bo Heeler", "Heeler", 19, "2nd", "100%"],
-      [4, "Ada Header", "Header", 19, "2nd", "50%"],
+      [1, "Dee Fast", "Header", 2, "1st", "100%"],
+      [2, "Cal Catch", "Heeler", 2, "1st", "75%"],
+      [3, "Bo Heeler", "Heeler", 1, "2nd", "100%"],
+      [4, "Ada Header", "Header", 1, "2nd", "75%"],
     ]);
+  });
+
+  it("leaves out ropers who did not catch in the final round", () => {
+    const workspace = {
+      ...data([
+        team({ id: "t1", headerId: "d", heelerId: "c", rawTime: 5 }),
+        team({ id: "t3", headerId: "a", heelerId: "b", drawPosition: 3, status: "no-time", rawTime: null, points: 0 }),
+      ]),
+      contestants: riders,
+    };
+
+    const rows = highPointRoperRows(workspace, [event], workspace.teams);
+
+    expect(rows.map((row) => row.roper).sort()).toEqual(["Cal Catch", "Dee Fast"]);
   });
 
   it("filters to a single position", () => {
@@ -213,16 +232,18 @@ describe("high point roper", () => {
     const rows = highPointRoperRows(workspace, [event], workspace.teams, "Heeler");
 
     expect(rows.map((row) => [row.rank, row.roper, row.points])).toEqual([
-      [1, "Cal Catch", 20],
-      [2, "Bo Heeler", 19],
+      [1, "Cal Catch", 2],
+      [2, "Bo Heeler", 1],
     ]);
   });
 
-  it("scores places 21 and beyond at zero points", () => {
+  it("pays 20 down to 1 with a full field and caps at 20 scored teams", () => {
     expect(highPointPlacePoints(1)).toBe(20);
-    expect(highPointPlacePoints(10)).toBe(11);
     expect(highPointPlacePoints(20)).toBe(1);
     expect(highPointPlacePoints(21)).toBe(0);
+    expect(highPointPlacePoints(1, 30)).toBe(20);
+    expect(highPointPlacePoints(1, 7)).toBe(7);
+    expect(highPointPlacePoints(7, 7)).toBe(1);
   });
 });
 
