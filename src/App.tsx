@@ -4752,6 +4752,14 @@ function RunDesk({
   );
   const [showRideInForm, setShowRideInForm] = useState(false);
   const [rideInMessage, setRideInMessage] = useState("");
+  // In-app confirmation instead of window.confirm(): a native dialog in the
+  // Run Desk knocks the LED/livestream tabs it opened out of fullscreen.
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  } | null>(null);
   const [draggedQueueTeamId, setDraggedQueueTeamId] = useState("");
   const [scoreboardResetBusy, setScoreboardResetBusy] = useState(false);
   const [scoreboardResetMessage, setScoreboardResetMessage] = useState("");
@@ -5419,58 +5427,65 @@ function RunDesk({
   };
   const clearRunResult = () => {
     if (!selected || selected.status === "ready") return;
-    if (!window.confirm(`Clear the result for Draw #${selected.drawPosition} and mark this team Not run yet?`)) return;
-    onSave(selected.id, {
-      status: "ready",
-      rawTime: null,
-      penalties: 0,
-      notes: "",
-      points: 0,
-      rolled: false,
-      reRun: false,
+    setPendingConfirm({
+      title: "Clear result",
+      message: `Clear the result for Draw #${selected.drawPosition} and mark this team Not run yet?`,
+      confirmLabel: "Clear result",
+      onConfirm: () => {
+        onSave(selected.id, {
+          status: "ready",
+          rawTime: null,
+          penalties: 0,
+          notes: "",
+          points: 0,
+          rolled: false,
+          reRun: false,
+        });
+        selectActiveRunDeferred(selected.id);
+        setRawTime("");
+        setPenalties("0");
+        setNotes("");
+      },
     });
-    selectActiveRunDeferred(selected.id);
-    setRawTime("");
-    setPenalties("0");
-    setNotes("");
   };
   const grantReRun = () => {
     if (!selected) return;
-    if (
-      !window.confirm(
-        `Grant a re-run to Draw #${selected.drawPosition}? The team goes back in the run order as a pending re-run and all Cowboys × Steer picks on this run are cleared — spectators pick again when the team is up.`,
-      )
-    )
-      return;
-    const followingTeam =
-      eventTeams.find(
-        (team) =>
-          team.id !== selected.id &&
-          team.status === "ready" &&
-          !team.rolled &&
-          team.drawPosition > selected.drawPosition,
-      ) ??
-      eventTeams.find(
-        (team) =>
-          team.id !== selected.id &&
-          team.status === "ready" &&
-          !team.rolled,
-      );
-    onSave(selected.id, {
-      status: "ready",
-      rawTime: null,
-      penalties: 0,
-      notes: "",
-      points: 0,
-      rolled: false,
-      reRun: true,
-      predictionClosesAt: undefined,
+    setPendingConfirm({
+      title: "Grant re-run",
+      message: `Grant a re-run to Draw #${selected.drawPosition}? The team goes back in the run order as a pending re-run and all Cowboys × Steer picks on this run are cleared — spectators pick again when the team is up.`,
+      confirmLabel: "Grant re-run",
+      onConfirm: () => {
+        const followingTeam =
+          eventTeams.find(
+            (team) =>
+              team.id !== selected.id &&
+              team.status === "ready" &&
+              !team.rolled &&
+              team.drawPosition > selected.drawPosition,
+          ) ??
+          eventTeams.find(
+            (team) =>
+              team.id !== selected.id &&
+              team.status === "ready" &&
+              !team.rolled,
+          );
+        onSave(selected.id, {
+          status: "ready",
+          rawTime: null,
+          penalties: 0,
+          notes: "",
+          points: 0,
+          rolled: false,
+          reRun: true,
+          predictionClosesAt: undefined,
+        });
+        onClearTeamPredictions(selected.id);
+        selectActiveRunDeferred(followingTeam?.id ?? null);
+        setRawTime("");
+        setPenalties("0");
+        setNotes("");
+      },
     });
-    onClearTeamPredictions(selected.id);
-    selectActiveRunDeferred(followingTeam?.id ?? null);
-    setRawTime("");
-    setPenalties("0");
-    setNotes("");
   };
   const changeRound = (round: number) => {
     const roundTeams = allEventTeams.filter((team) => team.round === round);
@@ -5556,45 +5571,66 @@ function RunDesk({
     );
   };
   const deleteRideInTeam = (team: Team) => {
-    if (
-      !window.confirm(
-        `Delete ride-in team ${rider(team.headerId)} & ${rider(team.heelerId)} (Draw #${team.drawPosition})? The team${
-          team.status === "ready" ? "" : ", including its recorded result,"
-        } is removed from the run order and any Cowboys × Steer picks on it are cleared.`,
-      )
-    ) {
-      return;
-    }
-    if (selected?.id === team.id) {
-      const followingTeam =
-        eventTeams.find(
-          (candidate) =>
-            candidate.id !== team.id &&
-            candidate.status === "ready" &&
-            !candidate.rolled &&
-            candidate.drawPosition > team.drawPosition,
-        ) ??
-        eventTeams.find(
-          (candidate) =>
-            candidate.id !== team.id &&
-            candidate.status === "ready" &&
-            !candidate.rolled,
+    setPendingConfirm({
+      title: "Delete ride-in team",
+      message: `Delete ride-in team ${rider(team.headerId)} & ${rider(team.heelerId)} (Draw #${team.drawPosition})? The team${
+        team.status === "ready" ? "" : ", including its recorded result,"
+      } is removed from the run order and any Cowboys × Steer picks on it are cleared.`,
+      confirmLabel: "Delete team",
+      onConfirm: () => {
+        if (selected?.id === team.id) {
+          const followingTeam =
+            eventTeams.find(
+              (candidate) =>
+                candidate.id !== team.id &&
+                candidate.status === "ready" &&
+                !candidate.rolled &&
+                candidate.drawPosition > team.drawPosition,
+            ) ??
+            eventTeams.find(
+              (candidate) =>
+                candidate.id !== team.id &&
+                candidate.status === "ready" &&
+                !candidate.rolled,
+            );
+          selectActiveRunDeferred(followingTeam?.id ?? null);
+          setRawTime("");
+          setPenalties("0");
+          setNotes("");
+        }
+        onClearTeamPredictions(team.id);
+        onDeleteRideIn(team.id);
+        setRideInMessage(
+          `Ride-in team ${rider(team.headerId)} & ${rider(team.heelerId)} deleted.`,
         );
-      selectActiveRunDeferred(followingTeam?.id ?? null);
-      setRawTime("");
-      setPenalties("0");
-      setNotes("");
-    }
-    onClearTeamPredictions(team.id);
-    onDeleteRideIn(team.id);
-    setRideInMessage(
-      `Ride-in team ${rider(team.headerId)} & ${rider(team.heelerId)} deleted.`,
-    );
+      },
+    });
   };
 
   return (
     <>
       <PageIntro title="Run desk" text={event ? `Record times and publish standings for ${event.name}.` : "Select an event to open the run desk."} />
+      {pendingConfirm && (
+        <div className="notice run-desk-confirm" role="alertdialog" aria-live="assertive">
+          <div>
+            <strong>{pendingConfirm.title}</strong>
+            <span>{pendingConfirm.message}</span>
+          </div>
+          <div className="run-desk-confirm-actions">
+            <button className="secondary" onClick={() => setPendingConfirm(null)}>Cancel</button>
+            <button
+              className="primary"
+              onClick={() => {
+                const action = pendingConfirm;
+                setPendingConfirm(null);
+                action.onConfirm();
+              }}
+            >
+              {pendingConfirm.confirmLabel}
+            </button>
+          </div>
+        </div>
+      )}
       {activeRunSaveStatus === "saving" && (
         <div className="notice">
           <span>Saving Roping Now to Wix…</span>
