@@ -461,7 +461,6 @@ function StaffApp() {
       <LivestreamScreen
         data={data}
         eventId={displayParams.get("event") ?? activeEvent?.id}
-        requestedRound={Number(displayParams.get("round")) || undefined}
         requestedTeamId={displayParams.get("team") ?? undefined}
         usePublicRelay={displayParams.get("relay") === "wix"}
       />
@@ -1499,13 +1498,11 @@ function useRelayedWorkspaceData(
 function LivestreamScreen({
   data: fallbackData,
   eventId,
-  requestedRound,
   requestedTeamId,
   usePublicRelay,
 }: {
   data: ArenaData;
   eventId?: string;
-  requestedRound?: number;
   requestedTeamId?: string;
   usePublicRelay: boolean;
 }) {
@@ -1526,29 +1523,35 @@ function LivestreamScreen({
   const eventTeams = data.teams.filter(
     (team) => team.eventId === event.id && !team.scratched,
   );
+  // The livestream only covers the short round (final round).
+  const round = Math.max(event.rounds, 1);
   const runDeskState = resolveLedRunDeskState(
     event,
     eventTeams,
-    requestedRound,
+    round,
     requestedTeamId,
   );
-  const round = runDeskState.round;
   const roundTeams = eventTeams
     .filter((team) => team.round === round)
     .sort((a, b) => a.drawPosition - b.drawPosition);
-  const completedRoundsFor = (team: Team) =>
+  const completedRoundsThrough = (team: Team, through: number) =>
     eventTeams.filter(
       (run) =>
         sameTeamEntry(run, team) &&
-        run.round <= round &&
+        run.round <= through &&
         run.status === "complete" &&
         run.rawTime !== null,
     ).length;
+  // Only teams that have already roped in the short round and caught every
+  // steer of the roping make the board.
   const standings = sortLedStandings(
-    ledQualifiedRunsThroughRound(event.id, eventTeams, round),
+    ledQualifiedRunsThroughRound(event.id, eventTeams, round).filter(
+      (team) =>
+        team.round === round && completedRoundsThrough(team, round) === round,
+    ),
     (team) =>
       teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants),
-    completedRoundsFor,
+    (team) => completedRoundsThrough(team, round),
   ).slice(0, 20);
   const currentTeam =
     roundTeams.find(
@@ -1557,6 +1560,18 @@ function LivestreamScreen({
     ) ??
     roundTeams.find((team) => team.status === "ready" && !team.rolled) ??
     roundTeams.find((team) => team.status === "ready");
+  // High call = where the team stood coming into the short round.
+  const highCall = (() => {
+    if (!currentTeam || round < 2) return null;
+    const entering = sortLedStandings(
+      ledQualifiedRunsThroughRound(event.id, eventTeams, round - 1),
+      (team) =>
+        teamQualifiedTotal(team, eventTeams, round, event, data.contestants),
+      (team) => completedRoundsThrough(team, round - 1),
+    );
+    const index = entering.findIndex((team) => sameTeamEntry(team, currentTeam));
+    return index >= 0 ? index + 1 : null;
+  })();
   const finalResults = ledShowsFinalResults(event, eventTeams, round);
   const rider = (id: string) =>
     data.contestants.find((contestant) => contestant.id === id);
@@ -1589,36 +1604,40 @@ function LivestreamScreen({
     <div className="livestream">
       <aside className="livestream-board">
         <header className="livestream-title">
-          <span className="livestream-brand">
-            <img src="./destiny-ranch-arena-logo.png" alt="" />
-            Destiny Ranch
-          </span>
-          <h1>{ropingFormatLabel(event)}</h1>
-          <h2>{finalResults ? "Final Results" : "Leader Board"}</h2>
+          <img className="livestream-logo" src="./destiny-ranch-arena-logo.png" alt="Destiny Ranch Arena" />
+          <h1>{event.name}</h1>
+          <span className="livestream-date">{formatDate(event.date)}</span>
+          <h2>{finalResults ? "Short Round · Final Results" : "Short Round · Leader Board"}</h2>
         </header>
         <LedScrollingRows rowCount={standings.length}>
           {standings.map((team, index) => (
             <div className={`livestream-row livestream-place-${index + 1}`} key={team.id}>
-              <b>{index + 1}</b>
-              <span className="livestream-team">
-                <span>{riderName(team.headerId)}</span>
-                <i>&amp;</i>
-                <span>{riderName(team.heelerId)}</span>
-              </span>
-              <strong>{teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants).toFixed(2)}</strong>
+              <b>{ordinal(index + 1)} Place</b>
+              <span>{riderName(team.headerId)}</span>
+              <span>{riderName(team.heelerId)}</span>
+              <strong>
+                {teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants).toFixed(2)}
+                <small> on {round} head</small>
+              </strong>
             </div>
           ))}
           {!standings.length && (
-            <div className="livestream-waiting">Waiting for qualified results</div>
+            <div className="livestream-waiting">Waiting for the first clean short-round run</div>
           )}
         </LedScrollingRows>
-        <footer className="livestream-round">Round {round} of {event.rounds} · Unofficial</footer>
+        <footer className="livestream-round">{ropingFormatLabel(event)} · Unofficial</footer>
       </aside>
       <div className="livestream-stage" />
       <section className="livestream-now">
         <div className="livestream-now-label">
           <span className="live-dot" />
-          <strong>{finalResults ? <>Final<br />Results</> : <>Current<br />Team</>}</strong>
+          <strong>
+            {finalResults
+              ? <>Final<br />Results</>
+              : highCall
+                ? <>High Call<br /><em>#{highCall}</em></>
+                : <>Current<br />Team</>}
+          </strong>
         </div>
         {currentTeam ? (
           <>
