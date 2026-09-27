@@ -4594,11 +4594,13 @@ function IndividualRegistrationForm({
   onCancel: () => void;
 }) {
   const requiredRole = null;
-  const eligibleContestants = contestants.filter((contestant) =>
-    requiredRole
-      ? contestantEligibleForRole(event, contestant, requiredRole)
-      : contestantEligibleForRole(event, contestant, "Header") ||
-        contestantEligibleForRole(event, contestant, "Heeler"),
+  const eligibleContestants = sortContestantsByName(
+    contestants.filter((contestant) =>
+      requiredRole
+        ? contestantEligibleForRole(event, contestant, requiredRole)
+        : contestantEligibleForRole(event, contestant, "Header") ||
+          contestantEligibleForRole(event, contestant, "Heeler"),
+    ),
   );
   const firstEligibleRole = (contestant?: Contestant) =>
     contestantEligibleForRole(event, contestant, "Header")
@@ -4650,12 +4652,17 @@ function IndividualRegistrationForm({
   );
 }
 
-function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel, rideIn = false }: { event: ArenaEvent; team?: Team; contestants: Contestant[]; drawPosition: number; onSubmit: (team: Team) => void; onCancel: () => void; rideIn?: boolean }) {
-  const headers = contestants.filter((rider) =>
-    contestantEligibleForRole(event, rider, "Header"),
+const sortContestantsByName = (riders: Contestant[]) =>
+  [...riders].sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
   );
-  const heelers = contestants.filter((rider) =>
-    contestantEligibleForRole(event, rider, "Heeler"),
+
+function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel, rideIn = false }: { event: ArenaEvent; team?: Team; contestants: Contestant[]; drawPosition: number; onSubmit: (team: Team) => void; onCancel: () => void; rideIn?: boolean }) {
+  const headers = sortContestantsByName(
+    contestants.filter((rider) => contestantEligibleForRole(event, rider, "Header")),
+  );
+  const heelers = sortContestantsByName(
+    contestants.filter((rider) => contestantEligibleForRole(event, rider, "Heeler")),
   );
   const [headerId, setHeaderId] = useState(team?.headerId ?? headers[0]?.id ?? "");
   const [heelerId, setHeelerId] = useState(team?.heelerId ?? heelers.find((rider) => rider.id !== headerId)?.id ?? "");
