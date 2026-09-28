@@ -102,6 +102,9 @@ export interface RegistrationDeskContestantInput {
   email: string;
   hometown: string;
   horses?: string[];
+  /** New photo data URL. Omit to keep the current photo. */
+  photo?: string;
+  clearPhoto?: boolean;
 }
 
 const registrationWorkspaceKey = "arena-command-data-v1";
@@ -439,7 +442,7 @@ export function upsertRegistrationDeskContestant(
     role: input.role,
     headerHandicap: Number(input.headerHandicap),
     heelerHandicap: Number(input.heelerHandicap),
-    photo: previous?.photo ?? "",
+    photo: input.clearPhoto ? "" : input.photo || previous?.photo || "",
     phone,
     email,
     hometown: input.hometown.trim(),

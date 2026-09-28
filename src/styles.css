@@ -1115,6 +1115,39 @@ html:fullscreen .livestream-fullscreen { opacity: 0; pointer-events: none; }
 .registration-horse-editor .horse-entry button { min-width: 125px; color: #eadcc6; background: #49301f; border: 1px solid #765036; border-radius: 6px; }
 .registration-horse-editor .horse-list > span { color: #eadcc6; background: #211810; border-color: #5a4434; }
 .registration-profile-form .primary { align-self: end; }
+.registration-desk-step { margin-bottom: 22px; }
+.registration-desk-step .registration-selected-contestant { margin: 18px 22px 0; }
+.registration-desk-step .registration-profile-form { grid-template-columns: minmax(180px,220px) minmax(0,1fr); align-items: start; }
+.registration-profile-photo { display: grid; gap: 12px; }
+.registration-profile-photo img,.registration-profile-photo-empty { width: 100%; aspect-ratio: 1; object-fit: cover; background: #0d0a08; border: 1px solid #5a4434; border-radius: 10px; }
+.registration-profile-photo-empty { display: grid; place-items: center; color: #6b5744; }
+.registration-profile-photo-empty svg { width: 46px; height: 46px; }
+.registration-profile-photo-actions { display: grid; gap: 8px; }
+.registration-profile-photo-actions small { color: #a9937d; font-size: 9px; text-align: center; }
+.registration-photo-button,.registration-profile-photo-actions button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 0 12px; color: #eadcc6; background: #49301f; border: 1px solid #765036; border-radius: 6px; font-size: 11px; font-weight: 800; cursor: pointer; text-transform: none; }
+.registration-profile-photo-actions button { background: #17110d; border-color: #543d2c; color: #d7c0a7; }
+.registration-photo-button.disabled { opacity: .6; pointer-events: none; }
+.registration-photo-button input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.registration-profile-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.registration-profile-fields label:first-child { grid-column: 1 / -1; }
+.registration-profile-waiver { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 15px; background: #120d0a; border: 1px solid #5a4434; border-radius: 7px; }
+.registration-profile-waiver > span { color: #cdb9a3; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.registration-profile-waiver small { color: #a9937d; font-size: 10px; }
+.registration-profile-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.registration-profile-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 46px; padding: 0 18px; color: #d7c0a7; background: #17110d; border: 1px solid #543d2c; border-radius: 6px; font-size: 12px; font-weight: 800; }
+.registration-profile-actions button.primary { color: #fff; background: #875538; border-color: #a46b47; }
+.registration-profile-actions button.secondary { color: #eadcc6; background: #49301f; border-color: #765036; }
+.registration-profile-form .registration-pin-panel { grid-column: 1 / -1; }
+.registration-contestant-list>button img,.registration-contestant-list>button>i { flex: none; width: 44px; height: 44px; object-fit: cover; border-radius: 50%; background: #2a1e16; }
+.registration-contestant-list>button>i { display: grid; place-items: center; padding: 0; font-weight: 900; }
+.registration-contestant-list>button>span { flex: 1; }
+.registration-inline-link { padding: 0; color: #e4c494; background: none; border: 0; font: inherit; font-weight: 800; text-decoration: underline; }
+.registration-draw-details { padding: 24px; }
+@media (max-width: 760px) {
+  .registration-desk-step .registration-profile-form { grid-template-columns: 1fr; }
+  .registration-profile-photo { grid-template-columns: 140px 1fr; align-items: start; }
+  .registration-profile-fields { grid-template-columns: 1fr; }
+}
 .registration-desk-message { position: sticky; bottom: 16px; margin: 20px auto 0; padding: 14px 18px; color: #2a1b0f; background: #e2bc83; border: 1px solid #b47b44; border-radius: 7px; font-size: 12px; font-weight: 800; box-shadow: 0 10px 28px rgba(0,0,0,.28); }
 
 .registration-waiver-overlay { position: fixed; z-index: 1000; inset: 0; width: 100vw; width: 100dvw; max-width: 100%; height: 100vh; height: 100dvh; max-height: 100%; margin: 0; padding: env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0); overflow: hidden; overflow-x: hidden; box-sizing: border-box; touch-action: pan-y; color: #eadcc6; background: #0d0a08; }
