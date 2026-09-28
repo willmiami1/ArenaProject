@@ -130,6 +130,7 @@ import {
   contestantHasDrawRegistration,
   defaultCompetitionSettings,
   entryClearedForDraw,
+  drawPairingProblems,
   generateCompetitionDraw,
   minimumDrawEntries,
   officialRunTime,
@@ -4207,13 +4208,20 @@ function Teams({
   const generateDraw = () => {
     if (!event) return;
     const generated = generateCompetitionDraw(event, eventRegistrations, teams, contestants);
+    const describeProblems = (fallback: string) => {
+      const problems = drawPairingProblems(event, eventRegistrations, teams, contestants);
+      if (!problems.length) return fallback;
+      return `The draw could not be completed. Fix these entries and try again:\n${problems
+        .map((problem) => `• ${problem.reason}`)
+        .join("\n")}`;
+    };
     if (!generated.length) {
       setMessage(
         event.competitionType === "draw-pot" ||
         event.competitionType === "slide"
-          ? "Register at least one eligible header and heeler before drawing."
+          ? describeProblems("Register at least one eligible header and heeler before drawing.")
           : event.competitionType === "pick-and-draw"
-            ? "No eligible draw teams could be made. Confirm paid Header and Heeler entries, check the handicap limit, and enable repeat partner runs when entries must reuse partners."
+            ? describeProblems("No eligible draw teams could be made. Confirm paid Header and Heeler entries, check the handicap limit, and enable repeat partner runs when entries must reuse partners.")
             : "Add eligible contestants or teams before generating the draw.",
       );
       return;
@@ -4225,7 +4233,9 @@ function Teams({
       ).length;
       if (generatedDrawTeams < expectedDrawTeams) {
         setMessage(
-          `The draw pot has ${expectedDrawTeams} entries but only ${generatedDrawTeams} unique eligible teams can be made. Check handicaps and positions, or enable repeat partner runs.`,
+          describeProblems(
+            `The draw pot has ${expectedDrawTeams} entries but only ${generatedDrawTeams} unique eligible teams can be made. Check handicaps and positions, or enable repeat partner runs.`,
+          ),
         );
         return;
       }
@@ -4288,7 +4298,7 @@ function Teams({
           <span className={`tag ${event.drawLocked ? "no-time" : "neutral"}`}>{event.drawLocked ? "Draw locked" : "Draw editable"}</span>
         </div>
       )}
-      {message && <div className="notice"><span>{message}</span><button onClick={() => setMessage("")}><X size={16} /></button></div>}
+      {message && <div className="notice"><span style={{ whiteSpace: "pre-line" }}>{message}</span><button onClick={() => setMessage("")}><X size={16} /></button></div>}
       {showForm && event && entryMode === "registration" && (
         <IndividualRegistrationForm
           event={event}

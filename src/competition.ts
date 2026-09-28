@@ -919,6 +919,138 @@ export function generateCompetitionDraw(
   return fixedTeams;
 }
 
+export type DrawPairingProblem = {
+  contestantId: string;
+  name: string;
+  role: "Header" | "Heeler";
+  handicap: number;
+  entries: number;
+  eligiblePartners: number;
+  reason: string;
+};
+
+/**
+ * Explains why a draw cannot be completed by naming each draw entry that
+ * cannot find enough eligible partners under the event limits.
+ */
+export function drawPairingProblems(
+  event: ArenaEvent,
+  registrations: EventRegistration[],
+  teams: Team[],
+  contestants: Contestant[],
+): DrawPairingProblem[] {
+  const active = registrations.filter(
+    (registration) =>
+      registration.eventId === event.id &&
+      registration.status === "entered" &&
+      registration.entries > 0 &&
+      (event.competitionType !== "pick-and-draw" || !registration.sourceTeamId) &&
+      entryClearedForDraw(registration),
+  );
+  const byRole = (role: "Header" | "Heeler") => {
+    const entries = new Map<string, number>();
+    active
+      .filter((registration) => registration.role === role)
+      .forEach((registration) => {
+        entries.set(
+          registration.contestantId,
+          (entries.get(registration.contestantId) ?? 0) + registration.entries,
+        );
+      });
+    return entries;
+  };
+  const headers = byRole("Header");
+  const heelers = byRole("Heeler");
+  if (!headers.size || !heelers.size) return [];
+  const pickedPairs = new Set(
+    teams
+      .filter(
+        (team) =>
+          team.eventId === event.id && !team.generated && !team.scratched,
+      )
+      .map((team) => pairKey(team.headerId, team.heelerId)),
+  );
+  const contestantById = new Map(
+    contestants.map((contestant) => [contestant.id, contestant]),
+  );
+  const maxHandicap = event.maxContestantHandicap ?? 10;
+  const problems: DrawPairingProblem[] = [];
+  const check = (
+    role: "Header" | "Heeler",
+    own: Map<string, number>,
+    partners: Map<string, number>,
+  ) => {
+    own.forEach((entries, contestantId) => {
+      const contestant = contestantById.get(contestantId);
+      const name = contestant?.name ?? "Unknown contestant";
+      const handicap =
+        role === "Header"
+          ? contestant?.headerHandicap ?? 0
+          : contestant?.heelerHandicap ?? 0;
+      if (!contestantEligibleForRole(event, contestant, role)) {
+        problems.push({
+          contestantId,
+          name,
+          role,
+          handicap,
+          entries,
+          eligiblePartners: 0,
+          reason: `${name} is a #${handicap} ${role.toLowerCase()} but this roping is capped at #${maxHandicap} per rider.`,
+        });
+        return;
+      }
+      const partnerRole = role === "Header" ? "Heeler" : "Header";
+      let eligiblePartners = 0;
+      let eligibleRuns = 0;
+      let blockedByPick = 0;
+      partners.forEach((partnerEntries, partnerId) => {
+        if (partnerId === contestantId) return;
+        const headerId = role === "Header" ? contestantId : partnerId;
+        const heelerId = role === "Header" ? partnerId : contestantId;
+        if (!eligiblePair(event, headerId, heelerId, contestants)) return;
+        if (
+          !event.allowRepeatPartners &&
+          !event.allowSamePartnerDrawAndPick &&
+          pickedPairs.has(pairKey(headerId, heelerId))
+        ) {
+          blockedByPick += 1;
+          return;
+        }
+        eligiblePartners += 1;
+        eligibleRuns += partnerEntries;
+      });
+      const maxPartnerHandicap = event.handicapTotal - handicap;
+      if (eligiblePartners === 0) {
+        problems.push({
+          contestantId,
+          name,
+          role,
+          handicap,
+          entries,
+          eligiblePartners,
+          reason: `${name} (#${handicap} ${role.toLowerCase()}) has no eligible ${partnerRole.toLowerCase()} in the draw — needs a #${Math.max(0, maxPartnerHandicap)} or lower${blockedByPick ? `; ${blockedByPick} possible partner${blockedByPick === 1 ? " is" : "s are"} already picked with them` : ""}.`,
+        });
+        return;
+      }
+      const capacity = event.allowRepeatPartners ? eligibleRuns : eligiblePartners;
+      if (capacity < entries) {
+        problems.push({
+          contestantId,
+          name,
+          role,
+          handicap,
+          entries,
+          eligiblePartners,
+          reason: `${name} (#${handicap} ${role.toLowerCase()}) has ${entries} entries but only ${eligiblePartners} eligible ${partnerRole.toLowerCase()}${eligiblePartners === 1 ? "" : "s"} (#${Math.max(0, maxPartnerHandicap)} or lower). Reduce the entries or enable repeat partner runs.`,
+        });
+      }
+    });
+  };
+  check("Header", headers, heelers);
+  check("Heeler", heelers, headers);
+  return problems;
+}
+
 export function calculatePurse(
   event: ArenaEvent,
   teamCount: number,
