@@ -5357,7 +5357,14 @@ function RunDesk({
     URL.revokeObjectURL(url);
   };
   const chooseTeam = (team: Team) => {
-    void selectActiveRun(team.id);
+    if (team.status === "ready" && !team.rolled && !team.scratched) {
+      void selectActiveRun(team.id);
+    } else {
+      // Recorded, rolled, or scratched runs can't become Roping Now; open
+      // them locally for correction without touching the live selection.
+      setSelectedRound(activeRound);
+      setSelectedId(team.id);
+    }
     setRawTime(team.rawTime?.toString() ?? "");
     setPenalties(team.penalties.toString());
     setNotes(team.notes);
