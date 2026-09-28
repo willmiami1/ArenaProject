@@ -91,6 +91,7 @@ import {
 import {
   normalizedRunDeskRound,
   runDeskSelectionToPersist,
+  activeRunRejectedByRules,
 } from "./runDeskActiveSelection";
 import {
   ActiveRunSaveError,
@@ -4822,7 +4823,25 @@ function RunDesk({
   const [rawTime, setRawTime] = useState("");
   const [penalties, setPenalties] = useState("0");
   const [notes, setNotes] = useState("");
+  // Team the operator clicked on. While set, background Roping Now updates
+  // (Wix syncs, other devices) must not move the selection or wipe the
+  // entry fields until the operator finishes with that team.
+  const pinnedSelection = useRef<{ eventId: string; teamId: string } | null>(
+    null,
+  );
+  const clearPinnedSelection = () => {
+    pinnedSelection.current = null;
+  };
   useEffect(() => {
+    const pinned = pinnedSelection.current;
+    if (
+      pinned &&
+      pinned.eventId === event?.id &&
+      allEventTeams.some((team) => team.id === pinned.teamId)
+    ) {
+      return;
+    }
+    pinnedSelection.current = null;
     const nextRound = normalizedRunDeskRound(event?.activeRound, roundCount);
     setSelectedRound(nextRound);
     setSelectedId(event?.activeRunId ?? null);
@@ -4905,6 +4924,27 @@ function RunDesk({
         setActiveRunSaveError("");
         return;
       }
+      const errorMessage =
+        error instanceof Error ? error.message : String(error ?? "");
+      if (teamId && !activeRunRejectedByRules(errorMessage)) {
+        // Transient Wix failure (timeout, lock contention, generic 500):
+        // keep the operator's choice and let the workspace autosave carry
+        // the selection instead of snapping back to the previous team.
+        setPendingActiveSelection(null);
+        if (
+          event.activeRunId !== teamId ||
+          event.activeRound !== round
+        ) {
+          onUpdateEvent({
+            ...event,
+            activeRunId: teamId,
+            activeRound: round,
+          });
+        }
+        setActiveRunSaveStatus("offline");
+        setActiveRunSaveError("");
+        return;
+      }
       const confirmed =
         error instanceof ActiveRunSaveError
           ? error.confirmedSelection
@@ -4916,6 +4956,7 @@ function RunDesk({
         normalizedRunDeskRound(confirmed.activeRound, roundCount),
       );
       setSelectedId(confirmed.activeRunId ?? null);
+      clearPinnedSelection();
       setActiveRunSaveStatus("error");
       setActiveRunSaveError(
         error instanceof Error
@@ -4928,6 +4969,7 @@ function RunDesk({
     teamId: string | null,
     round = activeRound,
   ) => {
+    clearPinnedSelection();
     setSelectedRound(round);
     setSelectedId(teamId);
     if (
@@ -5367,6 +5409,9 @@ function RunDesk({
     URL.revokeObjectURL(url);
   };
   const chooseTeam = (team: Team) => {
+    if (event) {
+      pinnedSelection.current = { eventId: event.id, teamId: team.id };
+    }
     if (team.status === "ready" && !team.rolled && !team.scratched) {
       void selectActiveRun(team.id);
     } else {
@@ -5647,8 +5692,8 @@ function RunDesk({
       {activeRunSaveStatus === "offline" && (
         <div className="notice">
           <span>
-            Offline — Roping Now is saved on this computer and will sync to
-            Wix when the connection returns.
+            Roping Now is saved on this computer and will sync to Wix with
+            the next workspace save.
           </span>
         </div>
       )}
