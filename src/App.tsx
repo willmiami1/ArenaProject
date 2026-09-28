@@ -1575,6 +1575,34 @@ function LivestreamScreen({
     return index >= 0 ? index + 1 : null;
   })();
   const finalResults = ledShowsFinalResults(event, eventTeams, round);
+  // Announcer figures for the team about to rope in the short round.
+  const shortRoundTotals =
+    round > 1
+      ? roundTeams
+          .filter((team) => team.status === "complete" && team.rawTime !== null)
+          .map((team) =>
+            teamQualifiedTotal(team, eventTeams, undefined, event, data.contestants),
+          )
+          .sort((a, b) => a - b)
+      : [];
+  const currentPriorTotal = currentTeam
+    ? teamQualifiedTotal(currentTeam, eventTeams, round, event, data.contestants)
+    : 0;
+  const currentTimeToFirst = shortRoundTotals.length
+    ? shortRoundTotals[0] - currentPriorTotal - 0.01
+    : undefined;
+  const livestreamPayingSpots = Math.max(
+    1,
+    eventPayoutPercentages(
+      event,
+      eventTeams.filter((team) => team.round === 1).length,
+    ).filter((percentage) => percentage > 0).length,
+  );
+  const currentTimeToMoney =
+    shortRoundTotals.length >= livestreamPayingSpots
+      ? shortRoundTotals[livestreamPayingSpots - 1] - currentPriorTotal - 0.01
+      : undefined;
+  const showAnnouncerTimes = Boolean(currentTeam && round > 1 && !finalResults);
   const rider = (id: string) =>
     data.contestants.find((contestant) => contestant.id === id);
   const riderName = (id: string) => rider(id)?.name ?? "Unknown";
@@ -1630,7 +1658,7 @@ function LivestreamScreen({
         <footer className="livestream-round">{ropingFormatLabel(event)} · Unofficial</footer>
       </aside>
       <div className="livestream-stage" />
-      <section className="livestream-now">
+      <section className={`livestream-now${showAnnouncerTimes ? " with-times" : ""}`}>
         <div className="livestream-now-label">
           <span className="live-dot" />
           <strong>
@@ -1644,6 +1672,13 @@ function LivestreamScreen({
         {currentTeam ? (
           <>
             {riderCard(currentTeam.headerId, "Header")}
+            {showAnnouncerTimes && (
+              <div className="livestream-times">
+                <div><small>Prior aggregate</small><strong>{currentPriorTotal.toFixed(2)}s</strong></div>
+                <div><small>To be in the money</small><strong>{currentTimeToMoney === undefined ? "Just catch" : currentTimeToMoney <= 0 ? "Out of reach" : `${currentTimeToMoney.toFixed(2)}s`}</strong></div>
+                <div><small>To move into 1st</small><strong>{currentTimeToFirst === undefined ? "Set the pace" : currentTimeToFirst <= 0 ? "Out of reach" : `${currentTimeToFirst.toFixed(2)}s`}</strong></div>
+              </div>
+            )}
             {riderCard(currentTeam.heelerId, "Heeler")}
           </>
         ) : (
