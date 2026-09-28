@@ -5624,27 +5624,6 @@ function RunDesk({
   return (
     <>
       <PageIntro title="Run desk" text={event ? `Record times and publish standings for ${event.name}.` : "Select an event to open the run desk."} />
-      {pendingConfirm && (
-        <div className="notice run-desk-confirm" role="alertdialog" aria-live="assertive">
-          <div>
-            <strong>{pendingConfirm.title}</strong>
-            <span>{pendingConfirm.message}</span>
-          </div>
-          <div className="run-desk-confirm-actions">
-            <button className="secondary" onClick={() => setPendingConfirm(null)}>Cancel</button>
-            <button
-              className="primary"
-              onClick={() => {
-                const action = pendingConfirm;
-                setPendingConfirm(null);
-                action.onConfirm();
-              }}
-            >
-              {pendingConfirm.confirmLabel}
-            </button>
-          </div>
-        </div>
-      )}
       {activeRunSaveStatus === "saving" && (
         <div className="notice">
           <span>Saving Roping Now to Wix…</span>
@@ -5893,6 +5872,27 @@ function RunDesk({
                 <button className="re-run-button" onClick={grantReRun}>Grant re-run</button>
                 <button className="primary" disabled={!rawTime || Number(rawTime) <= 0} onClick={() => saveRun("complete")}><Check size={18} /> {isEditingResult ? "Save corrected time" : "Save result"}</button>
               </div>
+              {pendingConfirm && (
+                <div className="notice run-desk-confirm" role="alertdialog" aria-live="assertive">
+                  <div>
+                    <strong>{pendingConfirm.title}</strong>
+                    <span>{pendingConfirm.message}</span>
+                  </div>
+                  <div className="run-desk-confirm-actions">
+                    <button className="secondary" onClick={() => setPendingConfirm(null)}>Cancel</button>
+                    <button
+                      className="primary"
+                      onClick={() => {
+                        const action = pendingConfirm;
+                        setPendingConfirm(null);
+                        action.onConfirm();
+                      }}
+                    >
+                      {pendingConfirm.confirmLabel}
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           ) : <EmptyState text="Every team in this draw has a result." />}
         </section>

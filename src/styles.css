@@ -364,7 +364,7 @@ main { grid-column: 2; min-width: 0; }
 .format-banner p { margin: 3px 0 0; color: var(--muted); font-size: 10px; }
 .notice { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 16px; padding: 11px 14px; color: #67502f; background: #fdf4e6; border: 1px solid #efdbbc; border-radius: 8px; font-size: 11px; }
 .notice button { display: grid; place-items: center; padding: 2px; color: inherit; background: none; border: 0; }
-.run-desk-confirm { align-items: center; padding: 14px 16px; border-width: 2px; font-size: 12px; }
+.run-desk-confirm { align-items: center; margin: 14px 0 0; padding: 14px 16px; border-width: 2px; font-size: 12px; }
 .run-desk-confirm > div:first-child { display: grid; gap: 4px; }
 .run-desk-confirm strong { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
 .run-desk-confirm-actions { display: flex; flex: none; gap: 8px; }
