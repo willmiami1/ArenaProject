@@ -226,6 +226,9 @@ function PublicHeader({ liveCompetitionId }: { liveCompetitionId?: string }) {
           <img src="./destiny-ranch-arena-logo.png" alt="" />
           <strong>Destiny Ranch Arena</strong>
         </a>
+        <a className="public-header-game" href={spectatorGameHref} aria-label="Play Cowboy x Steers during live competitions">
+          <img src="./play-cowboy-x-steers-banner.png" alt="During live competitions — play Cowboy x Steers" />
+        </a>
         <button
           className="public-menu"
           aria-label={open ? "Close navigation" : "Open navigation"}
@@ -249,9 +252,6 @@ function PublicHeader({ liveCompetitionId }: { liveCompetitionId?: string }) {
         </a>
         <a className="public-header-cta" href={href("rider-account")}>
           <UsersRound size={16} /> CREATE A RIDER ACCOUNT
-        </a>
-        <a className="public-header-game" href={spectatorGameHref} aria-label="Play Cowboy x Steers during live competitions">
-          <img src="./play-cowboy-x-steers-banner.png" alt="During live competitions — play Cowboy x Steers" />
         </a>
       </div>
     </header>

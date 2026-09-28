@@ -27,9 +27,9 @@
 .public-header-actions a { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 14px; font-size: 11px; font-weight: 800; text-align: center; text-transform: uppercase; letter-spacing: .04em; }
 .public-header-actions .public-header-cta { color: #fff; background: var(--public-brown); border: 1px solid var(--public-brown); }
 .public-header-actions .public-header-cta:hover { background: #4f2d1d; border-color: var(--public-tan); }
-.public-header-actions .public-header-game { grid-column: 1/-1; justify-self: center; width: min(560px,100%); padding: 0; border: 0; }
-.public-header-actions .public-header-game img { display: block; width: 100%; height: auto; }
-.public-header-actions .public-header-game:hover { transform: translateY(-2px); }
+.public-header-row .public-header-game { flex: 0 1 auto; display: block; margin: 0 auto; padding: 0; border: 0; border-radius: 6px; overflow: hidden; transition: transform .15s; }
+.public-header-row .public-header-game img { display: block; height: 54px; width: auto; max-width: 100%; }
+.public-header-row .public-header-game:hover { transform: translateY(-2px); }
 .public-social-links { display: inline-flex; align-items: center; gap: 8px; }
 .public-social-links a { width: 36px; height: 36px; display: grid!important; place-items: center; padding: 0!important; color: var(--public-cream); border: 1px solid rgba(234,220,198,.28)!important; border-radius: 50%; }
 .public-social-links a:hover { color: #17130f; background: var(--public-tan); border-color: var(--public-tan)!important; }
@@ -365,6 +365,8 @@
   .public-header .public-social-links { padding: 8px 14px; }
   .public-header .public-social-links a { padding: 0; }
   .public-header-actions a { min-height: 44px; }
+  .public-header-row { gap: 10px; }
+  .public-header-row .public-header-game img { height: 44px; }
   .public-main { padding-inline: clamp(22px,4vw,38px); }
   .public-hero { min-height: auto; grid-template-columns: 1fr; gap: 48px; padding-top: 70px; }
   .public-hero-media { width: min(620px,calc(100% - 32px)); justify-self: center; }
@@ -387,6 +389,7 @@
   .public-header nav { right: 16px; left: 16px; }
   .public-header-actions { gap: 6px; }
   .public-header-actions a { padding: 8px 6px; font-size: 9px; line-height: 1.25; letter-spacing: .02em; }
+  .public-header-row .public-header-game img { height: 36px; }
   .public-main { padding: 0 max(16px,env(safe-area-inset-right)) 72px max(16px,env(safe-area-inset-left)); }
   .public-hero { gap: 36px; margin-bottom: 42px; padding: 44px 0 58px; }
   .public-hero h1 { font-size: clamp(42px,13.2vw,62px); line-height: .98; }
