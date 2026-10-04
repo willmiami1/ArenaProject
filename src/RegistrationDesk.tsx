@@ -213,6 +213,7 @@ export function RegistrationDesk() {
   const [submissionId, setSubmissionId] = useState("");
   const [search, setSearch] = useState("");
   const [creatingProfile, setCreatingProfile] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
   const signWaiverAfterSave = useRef(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
@@ -458,6 +459,7 @@ export function RegistrationDesk() {
     setProfile(profileFromContestant(item));
     setHorseName("");
     setCreatingProfile(false);
+    setEditingProfile(true);
     signWaiverAfterSave.current = false;
     setSearch("");
     setPinOpen(false);
@@ -468,11 +470,35 @@ export function RegistrationDesk() {
     setMessage("");
   };
 
+  // Reopen the profile form for the selected rider (edits start from saved data).
+  const editContestant = () => {
+    if (!contestant) return;
+    setProfile(profileFromContestant(contestant));
+    setHorseName("");
+    setEditingProfile(true);
+    setPinOpen(false);
+    setPin("");
+    setPinConfirmation("");
+    setMessage("");
+  };
+
+  // Discard unsaved edits, close the form, and keep the rider selected.
+  const cancelProfileEdit = () => {
+    if (contestant) setProfile(profileFromContestant(contestant));
+    setHorseName("");
+    setEditingProfile(false);
+    setPinOpen(false);
+    setPin("");
+    setPinConfirmation("");
+    setMessage("");
+  };
+
   const startNewProfile = () => {
     setContestantId("");
     setProfile(emptyContestant());
     setHorseName("");
     setCreatingProfile(true);
+    setEditingProfile(true);
     signWaiverAfterSave.current = false;
     setSearch("");
     setPinOpen(false);
@@ -485,6 +511,7 @@ export function RegistrationDesk() {
     setContestantId("");
     setProfile(emptyContestant());
     setCreatingProfile(false);
+    setEditingProfile(false);
     signWaiverAfterSave.current = false;
     setPinOpen(false);
     setEntryMode("");
@@ -551,6 +578,7 @@ export function RegistrationDesk() {
       setContestantId(savedContestant.id);
       setProfile(profileFromContestant(savedContestant));
       setCreatingProfile(false);
+      setEditingProfile(false);
       setPinOpen(false);
       setPin("");
       setPinConfirmation("");
@@ -700,9 +728,13 @@ export function RegistrationDesk() {
           </div>
         )}
         <div className="registration-profile-actions">
-          {creatingProfile && (
-            <button type="button" disabled={busy} onClick={clearContestant}>Cancel</button>
-          )}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={creatingProfile ? clearContestant : cancelProfileEdit}
+          >
+            Cancel
+          </button>
           {contestant && (
             <button
               type="button"
@@ -1186,13 +1218,49 @@ export function RegistrationDesk() {
                   {contestant ? <CheckCircle2 /> : <UserRoundPlus />}
                   <span>
                     {contestant ? (
-                      <>Profile found: <strong>{contestant.name}</strong>. Review and correct the details, then save.</>
+                      editingProfile ? (
+                        <>Profile found: <strong>{contestant.name}</strong>. Review and correct the details, then save or cancel.</>
+                      ) : (
+                        <>Contestant: <strong>{contestant.name}</strong>. Continue to the entry choice below.</>
+                      )
                     ) : (
                       <>New contestant. Fill in the profile, take a photo, and save to collect the waiver.</>
                     )}
                   </span>
+                  {contestant && !editingProfile && (
+                    <button type="button" disabled={busy} onClick={editContestant}>
+                      <Pencil size={15} /> Edit profile
+                    </button>
+                  )}
                 </div>
-                {profileEditor}
+                {contestant && !editingProfile && data && (
+                  <div className="registration-selected-summary">
+                    {contestant.photo ? (
+                      <img src={contestant.photo} alt="" />
+                    ) : (
+                      <i aria-hidden="true">{contestant.name.slice(0, 1)}</i>
+                    )}
+                    <div>
+                      <strong>{contestant.name}</strong>
+                      <small>
+                        {contestant.role} · Head #{contestant.headerHandicap} · Heel #{contestant.heelerHandicap}
+                        {contestant.hometown ? ` · ${contestant.hometown}` : ""}
+                      </small>
+                      <small>{contestant.email || contestant.phone || "No contact information"}</small>
+                    </div>
+                    <div className="registration-profile-waiver">
+                      <span>Waiver for {event.name}</span>
+                      <WaiverStatusControl
+                        contestantName={contestant.name}
+                        status={contestantWaiverStatus}
+                        available={data.waiverDocument.available}
+                        disabled={busy || waiverBusy}
+                        onSign={() => launchWaiver(contestant.id)}
+                      />
+                    </div>
+                  </div>
+                )}
+                {editingProfile && profileEditor}
               </>
             )}
           </section>

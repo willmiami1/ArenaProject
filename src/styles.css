@@ -1122,6 +1122,19 @@ html:fullscreen .livestream-fullscreen { opacity: 0; pointer-events: none; }
 .registration-profile-form .primary { align-self: end; }
 .registration-desk-step { margin-bottom: 22px; }
 .registration-desk-step .registration-selected-contestant { margin: 18px 22px 0; }
+.registration-selected-contestant > span { flex: 1; }
+.registration-selected-contestant > button { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; color: #eadcc6; background: #49301f; border: 1px solid #765036; border-radius: 6px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.registration-selected-summary { display: grid; grid-template-columns: 76px minmax(0,1fr) auto; align-items: center; gap: 16px; margin: 14px 22px 22px; padding: 14px 16px; background: #17110d; border: 1px solid #3e2d1f; border-radius: 8px; }
+.registration-selected-summary img,.registration-selected-summary i { width: 76px; height: 76px; object-fit: cover; display: grid; place-items: center; color: #e4c494; background: #0d0a08; border: 1px solid #5a4434; border-radius: 10px; font-style: normal; font-size: 30px; font-weight: 900; }
+.registration-selected-summary > div:first-of-type { display: grid; gap: 3px; min-width: 0; }
+.registration-selected-summary > div:first-of-type strong { color: #fff4e3; font-size: 18px; }
+.registration-selected-summary > div:first-of-type small { color: #b89a7a; font-size: 12px; }
+.registration-selected-summary .registration-profile-waiver { grid-column: auto; margin: 0; flex-direction: column; align-items: flex-start; gap: 8px; }
+@media (max-width: 720px) {
+  .registration-selected-summary { grid-template-columns: 60px minmax(0,1fr); }
+  .registration-selected-summary img,.registration-selected-summary i { width: 60px; height: 60px; }
+  .registration-selected-summary .registration-profile-waiver { grid-column: 1 / -1; }
+}
 .registration-desk-step .registration-profile-form { grid-template-columns: minmax(180px,220px) minmax(0,1fr); align-items: start; }
 .registration-profile-photo { display: grid; gap: 12px; }
 .registration-profile-photo img,.registration-profile-photo-empty { width: 100%; aspect-ratio: 1; object-fit: cover; background: #0d0a08; border: 1px solid #5a4434; border-radius: 10px; }
