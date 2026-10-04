@@ -353,6 +353,7 @@ describe("Registration Desk local mirror", () => {
     expect(added).toMatchObject({
       rideIn: true,
       drawPosition: 5,
+      originalTeamNumber: 5,
       round: 1,
       headerEntryNumber: 1,
       heelerEntryNumber: 1,

@@ -884,7 +884,7 @@ export function submitLocalRegistrationDeskSignup(
         headerHorseName: row.headerHorseName,
         heelerId: row.heelerId,
         heelerHorseName: row.heelerHorseName,
-        drawPosition: rideIn ? nextDrawPosition++ : 0,
+        drawPosition: rideIn ? nextDrawPosition : 0,
         status: "ready" as const,
         rawTime: null,
         penalties: 0,
@@ -896,6 +896,7 @@ export function submitLocalRegistrationDeskSignup(
         ...(rideIn
           ? {
               rideIn: true,
+              originalTeamNumber: nextDrawPosition++,
               headerEntryNumber: priorRuns + 1,
               heelerEntryNumber: priorRuns + 1,
             }

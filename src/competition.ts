@@ -1246,7 +1246,8 @@ export function assignOriginalTeamNumbers(teams: Team[]) {
     ...team,
     originalTeamNumber:
       team.originalTeamNumber ??
-      roundOneNumbers.get(entryKey(team)) ??
+      // Round 1 defines the team numbers; only later rounds inherit by entry key.
+      (team.round === 1 ? team.drawPosition : roundOneNumbers.get(entryKey(team))) ??
       team.drawPosition,
   }));
 }
