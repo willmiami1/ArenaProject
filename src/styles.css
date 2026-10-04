@@ -1419,3 +1419,7 @@ html:fullscreen .livestream-fullscreen { opacity: 0; pointer-events: none; }
 .registration-profile-form input:not([type="email"]) { text-transform: uppercase; }
 .form-panel input[type="email"],
 .registration-profile-form input[type="email"] { text-transform: lowercase; }
+
+/* Deploy update banner: shown on staff pages when a newer build is live. */
+.app-update-banner { position: fixed; top: 10px; left: 50%; z-index: 10000; display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 24px); padding: 10px 12px 10px 16px; color: #fff4e3; background: #2c2015; border: 1px solid #a46b47; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.45); font-size: 12px; font-weight: 700; transform: translateX(-50%); }
+.app-update-banner button { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 14px; color: #fff; background: #875538; border: 1px solid #a46b47; border-radius: 6px; font-size: 12px; font-weight: 800; white-space: nowrap; cursor: pointer; }

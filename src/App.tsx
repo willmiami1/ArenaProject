@@ -62,6 +62,7 @@ import { PublicSite } from "./PublicSite";
 import { AdminAccessGate } from "./AdminAccessGate";
 import { RegistrationDeskAccessGate } from "./RegistrationDeskAccessGate";
 import { RegistrationDesk } from "./RegistrationDesk";
+import { AppUpdateBanner } from "./AppUpdateBanner";
 import {
   aggregatePublicSpectatorLeaderboard,
   parsePublicRoute,
@@ -6254,6 +6255,15 @@ function ordinal(place: number) {
 
 function App() {
   const route = parsePublicRoute(window.location.search);
+  return (
+    <>
+      <AppUpdateBanner />
+      <AppRoute route={route} />
+    </>
+  );
+}
+
+function AppRoute({ route }: { route: ReturnType<typeof parsePublicRoute> }) {
   if (
     route.kind === "home" ||
     route.kind === "events" ||

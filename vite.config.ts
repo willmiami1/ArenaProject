@@ -1,10 +1,32 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Unique per build so running tablets can detect a new deploy and reload.
+const nodeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+  .process?.env;
+const buildId =
+  nodeEnv?.GITHUB_SHA?.slice(0, 12) ?? new Date().toISOString();
+
+function buildVersionFile(): Plugin {
+  return {
+    name: "arena-build-version",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "version.json",
+        source: JSON.stringify({ buildId }),
+      });
+    },
+  };
+}
+
 export default defineConfig({
+  define: { __ARENA_BUILD_ID__: JSON.stringify(buildId) },
   plugins: [
     react(),
+    buildVersionFile(),
     VitePWA({
       registerType: "autoUpdate",
       workbox: {
