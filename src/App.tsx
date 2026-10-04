@@ -72,6 +72,8 @@ import {
 } from "./publicData";
 import { ReportsModule } from "./ReportsModule";
 import {
+  pickedTeamsPostingFileName,
+  pickedTeamsPostingHtml,
   roundTimeSheetFileName,
   roundTimeSheetHtml,
   type TimeSheetSource,
@@ -5413,6 +5415,14 @@ function RunDesk({
       fileName: roundTimeSheetFileName(event.name, activeRound, source),
     });
   };
+  const previewPickedTeamsPosting = () => {
+    if (!event || !eventTeams.length) return;
+    setTimeSheetPreview({
+      title: `Round ${activeRound} picked teams posting`,
+      html: pickedTeamsPostingHtml(event, eventTeams, contestants, activeRound),
+      fileName: pickedTeamsPostingFileName(event.name, activeRound),
+    });
+  };
   const printRoundTimeSheet = () => {
     timeSheetFrame.current?.contentWindow?.print();
   };
@@ -5778,6 +5788,13 @@ function RunDesk({
               onClick={() => previewRoundTimeSheet("pick")}
             >
               <Eye size={16} /> Preview picked teams sheet
+            </button>
+            <button
+              className="secondary"
+              disabled={!eventTeams.some((team) => !team.generated)}
+              onClick={previewPickedTeamsPosting}
+            >
+              <Printer size={16} /> Post picked teams
             </button>
             {activeRound > 1 && (
               <button className="secondary" onClick={() => changeRound(activeRound - 1)}>

@@ -7,6 +7,92 @@ const escapeHtml = (value: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+export function pickedTeamsPostingFileName(eventName: string, round: number) {
+  const safeName = eventName
+    .trim()
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+  return `${safeName || "roping"}-round-${round}-picked-teams-posting.html`;
+}
+
+// Large-print list of picked (ride-in) teams to post for riders.
+export function pickedTeamsPostingHtml(
+  event: ArenaEvent,
+  teams: Team[],
+  contestants: Contestant[],
+  round: number,
+) {
+  const byId = new Map(contestants.map((contestant) => [contestant.id, contestant]));
+  const posted = teams
+    .filter(
+      (team) =>
+        team.eventId === event.id &&
+        team.round === round &&
+        !team.scratched &&
+        !team.generated,
+    )
+    .sort((left, right) => left.drawPosition - right.drawPosition);
+  const rows = posted
+    .map((team) => {
+      const header = byId.get(team.headerId);
+      const heeler = byId.get(team.heelerId);
+      const headerHc = header?.headerHandicap ?? 0;
+      const heelerHc = heeler?.heelerHandicap ?? 0;
+      return `<tr>
+        <td class="num">${team.originalTeamNumber ?? team.drawPosition}</td>
+        <td class="hc">${headerHc}</td>
+        <td>${escapeHtml(header?.name ?? "Unknown")}</td>
+        <td class="hc">${heelerHc}</td>
+        <td>${escapeHtml(heeler?.name ?? "Unknown")}</td>
+        <td class="hc">${headerHc + heelerHc}</td>
+      </tr>`;
+    })
+    .join("");
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(event.name)} - Round ${round} Picked Teams</title>
+  <style>
+    @page { size: portrait; margin: 10mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #17201c; font: 14px Arial, sans-serif; }
+    header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 8px; border-bottom: 3px solid #285f46; }
+    h1 { margin: 0 0 2px; font-size: 22px; }
+    header p { margin: 0; color: #58645d; font-size: 12px; }
+    header strong { color: #285f46; font-size: 18px; white-space: nowrap; }
+    table { width: 100%; margin-top: 10px; border-collapse: collapse; table-layout: fixed; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    th { padding: 6px; color: #fff; background: #285f46; border: 1px solid #285f46; font-size: 11px; text-align: left; text-transform: uppercase; }
+    td { height: 30px; padding: 4px 6px; border: 1px solid #9fa8a2; vertical-align: middle; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 15px; }
+    .num { width: 10%; font-size: 18px; font-weight: 700; text-align: center; }
+    .hc { width: 10%; text-align: center; font-weight: 700; }
+    th:nth-child(3), th:nth-child(5) { width: 30%; }
+    footer { display: flex; justify-content: space-between; margin-top: 8px; color: #66716b; font-size: 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>${escapeHtml(event.name)}</h1>
+      <p>${escapeHtml(event.date)} · ${escapeHtml(event.location)}</p>
+    </div>
+    <strong>Round ${round} Picked Teams</strong>
+  </header>
+  <table>
+    <thead>
+      <tr><th>Team #</th><th>Header HC</th><th>Header</th><th>Heeler HC</th><th>Heeler</th><th>Total HC</th></tr>
+    </thead>
+    <tbody>${rows || '<tr><td colspan="6">No picked teams in this round.</td></tr>'}</tbody>
+  </table>
+  <footer><span>Destiny Ranch Arena</span><span>${posted.length} picked teams</span></footer>
+</body>
+</html>`;
+}
+
 export type TimeSheetSource = "draw" | "pick";
 
 const sourceLabel = (source: TimeSheetSource) =>

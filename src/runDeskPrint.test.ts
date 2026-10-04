@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { defaultCompetitionSettings } from "./competition";
-import { roundTimeSheetFileName, roundTimeSheetHtml } from "./runDeskPrint";
+import {
+  pickedTeamsPostingFileName,
+  pickedTeamsPostingHtml,
+  roundTimeSheetFileName,
+  roundTimeSheetHtml,
+} from "./runDeskPrint";
 import type { ArenaEvent, Contestant, Team } from "./types";
 
 const event: ArenaEvent = {
@@ -89,6 +94,29 @@ describe("Run Desk manual time sheet", () => {
     expect(pickSheet).toContain('<td class="draw">11</td>');
     expect(pickSheet).not.toContain('<td class="draw">1</td>');
     expect(pickSheet).toContain("1 picked teams");
+  });
+
+  it("builds a posting list of picked teams with handicaps", () => {
+    const html = pickedTeamsPostingHtml(
+      event,
+      [
+        team({ id: "draw", drawPosition: 1, generated: true }),
+        team({ id: "pick", drawPosition: 11, originalTeamNumber: 11, generated: false }),
+      ],
+      contestants,
+      1,
+    );
+
+    expect(html).toContain("Round 1 Picked Teams");
+    expect(html).toContain('<td class="num">11</td>');
+    expect(html).not.toContain('<td class="num">1</td>');
+    expect(html).toContain("Ada &lt;Header&gt;");
+    expect(html).toContain("Bo &amp; Heeler");
+    expect(html.match(/<td class="hc">4<\/td>/g)).toHaveLength(2);
+    expect(html).toContain('<td class="hc">8</td>');
+    expect(pickedTeamsPostingFileName("Tuesday Roping #4", 1)).toBe(
+      "tuesday-roping-4-round-1-picked-teams-posting.html",
+    );
   });
 
   it("creates a safe downloadable file name", () => {
