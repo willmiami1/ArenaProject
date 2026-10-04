@@ -85,8 +85,46 @@ describe("drawPairingProblems", () => {
       registration("l6", "Heeler"),
     ];
     const problems = drawPairingProblems(event(), registrations, [], contestants);
-    expect(problems.map((problem) => problem.contestantId)).toEqual(["l7"]);
-    expect(problems[0].reason).toContain("has 2 entries but only 1 eligible header");
+    expect(problems.map((problem) => problem.contestantId)).toEqual(["h3", "l7"]);
+    expect(problems[0].reason).toContain("has 3 runs (2 paid + 1 free) but only 2 eligible heelers");
+    expect(problems[1].reason).toContain("has 2 entries but only 1 eligible header");
+    expect(problems[1].reason).toContain("H3");
+  });
+
+  it("counts free runs when one side of the draw is short", () => {
+    const contestants = [
+      contestant("h1", "Header", 1, 0),
+      contestant("h2", "Header", 2, 0),
+      contestant("h3", "Header", 3, 0),
+      contestant("l7", "Heeler", 0, 7),
+    ];
+    const registrations = [
+      registration("h1", "Header"),
+      registration("h2", "Header"),
+      registration("h3", "Header"),
+      registration("l7", "Heeler"),
+    ];
+    const problems = drawPairingProblems(
+      event({ handicapTotal: 9.5 }),
+      registrations,
+      [],
+      contestants,
+    );
+    expect(problems.map((problem) => problem.contestantId)).toEqual(["h3", "l7"]);
+    expect(problems[1].reason).toContain("3 runs (1 paid + 2 free)");
+    expect(problems[1].reason).toContain("H1, H2");
+  });
+
+  it("names the tightest riders when asked to explain pairing collisions", () => {
+    const contestants = [
+      contestant("h3", "Header", 3, 0),
+      contestant("l7", "Heeler", 0, 7),
+    ];
+    const registrations = [registration("h3", "Header"), registration("l7", "Heeler")];
+    expect(drawPairingProblems(event(), registrations, [], contestants, true)).toHaveLength(2);
+    expect(
+      drawPairingProblems(event(), registrations, [], contestants, true)[0].reason,
+    ).toContain("can only rope with 1 heeler: L7");
   });
 
   it("reports nothing when every entry can be matched", () => {

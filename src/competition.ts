@@ -938,6 +938,7 @@ export function drawPairingProblems(
   registrations: EventRegistration[],
   teams: Team[],
   contestants: Contestant[],
+  explainCollisions = false,
 ): DrawPairingProblem[] {
   const active = registrations.filter(
     (registration) =>
@@ -962,6 +963,17 @@ export function drawPairingProblems(
   const headers = byRole("Header");
   const heelers = byRole("Heeler");
   if (!headers.size || !heelers.size) return [];
+  const sum = (entries: Map<string, number>) =>
+    [...entries.values()].reduce((total, count) => total + count, 0);
+  const headerRuns = sum(headers);
+  const heelerRuns = sum(heelers);
+  const drawCount = Math.max(headerRuns, heelerRuns);
+  // The short side is padded with free runs, spread across its riders, so
+  // each rider there must find partners for their share of the extra runs.
+  const extraRunsFor = (role: "Header" | "Heeler", pool: Map<string, number>) => {
+    const extra = drawCount - (role === "Header" ? headerRuns : heelerRuns);
+    return extra > 0 ? Math.ceil(extra / pool.size) : 0;
+  };
   const pickedPairs = new Set(
     teams
       .filter(
@@ -975,12 +987,16 @@ export function drawPairingProblems(
   );
   const maxHandicap = event.maxContestantHandicap ?? 10;
   const problems: DrawPairingProblem[] = [];
+  type TightEntry = DrawPairingProblem & { slack: number; partnerNames: string[] };
+  const tight: TightEntry[] = [];
   const check = (
     role: "Header" | "Heeler",
     own: Map<string, number>,
     partners: Map<string, number>,
   ) => {
-    own.forEach((entries, contestantId) => {
+    const freeRuns = extraRunsFor(role, own);
+    own.forEach((paidEntries, contestantId) => {
+      const entries = paidEntries + freeRuns;
       const contestant = contestantById.get(contestantId);
       const name = contestant?.name ?? "Unknown contestant";
       const handicap =
@@ -1003,6 +1019,7 @@ export function drawPairingProblems(
       let eligiblePartners = 0;
       let eligibleRuns = 0;
       let blockedByPick = 0;
+      const partnerNames: string[] = [];
       partners.forEach((partnerEntries, partnerId) => {
         if (partnerId === contestantId) return;
         const headerId = role === "Header" ? contestantId : partnerId;
@@ -1018,8 +1035,13 @@ export function drawPairingProblems(
         }
         eligiblePartners += 1;
         eligibleRuns += partnerEntries;
+        partnerNames.push(contestantById.get(partnerId)?.name ?? "Unknown");
       });
       const maxPartnerHandicap = event.handicapTotal - handicap;
+      const runsLabel =
+        freeRuns > 0
+          ? `${entries} runs (${paidEntries} paid + ${freeRuns} free)`
+          : `${entries} ${entries === 1 ? "entry" : "entries"}`;
       if (eligiblePartners === 0) {
         problems.push({
           contestantId,
@@ -1041,14 +1063,32 @@ export function drawPairingProblems(
           handicap,
           entries,
           eligiblePartners,
-          reason: `${name} (#${handicap} ${role.toLowerCase()}) has ${entries} entries but only ${eligiblePartners} eligible ${partnerRole.toLowerCase()}${eligiblePartners === 1 ? "" : "s"} (#${Math.max(0, maxPartnerHandicap)} or lower). Reduce the entries or enable repeat partner runs.`,
+          reason: `${name} (#${handicap} ${role.toLowerCase()}) has ${runsLabel} but only ${eligiblePartners} eligible ${partnerRole.toLowerCase()}${eligiblePartners === 1 ? "" : "s"} (#${Math.max(0, maxPartnerHandicap)} or lower): ${partnerNames.join(", ")}. Reduce the entries or enable repeat partner runs.`,
         });
+        return;
       }
+      tight.push({
+        contestantId,
+        name,
+        role,
+        handicap,
+        entries,
+        eligiblePartners,
+        slack: capacity - entries,
+        partnerNames,
+        reason: `${name} (#${handicap} ${role.toLowerCase()}) has ${runsLabel} and can only rope with ${eligiblePartners} ${partnerRole.toLowerCase()}${eligiblePartners === 1 ? "" : "s"}: ${partnerNames.join(", ")}.`,
+      });
     });
   };
   check("Header", headers, heelers);
   check("Heeler", heelers, headers);
-  return problems;
+  if (problems.length || !explainCollisions) return problems;
+  // Every rider has enough partners on paper, yet the pairings still collide
+  // with each other, so name the riders with the least room to move.
+  return tight
+    .sort((left, right) => left.slack - right.slack || left.name.localeCompare(right.name))
+    .slice(0, 4)
+    .map(({ slack: _slack, partnerNames: _partnerNames, ...problem }) => problem);
 }
 
 export function calculatePurse(

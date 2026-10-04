@@ -4247,8 +4247,14 @@ function Teams({
     const generated = generateCompetitionDraw(event, eventRegistrations, teams, contestants);
     const describeProblems = (fallback: string) => {
       const problems = drawPairingProblems(event, eventRegistrations, teams, contestants);
-      if (!problems.length) return fallback;
-      return `The draw could not be completed. Fix these entries and try again:\n${problems
+      if (problems.length) {
+        return `The draw could not be completed. Fix these entries and try again:\n${problems
+          .map((problem) => `• ${problem.reason}`)
+          .join("\n")}`;
+      }
+      const tight = drawPairingProblems(event, eventRegistrations, teams, contestants, true);
+      if (!tight.length) return fallback;
+      return `${fallback}\nThese riders have the fewest partner options and are most likely blocking the pairings:\n${tight
         .map((problem) => `• ${problem.reason}`)
         .join("\n")}`;
     };
