@@ -63,3 +63,22 @@ export function assertRegistrationDeskOpen(
   if (!event.registrationOpen) throw new Error("Registration is closed.");
   if (event.drawLocked) throw new Error("The draw is locked.");
 }
+
+// Picked teams may still be added once the competition is running; they ride
+// in at the end of Round 1 instead of joining the (locked) draw.
+export const registrationDeskRideInAllowed = (
+  event: Pick<ArenaEvent, "drawApproved" | "status">,
+) => registrationDeskIsVisible(event) && event.drawApproved === true;
+
+export function assertRegistrationDeskSignupOpen(
+  event: Pick<
+    ArenaEvent,
+    "registrationOpen" | "drawLocked" | "drawApproved" | "status"
+  >,
+  entryType: string,
+) {
+  if (entryType === "picked-teams" && registrationDeskRideInAllowed(event)) {
+    return;
+  }
+  assertRegistrationDeskOpen(event);
+}

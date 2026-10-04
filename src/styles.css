@@ -1026,6 +1026,18 @@ html:fullscreen .livestream-fullscreen { opacity: 0; pointer-events: none; }
 .registration-roster-entry-actions button,.registration-roster-editor-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 7px 9px; color: #d7c0a7; background: #211810; border: 1px solid #543d2c; border-radius: 5px; font-size: 9px; font-weight: 800; }
 .registration-roster-entry-actions button.danger { color: #efb0a8; border-color: #77463f; }
 .registration-roster-entry-actions button:disabled { opacity: .45; }
+.registration-roster-entry-actions button.pick { color: #c8e9c9; border-color: #477052; }
+.registration-roster-entry-actions button.pick.active { color: #fff; background: #2f6a3b; border-color: #6e946f; }
+.registration-desk-roster li.picked { background: #1c2a1d; box-shadow: inset 3px 0 0 #6e946f; }
+.registration-roster-pick-team { display: grid; gap: 13px; padding: 16px 20px 19px; background: #122015; border-bottom: 1px solid #3e2e23; }
+.registration-roster-pick-team-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.registration-roster-pick-team-heading>div { display: grid; gap: 3px; min-width: 0; }
+.registration-roster-pick-team-heading span { color: #8fc496; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
+.registration-roster-pick-team-heading strong { color: #eadcc6; font-family: "Manrope",sans-serif; font-size: 15px; }
+.registration-roster-pick-team-heading small { color: #a9937d; font-size: 10px; }
+.registration-roster-pick-team-heading button { min-height: 36px; padding: 7px 11px; color: #d7c0a7; background: #211810; border: 1px solid #543d2c; border-radius: 5px; font-size: 9px; font-weight: 800; }
+.registration-roster-pick-team-error { margin: 0; padding: 10px 12px; color: #f3b9b0; background: #3a1d1a; border: 1px solid #77463f; border-radius: 7px; font-size: 11px; }
+.registration-roster-pick-team .primary { justify-self: start; min-height: 42px; padding: 9px 16px; background: #875538; border: 1px solid #a46b47; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 800; }
 .registration-roster-entry-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-top: 13px; padding-top: 13px; border-top: 1px solid #49372b; }
 .registration-roster-entry-editor label { display: grid; gap: 6px; color: #cdb9a3; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .registration-roster-entry-editor :is(input,select) { min-height: 40px; }

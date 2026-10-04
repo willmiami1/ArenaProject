@@ -1,7 +1,7 @@
 import { seedData } from "./data";
 import { contestantHasDrawRegistration } from "./competition";
 import {
-  assertRegistrationDeskOpen,
+  assertRegistrationDeskSignupOpen,
   registrationDeskIsVisible,
 } from "./registrationWindow";
 import { normalizeHorseNames } from "./contestantHorses";
@@ -82,6 +82,7 @@ export type RegistrationDeskEvent = Pick<
   | "pickDrawRole"
   | "registrationOpen"
   | "drawLocked"
+  | "drawApproved"
   | "entriesAllowed"
   | "maxHeaders"
   | "maxHeelers"
@@ -324,6 +325,7 @@ export function registrationDeskProjection(
         pickDrawRole,
         registrationOpen,
         drawLocked,
+        drawApproved,
         entriesAllowed,
         maxHeaders,
         maxHeelers,
@@ -345,6 +347,7 @@ export function registrationDeskProjection(
         pickDrawRole,
         registrationOpen,
         drawLocked,
+        drawApproved: drawApproved === true,
         entriesAllowed,
         maxHeaders,
         maxHeelers,
@@ -481,7 +484,7 @@ export function submitLocalRegistrationDeskSignup(
   }
   const event = data.events.find(({ id }) => id === request.eventId);
   if (!event) throw new Error("Competition not found.");
-  assertRegistrationDeskOpen(event);
+  assertRegistrationDeskSignupOpen(event, request.entryType);
   if (
     [...data.registrations, ...data.teams].some(
       (record) =>
@@ -855,36 +858,66 @@ export function submitLocalRegistrationDeskSignup(
       submittedAt,
     }];
   } else {
-    teams = canonical.teams.map((row, index) => ({
-      id: recordIds.teams[index],
-      eventId: event.id,
-      rowId: row.rowId,
-      headerId: row.headerId,
-      headerHorseName: row.headerHorseName,
-      heelerId: row.heelerId,
-      heelerHorseName: row.heelerHorseName,
-      drawPosition: 0,
-      status: "ready",
-      rawTime: null,
-      penalties: 0,
-      notes: "",
-      round: 1,
-      checkedIn: false,
-      scratched: false,
-      generated: false,
-      points: 0,
-      ...metadata,
-      submissionFingerprint,
-      submittedAt,
-    }));
+    // Once the draw is approved the competition is running, so picked teams
+    // ride in at the end of the Round 1 run order instead of joining the draw.
+    const rideIn = event.drawApproved === true;
+    const roundOneTeams = data.teams.filter(
+      (team) => team.eventId === event.id && team.round === 1,
+    );
+    let nextDrawPosition =
+      Math.max(0, ...roundOneTeams.map((team) => team.drawPosition || 0)) + 1;
+    const pairingRuns = new Map<string, number>();
+    teams = canonical.teams.map((row, index) => {
+      const pair = `${row.headerId}\u0000${row.heelerId}`;
+      const priorRuns =
+        (pairingRuns.get(pair) ?? 0) +
+        roundOneTeams.filter(
+          (team) =>
+            team.headerId === row.headerId && team.heelerId === row.heelerId,
+        ).length;
+      pairingRuns.set(pair, (pairingRuns.get(pair) ?? 0) + 1);
+      return {
+        id: recordIds.teams[index],
+        eventId: event.id,
+        rowId: row.rowId,
+        headerId: row.headerId,
+        headerHorseName: row.headerHorseName,
+        heelerId: row.heelerId,
+        heelerHorseName: row.heelerHorseName,
+        drawPosition: rideIn ? nextDrawPosition++ : 0,
+        status: "ready" as const,
+        rawTime: null,
+        penalties: 0,
+        notes: "",
+        round: 1,
+        checkedIn: false,
+        scratched: false,
+        generated: false,
+        ...(rideIn
+          ? {
+              rideIn: true,
+              headerEntryNumber: priorRuns + 1,
+              heelerEntryNumber: priorRuns + 1,
+            }
+          : {}),
+        points: 0,
+        ...metadata,
+        submissionFingerprint,
+        submittedAt,
+      };
+    });
   }
   const nextData = {
     ...data,
     teams: [...data.teams, ...teams],
     registrations: [...data.registrations, ...registrations],
   };
-  const summary =
-    request.paymentMethod === "tab"
+  const rideInSummary = teams.some((team) => team.rideIn);
+  const summary = rideInSummary
+    ? request.paymentMethod === "tab"
+      ? "Contestant tab opened. Team was added to the Run Desk as a ride-in."
+      : "Payment recorded. Team was added to the Run Desk as a ride-in."
+    : request.paymentMethod === "tab"
       ? "Contestant tab opened. Entries were sent to the draw area."
       : "Payment recorded. Contestant entries were sent to the draw area.";
   return {

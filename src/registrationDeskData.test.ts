@@ -321,6 +321,52 @@ describe("Registration Desk local mirror", () => {
     expect(new Set(result.data.teams.map(({ id }) => id)).size).toBe(2);
   });
 
+  it("adds picked teams as ride-ins at the end of Round 1 once the draw is approved", () => {
+    const selectedEvent = event("pick-only", {
+      drawApproved: true,
+      drawLocked: true,
+    });
+    const existing = {
+      id: "team-existing",
+      eventId: selectedEvent.id,
+      headerId: "header-2",
+      heelerId: "heeler-2",
+      drawPosition: 4,
+      status: "ready" as const,
+      rawTime: null,
+      penalties: 0,
+      notes: "",
+      round: 1,
+      checkedIn: false,
+      scratched: false,
+      generated: true,
+      points: 0,
+    };
+    const result = submitLocalRegistrationDeskSignup(
+      workspace(selectedEvent, { teams: [existing] }),
+      picked(selectedEvent),
+    );
+    const added = result.data.teams.find(({ id }) => id !== existing.id);
+    expect(added).toMatchObject({
+      rideIn: true,
+      drawPosition: 5,
+      round: 1,
+      headerEntryNumber: 1,
+      heelerEntryNumber: 1,
+    });
+    expect(result.result.summary).toMatch(/Run Desk as a ride-in/);
+  });
+
+  it("still blocks draws once the draw is locked", () => {
+    const selectedEvent = event("draw-pot", {
+      drawApproved: true,
+      drawLocked: true,
+    });
+    expect(() =>
+      submitLocalRegistrationDeskSignup(workspace(selectedEvent), draw(selectedEvent)),
+    ).toThrow(/draw is locked/);
+  });
+
   it("treats reordered rows as the same logical retry without duplicates", () => {
     const selectedEvent = event("pick-only");
     const request = picked(selectedEvent, {

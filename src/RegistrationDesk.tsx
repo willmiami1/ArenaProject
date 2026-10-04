@@ -13,6 +13,7 @@ import {
   Search,
   Trash2,
   UserRoundPlus,
+  Users,
 } from "lucide-react";
 import {
   competitionName,
@@ -32,16 +33,19 @@ import {
 } from "./registrationDeskData";
 import {
   buildRegistrationDeskDrawRequest,
+  buildRegistrationDeskPickedTeamsRequest,
   createRegistrationDeskTeamRow,
   registrationDeskReviewComplete,
   registrationDeskTotals,
   supportedRegistrationDeskModes,
   type RegistrationDeskPaymentMethod,
   type RegistrationDeskSignupRequest,
+  type RegistrationDeskTeamRow,
 } from "./registrationDeskSignup";
 import type { ArenaData, Contestant } from "./types";
 import { roundRobinRoleCapacity } from "./roundRobinCapacity";
 import { registrationDeskWorkspaceHref } from "./registrationDeskNavigation";
+import { registrationDeskRideInAllowed } from "./registrationWindow";
 import {
   registrationDeskEntryPatch,
   registrationDeskEntryPermissions,
@@ -219,6 +223,13 @@ export function RegistrationDesk() {
   const [waiverContestantId, setWaiverContestantId] = useState("");
   const [waiverBusy, setWaiverBusy] = useState(false);
   const [waiverError, setWaiverError] = useState("");
+  // Team picked straight from the roster lists (one header + one heeler).
+  const [pickedHeaderId, setPickedHeaderId] = useState("");
+  const [pickedHeelerId, setPickedHeelerId] = useState("");
+  const [teamPaymentMethod, setTeamPaymentMethod] =
+    useState<RegistrationDeskPaymentMethod | "">("");
+  const [teamReview, setTeamReview] = useState(false);
+  const [teamSubmissionId, setTeamSubmissionId] = useState("");
 
   useEffect(() => {
     // Inside the Wix embed the page has its own scrollbar; hide the app's window
@@ -279,6 +290,9 @@ export function RegistrationDesk() {
       : event.drawLocked
         ? "This competition is visible, but entries are blocked while the draw is locked."
         : "";
+  // Picked teams can still ride in once the competition has started.
+  const teamRideIn = Boolean(event && registrationDeskRideInAllowed(event));
+  const teamUnavailableMessage = teamRideIn ? "" : entryUnavailableMessage;
   const contestant = data?.contestants.find((item) => item.id === contestantId);
   const waiverContestant = data?.contestants.find(
     (item) => item.id === waiverContestantId,
@@ -302,6 +316,63 @@ export function RegistrationDesk() {
     Boolean(workspaceEvent && contestant) &&
     contestantEligibleForRole(workspaceEvent!, contestant, role);
 
+  const pickedHeader = data?.contestants.find(({ id }) => id === pickedHeaderId);
+  const pickedHeeler = data?.contestants.find(({ id }) => id === pickedHeelerId);
+  const pickedTeamRows = useMemo<RegistrationDeskTeamRow[]>(
+    () =>
+      pickedHeaderId && pickedHeelerId
+        ? [{ ...createRegistrationDeskTeamRow(), headerId: pickedHeaderId, heelerId: pickedHeelerId }]
+        : [],
+    [pickedHeaderId, pickedHeelerId],
+  );
+  const pickedTeamTotals = registrationDeskTotals(
+    "picked-teams",
+    0,
+    pickedTeamRows,
+    Number(event?.entryFee ?? 0),
+  );
+  const pickedTeamHandicap =
+    pickedHeader && pickedHeeler
+      ? Number(pickedHeader.headerHandicap) + Number(pickedHeeler.heelerHandicap)
+      : 0;
+  const pickedTeamError = (() => {
+    if (!event || !pickedHeader || !pickedHeeler) return "";
+    if (pickedTeamHandicap > Number(event.handicapTotal)) {
+      return `Team handicap ${pickedTeamHandicap} is over the #${event.handicapTotal} cap.`;
+    }
+    if (
+      !event.allowRepeatPartners &&
+      data?.teams.some(
+        (team) =>
+          team.eventId === event.id &&
+          Number(team.round) === 1 &&
+          !team.generated &&
+          !team.scratched &&
+          team.headerId === pickedHeader.id &&
+          team.heelerId === pickedHeeler.id,
+      )
+    ) {
+      return "That partnership is already entered.";
+    }
+    return "";
+  })();
+
+  const clearPickedTeam = () => {
+    setPickedHeaderId("");
+    setPickedHeelerId("");
+    setTeamPaymentMethod("");
+    setTeamReview(false);
+    setTeamSubmissionId("");
+  };
+
+  const togglePickedRider = (role: "Header" | "Heeler", id: string) => {
+    if (role === "Header") setPickedHeaderId((current) => (current === id ? "" : id));
+    else setPickedHeelerId((current) => (current === id ? "" : id));
+    setTeamReview(false);
+    setTeamSubmissionId("");
+    setMessage("");
+  };
+
   useEffect(() => {
     setEntries(minimumDraws);
   }, [eventId, minimumDraws]);
@@ -313,6 +384,11 @@ export function RegistrationDesk() {
     setSubmissionId("");
     setWaiverContestantId("");
     setWaiverError("");
+    setPickedHeaderId("");
+    setPickedHeelerId("");
+    setTeamPaymentMethod("");
+    setTeamReview(false);
+    setTeamSubmissionId("");
   }, [event?.id]);
 
   useEffect(() => {
@@ -768,6 +844,11 @@ export function RegistrationDesk() {
       setPaymentMethod("");
       setReview(false);
       setSubmissionId("");
+      setPickedHeaderId("");
+      setPickedHeelerId("");
+      setTeamPaymentMethod("");
+      setTeamReview(false);
+      setTeamSubmissionId("");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "The entry could not be saved.",
@@ -775,6 +856,43 @@ export function RegistrationDesk() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const beginTeamReview = (formEvent: FormEvent) => {
+    formEvent.preventDefault();
+    if (teamUnavailableMessage) {
+      setMessage(teamUnavailableMessage);
+      return;
+    }
+    if (!event || !teamPaymentMethod || !pickedHeader || !pickedHeeler) return;
+    if (pickedTeamError) {
+      setMessage(pickedTeamError);
+      return;
+    }
+    setTeamSubmissionId(
+      window.crypto.randomUUID?.() ??
+        `desk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    );
+    setTeamReview(true);
+    setMessage("");
+  };
+
+  // The header is recorded as payer so the ledger stays complete; the
+  // attendant is not asked to choose one.
+  const submitPickedTeam = () => {
+    if (!event || !teamPaymentMethod || !teamSubmissionId || !pickedHeader || !pickedHeeler) {
+      return;
+    }
+    const request = buildRegistrationDeskPickedTeamsRequest({
+      submissionId: teamSubmissionId,
+      eventId: event.id,
+      rows: pickedTeamRows,
+      payerContestantId: pickedHeader.id,
+      paymentMethod: teamPaymentMethod,
+    });
+    setBusy(true);
+    setMessage("");
+    void finishSignup(request);
   };
 
   const beginReview = (formEvent: FormEvent) => {
@@ -985,6 +1103,119 @@ export function RegistrationDesk() {
             </h2>
           </div>
         </div>
+        {event && (pickedHeader || pickedHeeler) && (
+          <form
+            className="registration-roster-pick-team"
+            aria-label="Pick a team from the roster"
+            onSubmit={beginTeamReview}
+          >
+            <div className="registration-roster-pick-team-heading">
+              <div>
+                <span>{teamRideIn ? "Ride-in team" : "Pick a team"}</span>
+                <strong>
+                  {pickedHeader?.name ?? "Pick a header"}
+                  {" & "}
+                  {pickedHeeler?.name ?? "Pick a heeler"}
+                </strong>
+                {pickedHeader && pickedHeeler && (
+                  <small>
+                    Handicap #{pickedTeamHandicap}
+                    {" · "}
+                    {pickedTeamTotals.runCount} runs ·{" "}
+                    {formatMoney(pickedTeamTotals.amount)}
+                    {teamRideIn ? " · added to the end of Round 1" : ""}
+                  </small>
+                )}
+              </div>
+              <button type="button" onClick={clearPickedTeam} disabled={busy}>
+                Clear
+              </button>
+            </div>
+            {pickedTeamError && (
+              <p className="registration-roster-pick-team-error" role="alert">
+                {pickedTeamError}
+              </p>
+            )}
+            {pickedHeader && pickedHeeler && !pickedTeamError && !teamReview && (
+              <>
+                <fieldset className="registration-payment-method">
+                  <legend>Cashier payment selection</legend>
+                  {([
+                    ["cash", Banknote, "Paid in cash", `${formatMoney(pickedTeamTotals.amount)} received by cashier`],
+                    ["card", CreditCard, "Paid with credit card", `Charge ${formatMoney(pickedTeamTotals.amount)} on the Square Terminal first`],
+                    ["tab", ClipboardPen, "Open a tab", `Add ${formatMoney(pickedTeamTotals.amount)} to ${pickedHeader.name}'s balance`],
+                  ] as const).map(([method, Icon, title, detail]) => (
+                    <label className={teamPaymentMethod === method ? "selected" : ""} key={method}>
+                      <input
+                        type="radio"
+                        name="teamPaymentMethod"
+                        checked={teamPaymentMethod === method}
+                        onChange={() => {
+                          setTeamPaymentMethod(method);
+                          setTeamReview(false);
+                          setTeamSubmissionId("");
+                        }}
+                      />
+                      <Icon />
+                      <span><strong>{title}</strong><small>{detail}</small></span>
+                    </label>
+                  ))}
+                </fieldset>
+                {teamPaymentMethod && (
+                  <button
+                    className="primary"
+                    disabled={busy || Boolean(teamUnavailableMessage)}
+                  >
+                    Review team
+                  </button>
+                )}
+              </>
+            )}
+            {pickedHeader && pickedHeeler && teamReview && (
+              <section className="registration-entry-receipt" aria-label="Final team review">
+                <div className="registration-receipt-heading">
+                  <span>Final review</span>
+                  <strong>{event.name}</strong>
+                </div>
+                <p>
+                  {pickedHeader.name} (header) & {pickedHeeler.name} (heeler)
+                  {" · "}Handicap #{pickedTeamHandicap}
+                </p>
+                <dl>
+                  <div><dt>Payment</dt><dd>{teamPaymentMethod}</dd></div>
+                  <div><dt>Run count</dt><dd>{pickedTeamTotals.runCount}</dd></div>
+                  <div><dt>Entry fee</dt><dd>{formatMoney(event.entryFee)}</dd></div>
+                  <div className="registration-receipt-total-due">
+                    <dt>Amount</dt><dd>{formatMoney(pickedTeamTotals.amount)}</dd>
+                  </div>
+                </dl>
+                <div className="registration-review-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTeamReview(false);
+                      setTeamSubmissionId("");
+                    }}
+                  >
+                    Back / Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={busy}
+                    onClick={submitPickedTeam}
+                  >
+                    {busy
+                      ? "Sending…"
+                      : teamRideIn
+                        ? "Send to Run Desk"
+                        : "Send to Draw Desk"}
+                  </button>
+                </div>
+              </section>
+            )}
+          </form>
+        )}
         {!event ? (
           <p className="registration-desk-roster-empty">
             Choose a live competition to view its roster.
@@ -1016,8 +1247,12 @@ export function RegistrationDesk() {
                         );
                         const editDisabled = busy || !permissions.canEdit;
                         const scratchDisabled = busy || !permissions.canScratch;
+                        const picked =
+                          rosterEntry.role === "Header"
+                            ? pickedHeaderId === rosterEntry.contestantId
+                            : pickedHeelerId === rosterEntry.contestantId;
                         return (
-                          <li key={rosterEntry.key}>
+                          <li key={rosterEntry.key} className={picked ? "picked" : undefined}>
                             <div className="registration-roster-entry-summary">
                               <div>
                                 <strong>{rosterEntry.name}</strong>
@@ -1047,6 +1282,23 @@ export function RegistrationDesk() {
                                 </span>
                               </div>
                               <div className="registration-roster-entry-actions">
+                                <button
+                                  type="button"
+                                  className={picked ? "pick active" : "pick"}
+                                  aria-pressed={picked}
+                                  disabled={busy || Boolean(teamUnavailableMessage)}
+                                  title={
+                                    teamUnavailableMessage ||
+                                    (picked
+                                      ? `Remove ${rosterEntry.name} from the team`
+                                      : `Pick ${rosterEntry.name} as the team ${rosterEntry.role.toLowerCase()}`)
+                                  }
+                                  onClick={() =>
+                                    togglePickedRider(rosterEntry.role, rosterEntry.contestantId)
+                                  }
+                                >
+                                  <Users size={13} /> {picked ? "Picked" : "Pick"}
+                                </button>
                                 <button
                                   type="button"
                                   disabled={editDisabled}
