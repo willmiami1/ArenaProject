@@ -32,19 +32,12 @@ import {
 } from "./registrationDeskData";
 import {
   buildRegistrationDeskDrawRequest,
-  buildRegistrationDeskPickedTeamsRequest,
   createRegistrationDeskTeamRow,
-  defaultRegistrationDeskMode,
-  pickedTeamRowsError,
-  registrationDeskPayerCandidates,
   registrationDeskReviewComplete,
-  registrationDeskRoleCandidates,
   registrationDeskTotals,
   supportedRegistrationDeskModes,
-  type RegistrationDeskEntryMode,
   type RegistrationDeskPaymentMethod,
   type RegistrationDeskSignupRequest,
-  type RegistrationDeskTeamRow,
 } from "./registrationDeskSignup";
 import type { ArenaData, Contestant } from "./types";
 import { roundRobinRoleCapacity } from "./roundRobinCapacity";
@@ -61,7 +54,6 @@ import {
   type RegistrationDeskRosterEntry,
 } from "./registrationDeskRoster";
 import {
-  registrationDeskOutstandingWaiverParticipants,
   registrationDeskWaiverStatus,
   submitLocalRegistrationDeskWaiver,
 } from "./registrationDeskWaiver";
@@ -202,11 +194,8 @@ export function RegistrationDesk() {
   const [role, setRole] = useState<"Header" | "Heeler">("Header");
   const [entries, setEntries] = useState(1);
   const [entryHorseName, setEntryHorseName] = useState("");
-  const [entryMode, setEntryMode] = useState<RegistrationDeskEntryMode | "">("");
-  const [teamRows, setTeamRows] = useState<RegistrationDeskTeamRow[]>(() => [
-    createRegistrationDeskTeamRow(),
-  ]);
-  const [payerContestantId, setPayerContestantId] = useState("");
+  // Draw entries carry no picked-team rows; the signup helpers still expect the field.
+  const teamRows = useMemo(() => [createRegistrationDeskTeamRow()], []);
   const [paymentMethod, setPaymentMethod] =
     useState<RegistrationDeskPaymentMethod | "">("");
   const [review, setReview] = useState(false);
@@ -266,11 +255,6 @@ export function RegistrationDesk() {
     () => registrationDeskEventRoster(data, eventId),
     [data, eventId],
   );
-  const outstandingWaivers = useMemo(
-    () =>
-      registrationDeskOutstandingWaiverParticipants(data, eventId, eventRoster),
-    [data, eventId, eventRoster],
-  );
   const rosterSections = [
     {
       id: "header",
@@ -286,14 +270,8 @@ export function RegistrationDesk() {
         (rosterEntry) => rosterEntry.role === "Heeler" && rosterEntry.recordType === "registration",
       ),
     },
-    {
-      id: "team",
-      title: "Picked Teams",
-      entries: eventRoster.filter(
-        (rosterEntry) => rosterEntry.recordType === "team",
-      ),
-    },
   ];
+  const drawsSupported = supportedRegistrationDeskModes(event).includes("draws");
   const entryUnavailableMessage = !event
     ? ""
     : !event.registrationOpen
@@ -305,7 +283,6 @@ export function RegistrationDesk() {
   const waiverContestant = data?.contestants.find(
     (item) => item.id === waiverContestantId,
   );
-  const supportedModes = supportedRegistrationDeskModes(event);
   const minimumDraws = event ? minimumDrawEntries(event) : 1;
   const workspace = data ? asWorkspace(data) : null;
   const workspaceEvent = workspace?.events.find((item) => item.id === eventId);
@@ -315,64 +292,12 @@ export function RegistrationDesk() {
         Heeler: roundRobinRoleCapacity(workspaceEvent, data?.registrations ?? [], "Heeler"),
       }
     : null;
-  const headerCandidates = useMemo(
-    () =>
-      event && data
-        ? registrationDeskRoleCandidates(
-            data.contestants,
-            event,
-            data.registrations,
-            "Header",
-          )
-        : [],
-    [data, event],
-  );
-  const heelerCandidates = useMemo(
-    () =>
-      event && data
-        ? registrationDeskRoleCandidates(
-            data.contestants,
-            event,
-            data.registrations,
-            "Heeler",
-          )
-        : [],
-    [data, event],
-  );
-  const payerCandidates = useMemo(
-    () => registrationDeskPayerCandidates(teamRows, data?.contestants ?? []),
-    [data?.contestants, teamRows],
-  );
   const totals = registrationDeskTotals(
-    entryMode || "draws",
+    "draws",
     entries,
     teamRows,
     Number(event?.entryFee ?? 0),
   );
-  const pickedPairError = useMemo(() => {
-    if (!event || event.allowRepeatPartners) return "";
-    const pairs = new Set<string>();
-    for (const row of teamRows) {
-      if (!row.headerId || !row.heelerId) continue;
-      const pair = `${row.headerId}\0${row.heelerId}`;
-      if (
-        pairs.has(pair) ||
-        data?.teams.some(
-          (team) =>
-            team.eventId === event.id &&
-            Number(team.round) === 1 &&
-            !team.generated &&
-            !team.scratched &&
-            team.headerId === row.headerId &&
-            team.heelerId === row.heelerId,
-        )
-      ) {
-        return "That partnership is already entered.";
-      }
-      pairs.add(pair);
-    }
-    return "";
-  }, [data?.teams, event, teamRows]);
   const drawEligible =
     Boolean(workspaceEvent && contestant) &&
     contestantEligibleForRole(workspaceEvent!, contestant, role);
@@ -383,26 +308,12 @@ export function RegistrationDesk() {
 
   useEffect(() => {
     if (!event) return;
-    setEntryMode(defaultRegistrationDeskMode(event));
-    setTeamRows([createRegistrationDeskTeamRow()]);
-    setPayerContestantId("");
     setPaymentMethod("");
     setReview(false);
     setSubmissionId("");
     setWaiverContestantId("");
     setWaiverError("");
   }, [event?.id]);
-
-  useEffect(() => {
-    if (
-      payerContestantId &&
-      !payerCandidates.some(({ id }) => id === payerContestantId)
-    ) {
-      setPayerContestantId("");
-      setReview(false);
-      setSubmissionId("");
-    }
-  }, [payerCandidates, payerContestantId]);
 
   useEffect(() => {
     setPaymentMethod("");
@@ -445,8 +356,6 @@ export function RegistrationDesk() {
 
   const resetEntryDraft = () => {
     setEntryHorseName("");
-    setTeamRows([createRegistrationDeskTeamRow()]);
-    setPayerContestantId("");
     setPaymentMethod("");
     setReview(false);
     setSubmissionId("");
@@ -465,7 +374,6 @@ export function RegistrationDesk() {
     setPinOpen(false);
     setPin("");
     setPinConfirmation("");
-    setEntryMode("");
     resetEntryDraft();
     setMessage("");
   };
@@ -502,7 +410,6 @@ export function RegistrationDesk() {
     signWaiverAfterSave.current = false;
     setSearch("");
     setPinOpen(false);
-    setEntryMode("");
     resetEntryDraft();
     setMessage("");
   };
@@ -514,7 +421,6 @@ export function RegistrationDesk() {
     setEditingProfile(false);
     signWaiverAfterSave.current = false;
     setPinOpen(false);
-    setEntryMode("");
     resetEntryDraft();
     setMessage("");
   };
@@ -837,16 +743,6 @@ export function RegistrationDesk() {
     setSubmissionId("");
   };
 
-  const updateTeamRow = (
-    rowId: string,
-    patch: Partial<RegistrationDeskTeamRow>,
-  ) => {
-    setTeamRows((current) =>
-      current.map((row) => (row.rowId === rowId ? { ...row, ...patch } : row)),
-    );
-    invalidateReview();
-  };
-
   const finishSignup = async (request: RegistrationDeskSignupRequest) => {
     if (!event) return;
     try {
@@ -869,8 +765,6 @@ export function RegistrationDesk() {
       }
       setEntries(minimumDraws);
       setEntryHorseName("");
-      setTeamRows([createRegistrationDeskTeamRow()]);
-      setPayerContestantId("");
       setPaymentMethod("");
       setReview(false);
       setSubmissionId("");
@@ -889,26 +783,19 @@ export function RegistrationDesk() {
       setMessage(entryUnavailableMessage);
       return;
     }
-    if (!event || !paymentMethod || !entryMode) return;
-    const complete = registrationDeskReviewComplete(entryMode, {
-      contestantId: contestant?.id,
+    if (!event || !paymentMethod || !contestant) return;
+    const complete = registrationDeskReviewComplete("draws", {
+      contestantId: contestant.id,
       role,
       entries,
       minimumEntries: minimumDraws,
       maximumEntries: event.entriesAllowed,
       rows: teamRows,
-      payerContestantId:
-        entryMode === "draws" ? contestant?.id ?? "" : payerContestantId,
+      payerContestantId: contestant.id,
       paymentMethod,
     });
-    if (!complete || pickedPairError) {
-      setMessage(
-        entryMode === "picked-teams"
-          ? pickedPairError ||
-              pickedTeamRowsError(teamRows, payerContestantId) ||
-              "Complete every team and choose its payer and payment method."
-          : "Complete the draw entry before review.",
-      );
+    if (!complete) {
+      setMessage("Complete the draw entry before review.");
       return;
     }
     setSubmissionId(
@@ -920,33 +807,18 @@ export function RegistrationDesk() {
   };
 
   const submitEntry = () => {
-    if (
-      !event ||
-      !paymentMethod ||
-      !entryMode ||
-      !submissionId ||
-      (entryMode === "draws" && !contestant)
-    ) {
+    if (!event || !paymentMethod || !submissionId || !contestant) {
       return;
     }
-    const request =
-      entryMode === "draws"
-        ? buildRegistrationDeskDrawRequest({
-            submissionId,
-            eventId: event.id,
-            contestantId: contestant!.id,
-            horseName: entryHorseName,
-            role,
-            entries,
-            paymentMethod,
-          })
-        : buildRegistrationDeskPickedTeamsRequest({
-            submissionId,
-            eventId: event.id,
-            rows: teamRows,
-            payerContestantId,
-            paymentMethod,
-          });
+    const request = buildRegistrationDeskDrawRequest({
+      submissionId,
+      eventId: event.id,
+      contestantId: contestant.id,
+      horseName: entryHorseName,
+      role,
+      entries,
+      paymentMethod,
+    });
     setBusy(true);
     setMessage("");
     void finishSignup(request);
@@ -1100,6 +972,229 @@ export function RegistrationDesk() {
     }
   };
 
+  const rosterPanel = data ? (
+      <section
+        className="registration-desk-roster"
+        aria-labelledby="registration-desk-roster-heading"
+      >
+        <div className="registration-desk-roster-heading">
+          <div>
+            <span>Current signups</span>
+            <h2 id="registration-desk-roster-heading">
+              Competition roster
+            </h2>
+          </div>
+        </div>
+        {!event ? (
+          <p className="registration-desk-roster-empty">
+            Choose a live competition to view its roster.
+          </p>
+        ) : (
+          <div className="registration-desk-roster-groups">
+            {rosterSections.map((section) => {
+              const headingId = `registration-roster-${section.id}`;
+              return (
+                <section
+                  className="registration-desk-roster-group"
+                  aria-labelledby={headingId}
+                  key={section.id}
+                >
+                  <div className="registration-desk-roster-role-heading">
+                    <h3 id={headingId}>{section.title}</h3>
+                    <strong>{section.entries.length}</strong>
+                  </div>
+                  {!section.entries.length ? (
+                    <p>No {section.title.toLowerCase()} are signed up.</p>
+                  ) : (
+                    <ul>
+                      {section.entries.map((rosterEntry) => {
+                        const editing = rosterEntryEdit?.key === rosterEntry.key;
+                        const permissions = registrationDeskEntryPermissions(
+                          event,
+                          embedded,
+                          rosterEntry.generated,
+                        );
+                        const editDisabled = busy || !permissions.canEdit;
+                        const scratchDisabled = busy || !permissions.canScratch;
+                        return (
+                          <li key={rosterEntry.key}>
+                            <div className="registration-roster-entry-summary">
+                              <div>
+                                <strong>{rosterEntry.name}</strong>
+                                <span>
+                                  {rosterEntry.recordType === "registration"
+                                    ? `${rosterEntry.entries ?? 1} ${
+                                        (rosterEntry.entries ?? 1) === 1
+                                          ? "entry"
+                                          : "entries"
+                                      }`
+                                    : `Team${
+                                        rosterEntry.partnerName
+                                          ? ` with ${rosterEntry.partnerName}`
+                                          : ""
+                                      }`}
+                                  {" · "}Handicap {rosterEntry.handicap}
+                                  {rosterEntry.horseName
+                                    ? ` · ${rosterEntry.horseName}`
+                                    : ""}
+                                  {rosterEntry.payerName
+                                    ? ` · Payer: ${rosterEntry.payerName}${
+                                        rosterEntry.paymentMethod === "tab"
+                                          ? " (tab)"
+                                          : ""
+                                      }`
+                                    : ""}
+                                </span>
+                              </div>
+                              <div className="registration-roster-entry-actions">
+                                <button
+                                  type="button"
+                                  disabled={editDisabled}
+                                  title={
+                                    rosterEntry.generated
+                                      ? "Generated draw teams must be scratched as a whole team."
+                                      : editDisabled
+                                        ? "Editing requires an open, unlocked live competition in Wix."
+                                        : `Edit ${rosterEntry.name}'s ${rosterEntry.role.toLowerCase()} entry`
+                                  }
+                                  onClick={() => beginRosterEntryEdit(rosterEntry)}
+                                >
+                                  <Pencil size={13} /> Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="danger"
+                                  disabled={scratchDisabled}
+                                  title={
+                                    scratchDisabled
+                                      ? "Deleting requires a live competition in Wix."
+                                      : `Scratch ${rosterEntry.name}'s ${
+                                          rosterEntry.recordType === "team"
+                                            ? "whole team"
+                                            : rosterEntry.role.toLowerCase()
+                                        } entry`
+                                  }
+                                  onClick={() => void scratchRosterEntry(rosterEntry)}
+                                >
+                                  <Trash2 size={13} /> Delete
+                                </button>
+                              </div>
+                            </div>
+                            {editing && rosterEntryEdit && (
+                              <form
+                                className="registration-roster-entry-editor"
+                                onSubmit={saveRosterEntry}
+                              >
+                                {rosterEntry.recordType === "registration" && (
+                                  <>
+                                    <label>
+                                      Position
+                                      <select
+                                        value={rosterEntryEdit.role}
+                                        onChange={(change) =>
+                                          setRosterEntryEdit({
+                                            ...rosterEntryEdit,
+                                            role: change.target.value as
+                                              | "Header"
+                                              | "Heeler",
+                                          })
+                                        }
+                                      >
+                                        <option>Header</option>
+                                        <option>Heeler</option>
+                                      </select>
+                                    </label>
+                                    <label>
+                                      Entries
+                                      <input
+                                        required
+                                        type="number"
+                                        min={1}
+                                        max={event.entriesAllowed}
+                                        value={rosterEntryEdit.entries}
+                                        onChange={(change) =>
+                                          setRosterEntryEdit({
+                                            ...rosterEntryEdit,
+                                            entries: Number(change.target.value),
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                  </>
+                                )}
+                                <label>
+                                  Horse
+                                  <input
+                                    maxLength={100}
+                                    value={rosterEntryEdit.horseName}
+                                    onChange={(change) =>
+                                      setRosterEntryEdit({
+                                        ...rosterEntryEdit,
+                                        horseName: change.target.value.toUpperCase(),
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Payment method
+                                  <select
+                                    value={rosterEntryEdit.paymentMethod}
+                                    onChange={(change) =>
+                                      setRosterEntryEdit({
+                                        ...rosterEntryEdit,
+                                        paymentMethod: change.target.value as
+                                          | ""
+                                          | "cash"
+                                          | "card"
+                                          | "tab",
+                                      })
+                                    }
+                                  >
+                                    <option value="">Not recorded</option>
+                                    <option value="cash">Cash</option>
+                                    <option value="card">Credit card</option>
+                                    <option value="tab">Open tab</option>
+                                  </select>
+                                </label>
+                                <label className="registration-roster-paid">
+                                  <input
+                                    type="checkbox"
+                                    checked={rosterEntryEdit.paid}
+                                    onChange={(change) =>
+                                      setRosterEntryEdit({
+                                        ...rosterEntryEdit,
+                                        paid: change.target.checked,
+                                      })
+                                    }
+                                  />
+                                  Payment received
+                                </label>
+                                <div className="registration-roster-editor-actions">
+                                  <button
+                                    type="button"
+                                    onClick={() => setRosterEntryEdit(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button className="primary" disabled={busy}>
+                                    {busy ? "Saving…" : "Save entry"}
+                                  </button>
+                                </div>
+                              </form>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </section>
+  ) : null;
+
   return (
     <div className="registration-desk">
       <header className="registration-desk-header">
@@ -1221,7 +1316,7 @@ export function RegistrationDesk() {
                       editingProfile ? (
                         <>Profile found: <strong>{contestant.name}</strong>. Review and correct the details, then save or cancel.</>
                       ) : (
-                        <>Contestant: <strong>{contestant.name}</strong>. Continue to the entry choice below.</>
+                        <>Contestant: <strong>{contestant.name}</strong>. Enter the draws below.</>
                       )
                     ) : (
                       <>New contestant. Fill in the profile, take a photo, and save to collect the waiver.</>
@@ -1266,67 +1361,30 @@ export function RegistrationDesk() {
           </section>
         )}
 
-        {event && data && contestant && supportedModes.length > 0 && (
+        {event && data && contestant && !drawsSupported && (
           <section className="registration-desk-panel registration-desk-step">
             <div className="registration-desk-panel-heading">
               <div>
                 <span>Step 2</span>
-                <h2>Entry choice</h2>
+                <h2>Enter draws</h2>
               </div>
             </div>
-            <fieldset className="registration-entry-modes">
-              <legend>How is {contestant.name} entering?</legend>
-              {supportedModes.map((mode) => (
-                <label className={entryMode === mode ? "selected" : ""} key={mode}>
-                  <input
-                    type="radio"
-                    name="registration-entry-mode"
-                    checked={entryMode === mode}
-                    onChange={() => {
-                      setEntryMode(mode);
-                      setTeamRows([
-                        mode === "picked-teams"
-                          ? {
-                              ...createRegistrationDeskTeamRow(),
-                              ...(headerCandidates.some(({ id }) => id === contestant.id)
-                                ? { headerId: contestant.id }
-                                : heelerCandidates.some(({ id }) => id === contestant.id)
-                                  ? { heelerId: contestant.id }
-                                  : {}),
-                            }
-                          : createRegistrationDeskTeamRow(),
-                      ]);
-                      setEntries(minimumDraws);
-                      setEntryHorseName("");
-                      setPayerContestantId("");
-                      setPaymentMethod("");
-                      setReview(false);
-                      setSubmissionId("");
-                      setMessage("");
-                    }}
-                  />
-                  <strong>{mode === "draws" ? "Enter Draws" : "Pick Teams"}</strong>
-                  <small>
-                    {mode === "draws"
-                      ? "Add standalone draw entries."
-                      : "Build one or more complete Header / Heeler teams."}
-                  </small>
-                </label>
-              ))}
-            </fieldset>
+            <p className="registration-search-hint">
+              This competition does not accept draw entries at the Registration Desk.
+            </p>
           </section>
         )}
 
-        {event && data && contestant && entryMode && (
+        {event && data && contestant && drawsSupported && (
           <div className="registration-desk-columns">
-            <section className="registration-desk-panel">
-              <div className="registration-desk-panel-heading">
-                <div>
-                  <span>Step 3</span>
-                  <h2>{entryMode === "draws" ? "Draw entry" : "Build teams"}</h2>
+            <div className="registration-desk-column">
+              <section className="registration-desk-panel">
+                <div className="registration-desk-panel-heading">
+                  <div>
+                    <span>Step 2</span>
+                    <h2>Enter draws</h2>
+                  </div>
                 </div>
-              </div>
-              {entryMode === "draws" ? (
                 <div className="registration-entry-form registration-draw-details">
                   <label>
                     Horse
@@ -1367,7 +1425,7 @@ export function RegistrationDesk() {
                     </p>
                   )}
                   <label>
-                    Number of entries
+                    Number of draws
                     <input
                       type="number"
                       min={minimumDraws}
@@ -1383,183 +1441,22 @@ export function RegistrationDesk() {
                     </p>
                   )}
                 </div>
-              ) : (
-                <div className="registration-team-builder">
-                  {event.competitionType === "pick-and-draw" && (
-                    <p className="registration-search-hint">
-                      Only riders already entered in the draw can be picked. Enter
-                      the draw first to appear in these lists.
-                    </p>
-                  )}
-                  <div className="registration-team-rows">
-                    {teamRows.map((row, index) => {
-                      const header = data.contestants.find(({ id }) => id === row.headerId);
-                      const heeler = data.contestants.find(({ id }) => id === row.heelerId);
-                      return (
-                        <fieldset className="registration-team-row" key={row.rowId}>
-                          <legend>Team {index + 1}</legend>
-                          <label>
-                            Header
-                            <select
-                              value={row.headerId}
-                              onChange={(change) =>
-                                updateTeamRow(row.rowId, {
-                                  headerId: change.target.value,
-                                  headerHorseName: "",
-                                })
-                              }
-                            >
-                              <option value="">Choose Header</option>
-                              {headerCandidates
-                                .filter(
-                                  (candidate) =>
-                                    candidate.id !== row.heelerId &&
-                                    (!heeler ||
-                                      Number(candidate.headerHandicap) +
-                                        Number(heeler.heelerHandicap) <=
-                                        Number(event.handicapTotal)),
-                                )
-                                .map((candidate) => (
-                                  <option value={candidate.id} key={candidate.id}>
-                                    {candidate.name} · #{candidate.headerHandicap}
-                                  </option>
-                                ))}
-                            </select>
-                          </label>
-                          <label>
-                            Header horse
-                            <select
-                              disabled={!header?.horses?.length}
-                              value={row.headerHorseName}
-                              onChange={(change) =>
-                                updateTeamRow(row.rowId, {
-                                  headerHorseName: change.target.value,
-                                })
-                              }
-                            >
-                              <option value="">No horse selected</option>
-                              {header?.horses?.map((horse) => (
-                                <option value={horse} key={horse}>{horse}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Heeler
-                            <select
-                              value={row.heelerId}
-                              onChange={(change) =>
-                                updateTeamRow(row.rowId, {
-                                  heelerId: change.target.value,
-                                  heelerHorseName: "",
-                                })
-                              }
-                            >
-                              <option value="">Choose Heeler</option>
-                              {heelerCandidates
-                                .filter(
-                                  (candidate) =>
-                                    candidate.id !== row.headerId &&
-                                    (!header ||
-                                      Number(header.headerHandicap) +
-                                        Number(candidate.heelerHandicap) <=
-                                        Number(event.handicapTotal)),
-                                )
-                                .map((candidate) => (
-                                  <option value={candidate.id} key={candidate.id}>
-                                    {candidate.name} · #{candidate.heelerHandicap}
-                                  </option>
-                                ))}
-                            </select>
-                          </label>
-                          <label>
-                            Heeler horse
-                            <select
-                              disabled={!heeler?.horses?.length}
-                              value={row.heelerHorseName}
-                              onChange={(change) =>
-                                updateTeamRow(row.rowId, {
-                                  heelerHorseName: change.target.value,
-                                })
-                              }
-                            >
-                              <option value="">No horse selected</option>
-                              {heeler?.horses?.map((horse) => (
-                                <option value={horse} key={horse}>{horse}</option>
-                              ))}
-                            </select>
-                          </label>
-                          {teamRows.length > 1 && (
-                            <button
-                              type="button"
-                              className="registration-remove-team"
-                              onClick={() => {
-                                setTeamRows((current) =>
-                                  current.filter(({ rowId }) => rowId !== row.rowId),
-                                );
-                                invalidateReview();
-                              }}
-                            >
-                              <Trash2 size={15} /> Remove team
-                            </button>
-                          )}
-                        </fieldset>
-                      );
-                    })}
-                  </div>
-                  <button
-                    type="button"
-                    className="registration-add-team"
-                    disabled={teamRows.length >= 100}
-                    onClick={() => {
-                      setTeamRows((current) => [
-                        ...current,
-                        createRegistrationDeskTeamRow(),
-                      ]);
-                      invalidateReview();
-                    }}
-                  >
-                    <Plus size={16} /> Add another team
-                  </button>
-                </div>
-              )}
-            </section>
+              </section>
+              {rosterPanel}
+            </div>
 
             <section className="registration-desk-panel">
               <div className="registration-desk-panel-heading">
-                <div><span>Step 4</span><h2>Payment and review</h2></div>
+                <div><span>Step 3</span><h2>Payment and review</h2></div>
               </div>
               <div className="registration-entry-form">
                   <form className="registration-competition-form" onSubmit={beginReview}>
                     {!review ? (
                       <>
-                        {entryMode === "draws" ? (
-                          <label>
-                            Payer
-                            <input value={contestant.name} readOnly />
-                          </label>
-                        ) : (
-                          <label>
-                            Batch payer
-                            <select
-                              required
-                              value={payerContestantId}
-                              onChange={(change) => {
-                                setPayerContestantId(change.target.value);
-                                invalidateReview();
-                              }}
-                            >
-                              <option value="">Choose a rider in these teams</option>
-                              {payerCandidates.map((candidate) => (
-                                <option value={candidate.id} key={candidate.id}>
-                                  {candidate.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
-                        {pickedPairError && (
-                          <p className="registration-entry-hint">{pickedPairError}</p>
-                        )}
+                        <label>
+                          Payer
+                          <input value={contestant.name} readOnly />
+                        </label>
                         <fieldset className="registration-payment-method">
                           <legend>Cashier payment selection</legend>
                           {([
@@ -1588,20 +1485,16 @@ export function RegistrationDesk() {
                             disabled={
                               busy ||
                               Boolean(entryUnavailableMessage) ||
-                              (entryMode === "draws" &&
-                                (!drawEligible || !eligibleRoles.length)) ||
-                              Boolean(pickedPairError) ||
-                              !registrationDeskReviewComplete(entryMode, {
+                              !drawEligible ||
+                              !eligibleRoles.length ||
+                              !registrationDeskReviewComplete("draws", {
                                 contestantId: contestant?.id,
                                 role,
                                 entries,
                                 minimumEntries: minimumDraws,
                                 maximumEntries: event.entriesAllowed,
                                 rows: teamRows,
-                                payerContestantId:
-                                  entryMode === "draws"
-                                    ? contestant?.id ?? ""
-                                    : payerContestantId,
+                                payerContestantId: contestant?.id ?? "",
                                 paymentMethod,
                               })
                             }
@@ -1616,38 +1509,12 @@ export function RegistrationDesk() {
                           <span>Final review</span>
                           <strong>{event.name}</strong>
                         </div>
-                        {entryMode === "picked-teams" ? (
-                          <div className="registration-review-teams">
-                            {teamRows.map((row, index) => {
-                              const header = data.contestants.find(({ id }) => id === row.headerId);
-                              const heeler = data.contestants.find(({ id }) => id === row.heelerId);
-                              return (
-                                <div key={row.rowId}>
-                                  <strong>Team {index + 1}</strong>
-                                  <span>
-                                    {header?.name}{row.headerHorseName ? ` (${row.headerHorseName})` : ""}
-                                    {" / "}
-                                    {heeler?.name}{row.heelerHorseName ? ` (${row.heelerHorseName})` : ""}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p>
-                            {contestant?.name} · {role} · {entries} entr{entries === 1 ? "y" : "ies"}
-                            {entryHorseName ? ` · ${entryHorseName}` : ""}
-                          </p>
-                        )}
+                        <p>
+                          {contestant?.name} · {role} · {entries} draw{entries === 1 ? "" : "s"}
+                          {entryHorseName ? ` · ${entryHorseName}` : ""}
+                        </p>
                         <dl>
-                          <div>
-                            <dt>Payer</dt>
-                            <dd>
-                              {entryMode === "draws"
-                                ? contestant?.name
-                                : payerCandidates.find(({ id }) => id === payerContestantId)?.name}
-                            </dd>
-                          </div>
+                          <div><dt>Payer</dt><dd>{contestant?.name}</dd></div>
                           <div><dt>Payment</dt><dd>{paymentMethod}</dd></div>
                           <div><dt>Run count</dt><dd>{totals.runCount}</dd></div>
                           <div><dt>Entry fee</dt><dd>{formatMoney(event.entryFee)}</dd></div>
@@ -1682,257 +1549,7 @@ export function RegistrationDesk() {
           </div>
         )}
 
-        {data && (
-          <section
-            className="registration-desk-roster"
-            aria-labelledby="registration-desk-roster-heading"
-          >
-            <div className="registration-desk-roster-heading">
-              <div>
-                <span>Current signups</span>
-                <h2 id="registration-desk-roster-heading">
-                  Competition roster
-                </h2>
-              </div>
-            </div>
-            {event && outstandingWaivers.length > 0 && (
-              <section
-                className="registration-waiver-roster"
-                aria-labelledby="registration-waiver-roster-heading"
-              >
-                <div>
-                  <h3 id="registration-waiver-roster-heading">
-                    Waivers still needed
-                  </h3>
-                  <p>
-                    Only contestants who have not signed the current waiver are
-                    listed. Confirmed waivers drop off this list automatically.
-                  </p>
-                </div>
-                <ul>
-                  {outstandingWaivers.map((participant) => (
-                    <li key={participant.contestantId}>
-                      <strong>{participant.name}</strong>
-                      <WaiverStatusControl
-                        contestantName={participant.name}
-                        available={data.waiverDocument.available}
-                        disabled={busy || waiverBusy}
-                        onSign={() => launchWaiver(participant.contestantId)}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {!event ? (
-              <p className="registration-desk-roster-empty">
-                Choose a live competition to view its roster.
-              </p>
-            ) : (
-              <div className="registration-desk-roster-groups">
-                {rosterSections.map((section) => {
-                  const headingId = `registration-roster-${section.id}`;
-                  return (
-                    <section
-                      className="registration-desk-roster-group"
-                      aria-labelledby={headingId}
-                      key={section.id}
-                    >
-                      <div className="registration-desk-roster-role-heading">
-                        <h3 id={headingId}>{section.title}</h3>
-                        <strong>{section.entries.length}</strong>
-                      </div>
-                      {!section.entries.length ? (
-                        <p>No {section.title.toLowerCase()} are signed up.</p>
-                      ) : (
-                        <ul>
-                          {section.entries.map((rosterEntry) => {
-                            const editing = rosterEntryEdit?.key === rosterEntry.key;
-                            const permissions = registrationDeskEntryPermissions(
-                              event,
-                              embedded,
-                              rosterEntry.generated,
-                            );
-                            const editDisabled = busy || !permissions.canEdit;
-                            const scratchDisabled = busy || !permissions.canScratch;
-                            return (
-                              <li key={rosterEntry.key}>
-                                <div className="registration-roster-entry-summary">
-                                  <div>
-                                    <strong>{rosterEntry.name}</strong>
-                                    <span>
-                                      {rosterEntry.recordType === "registration"
-                                        ? `${rosterEntry.entries ?? 1} ${
-                                            (rosterEntry.entries ?? 1) === 1
-                                              ? "entry"
-                                              : "entries"
-                                          }`
-                                        : `Team${
-                                            rosterEntry.partnerName
-                                              ? ` with ${rosterEntry.partnerName}`
-                                              : ""
-                                          }`}
-                                      {" · "}Handicap {rosterEntry.handicap}
-                                      {rosterEntry.horseName
-                                        ? ` · ${rosterEntry.horseName}`
-                                        : ""}
-                                      {rosterEntry.payerName
-                                        ? ` · Payer: ${rosterEntry.payerName}${
-                                            rosterEntry.paymentMethod === "tab"
-                                              ? " (tab)"
-                                              : ""
-                                          }`
-                                        : ""}
-                                    </span>
-                                  </div>
-                                  <div className="registration-roster-entry-actions">
-                                    <button
-                                      type="button"
-                                      disabled={editDisabled}
-                                      title={
-                                        rosterEntry.generated
-                                          ? "Generated draw teams must be scratched as a whole team."
-                                          : editDisabled
-                                            ? "Editing requires an open, unlocked live competition in Wix."
-                                            : `Edit ${rosterEntry.name}'s ${rosterEntry.role.toLowerCase()} entry`
-                                      }
-                                      onClick={() => beginRosterEntryEdit(rosterEntry)}
-                                    >
-                                      <Pencil size={13} /> Edit
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="danger"
-                                      disabled={scratchDisabled}
-                                      title={
-                                        scratchDisabled
-                                          ? "Deleting requires a live competition in Wix."
-                                          : `Scratch ${rosterEntry.name}'s ${
-                                              rosterEntry.recordType === "team"
-                                                ? "whole team"
-                                                : rosterEntry.role.toLowerCase()
-                                            } entry`
-                                      }
-                                      onClick={() => void scratchRosterEntry(rosterEntry)}
-                                    >
-                                      <Trash2 size={13} /> Delete
-                                    </button>
-                                  </div>
-                                </div>
-                                {editing && rosterEntryEdit && (
-                                  <form
-                                    className="registration-roster-entry-editor"
-                                    onSubmit={saveRosterEntry}
-                                  >
-                                    {rosterEntry.recordType === "registration" && (
-                                      <>
-                                        <label>
-                                          Position
-                                          <select
-                                            value={rosterEntryEdit.role}
-                                            onChange={(change) =>
-                                              setRosterEntryEdit({
-                                                ...rosterEntryEdit,
-                                                role: change.target.value as
-                                                  | "Header"
-                                                  | "Heeler",
-                                              })
-                                            }
-                                          >
-                                            <option>Header</option>
-                                            <option>Heeler</option>
-                                          </select>
-                                        </label>
-                                        <label>
-                                          Entries
-                                          <input
-                                            required
-                                            type="number"
-                                            min={1}
-                                            max={event.entriesAllowed}
-                                            value={rosterEntryEdit.entries}
-                                            onChange={(change) =>
-                                              setRosterEntryEdit({
-                                                ...rosterEntryEdit,
-                                                entries: Number(change.target.value),
-                                              })
-                                            }
-                                          />
-                                        </label>
-                                      </>
-                                    )}
-                                    <label>
-                                      Horse
-                                      <input
-                                        maxLength={100}
-                                        value={rosterEntryEdit.horseName}
-                                        onChange={(change) =>
-                                          setRosterEntryEdit({
-                                            ...rosterEntryEdit,
-                                            horseName: change.target.value.toUpperCase(),
-                                          })
-                                        }
-                                      />
-                                    </label>
-                                    <label>
-                                      Payment method
-                                      <select
-                                        value={rosterEntryEdit.paymentMethod}
-                                        onChange={(change) =>
-                                          setRosterEntryEdit({
-                                            ...rosterEntryEdit,
-                                            paymentMethod: change.target.value as
-                                              | ""
-                                              | "cash"
-                                              | "card"
-                                              | "tab",
-                                          })
-                                        }
-                                      >
-                                        <option value="">Not recorded</option>
-                                        <option value="cash">Cash</option>
-                                        <option value="card">Credit card</option>
-                                        <option value="tab">Open tab</option>
-                                      </select>
-                                    </label>
-                                    <label className="registration-roster-paid">
-                                      <input
-                                        type="checkbox"
-                                        checked={rosterEntryEdit.paid}
-                                        onChange={(change) =>
-                                          setRosterEntryEdit({
-                                            ...rosterEntryEdit,
-                                            paid: change.target.checked,
-                                          })
-                                        }
-                                      />
-                                      Payment received
-                                    </label>
-                                    <div className="registration-roster-editor-actions">
-                                      <button
-                                        type="button"
-                                        onClick={() => setRosterEntryEdit(null)}
-                                      >
-                                        Cancel
-                                      </button>
-                                      <button className="primary" disabled={busy}>
-                                        {busy ? "Saving…" : "Save entry"}
-                                      </button>
-                                    </div>
-                                  </form>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </section>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        )}
+        {(!event || !data || !contestant || !drawsSupported) && rosterPanel}
 
         {message && <p className="registration-desk-message" role="status">{message}</p>}
       </main>
