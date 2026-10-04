@@ -866,6 +866,11 @@ export function submitLocalRegistrationDeskSignup(
     );
     let nextDrawPosition =
       Math.max(0, ...roundOneTeams.map((team) => team.drawPosition || 0)) + 1;
+    // Ride-ins join the end of the last rotation when rotations are in use.
+    const lastRotation =
+      (event.rotationSize ?? 0) > 0
+        ? Math.max(1, ...roundOneTeams.map((team) => team.rotation ?? 0))
+        : undefined;
     const pairingRuns = new Map<string, number>();
     teams = canonical.teams.map((row, index) => {
       const pair = `${row.headerId}\u0000${row.heelerId}`;
@@ -899,6 +904,7 @@ export function submitLocalRegistrationDeskSignup(
               originalTeamNumber: nextDrawPosition++,
               headerEntryNumber: priorRuns + 1,
               heelerEntryNumber: priorRuns + 1,
+              ...(lastRotation ? { rotation: lastRotation } : {}),
             }
           : {}),
         points: 0,

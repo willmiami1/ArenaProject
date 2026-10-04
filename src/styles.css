@@ -339,6 +339,12 @@ main { grid-column: 2; min-width: 0; }
 .draw-row.repeat-team-row { background: rgba(75, 118, 170, .14); box-shadow: inset 4px 0 #4b76aa; }
 .draw-row.free-run-row.repeat-team-row { background: linear-gradient(90deg, rgba(214, 145, 43, .18), rgba(75, 118, 170, .14)); box-shadow: inset 4px 0 #d6912b, inset 8px 0 #4b76aa; }
 .draw-color-legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0 2px; }
+.rotation-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 18px; margin: 10px 0 4px; padding: 12px 14px; background: #f4f7f5; border: 1px solid var(--line); border-radius: 10px; }
+.rotation-controls > div:first-child { flex: 1 1 320px; }
+.rotation-controls strong { display: block; font-size: 14px; }
+.rotation-controls p { margin: 3px 0 0; color: #65716a; font-size: 12px; line-height: 1.4; }
+.rotation-controls .rotation-size { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #65716a; }
+.rotation-controls .rotation-size input { width: 90px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; }
 .draw-color-legend span { padding: 5px 9px; border-radius: 5px; font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
 .free-run-key, .free-run-tag { color: #7b490b !important; background: #f8dfb8 !important; border: 1px solid #e4b66f; }
 .re-run-tag { color: #4a2f7d !important; background: #e8dff7 !important; border: 1px solid #b49ade; }

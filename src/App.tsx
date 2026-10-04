@@ -144,9 +144,19 @@ import {
   reorderDraftDrawTeams,
   reorderRunOrderTeams,
   repeatPairingBlockMessage,
+  assignRotations,
+  clearRotations,
+  ROTATION_SIZE_MAX,
+  ROTATION_SIZE_MIN,
+  rotationCount,
+  rotationsEnabled,
+  runDeskStages,
+  type RunDeskStage,
   slideRulesActive,
   ropingFormatLabel,
   slideTimeAdjustment,
+  stageLabel,
+  stageTeams,
   teamEligibleForCompetition,
   teamHandicapTotal,
 } from "./competition";
@@ -1068,6 +1078,28 @@ function StaffApp() {
                   ),
                 }))
               }
+              onApplyRotations={(eventId, size) =>
+                setData((current) => ({
+                  ...current,
+                  teams: assignRotations(current.teams, eventId, size),
+                  events: current.events.map((event) =>
+                    event.id === eventId
+                      ? { ...event, rotationSize: size, activeRotation: 1 }
+                      : event,
+                  ),
+                }))
+              }
+              onClearRotations={(eventId) =>
+                setData((current) => ({
+                  ...current,
+                  teams: clearRotations(current.teams, eventId),
+                  events: current.events.map((event) =>
+                    event.id === eventId
+                      ? { ...event, rotationSize: 0, activeRotation: undefined }
+                      : event,
+                  ),
+                }))
+              }
             />
           )}
           {view === "reserved" && (
@@ -1734,8 +1766,18 @@ function LedLeaderboard({
     requestedTeamId,
   );
   const round = ledRunDeskState.round;
+  // With rotations, the LED follows the rotation of the Roping Now team.
+  const ledRotation =
+    rotationsEnabled(event) && round < Math.max(event.rounds ?? 1, 1)
+      ? (eventTeams.find((team) => team.id === ledRunDeskState.activeTeamId)
+          ?.rotation ?? event.activeRotation)
+      : undefined;
   const roundTeams = eventTeams
-    .filter((team) => team.round === round)
+    .filter(
+      (team) =>
+        team.round === round &&
+        (ledRotation === undefined || team.rotation === ledRotation),
+    )
     .sort((a, b) => a.drawPosition - b.drawPosition);
   const completedRoundsFor = (team: Team) =>
     eventTeams.filter(
@@ -1900,7 +1942,7 @@ function LedLeaderboard({
         </div>
         <div className={`led-round${finalResults ? " final-results" : ""}`}>
           <span>{finalResults ? "Final results" : "Live leaderboard"}</span>
-          <strong>Round {round}</strong>
+          <strong>Round {round}{ledRotation ? ` · Rotation ${ledRotation}` : ""}</strong>
           <em className={officialResults ? "official" : "unofficial"}>
             {officialResults ? "Official results" : "Unofficial results"}
           </em>
@@ -4045,6 +4087,8 @@ function Teams({
   onDeleteRegistration,
   onCommitDraw,
   onUpdateEvent,
+  onApplyRotations,
+  onClearRotations,
 }: {
   event?: ArenaEvent;
   teams: Team[];
@@ -4058,8 +4102,13 @@ function Teams({
   onDeleteRegistration: (registrationId: string) => void;
   onCommitDraw: (eventId: string, teams: Team[]) => void;
   onUpdateEvent: (event: ArenaEvent) => void;
+  onApplyRotations: (eventId: string, size: number) => void;
+  onClearRotations: (eventId: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
+  const [rotationSizeInput, setRotationSizeInput] = useState(
+    () => String(event?.rotationSize || 30),
+  );
   const [entryMode, setEntryMode] = useState<"team" | "registration">("team");
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [message, setMessage] = useState("");
@@ -4074,6 +4123,10 @@ function Teams({
   const reportFrame = useRef<HTMLIFrameElement | null>(null);
   const registrationSubmissionInFlight = useRef(false);
   const eventTeams = teams.filter((team) => team.eventId === event?.id).sort((a, b) => a.drawPosition - b.drawPosition);
+  const roundCountFor = (target: ArenaEvent) => Math.max(target.rounds ?? 1, 1);
+  const rotationsLocked = eventTeams.some(
+    (team) => team.status !== "ready" || team.rawTime !== null,
+  );
   const eventRegistrations = registrations.filter(
     (entry) => entry.eventId === event?.id && !entry.sourceTeamId,
   );
@@ -4492,6 +4545,59 @@ function Teams({
             )}
           </div>
         </div>
+        {event?.drawApproved === true && !draftDraw && roundCountFor(event) > 1 && (
+          <div className="rotation-controls no-print">
+            <div>
+              <strong>Rotations</strong>
+              <p>
+                {rotationsEnabled(event)
+                  ? `${rotationCount(event, eventTeams)} rotations of about ${event.rotationSize} teams. Each rotation ropes its ${roundCountFor(event) - 1} preliminary round${roundCountFor(event) - 1 === 1 ? "" : "s"} back to back, then everyone meets in the short round.`
+                  : "Split Round 1 into blocks so each group ropes all its preliminary rounds before the next group starts."}
+                {rotationsLocked ? " Runs have been recorded, so rotations can no longer be changed." : ""}
+              </p>
+            </div>
+            <div className="toolbar-actions">
+              <label className="rotation-size">
+                Teams per rotation
+                <input
+                  type="number"
+                  min={ROTATION_SIZE_MIN}
+                  max={ROTATION_SIZE_MAX}
+                  value={rotationSizeInput}
+                  disabled={rotationsLocked}
+                  onChange={(e) => setRotationSizeInput(e.target.value)}
+                />
+              </label>
+              <button
+                className="primary"
+                disabled={rotationsLocked || !eventTeams.some((team) => team.round === 1)}
+                onClick={() => {
+                  const size = Number(rotationSizeInput);
+                  if (!Number.isInteger(size) || size < ROTATION_SIZE_MIN || size > ROTATION_SIZE_MAX) {
+                    setMessage(`Rotation size must be between ${ROTATION_SIZE_MIN} and ${ROTATION_SIZE_MAX} teams.`);
+                    return;
+                  }
+                  onApplyRotations(event.id, size);
+                  setMessage(`Rotations applied with ${size} teams per rotation.`);
+                }}
+              >
+                <RefreshCw size={16} /> {rotationsEnabled(event) ? "Re-apply rotation" : "Apply rotation"}
+              </button>
+              {rotationsEnabled(event) && (
+                <button
+                  className="secondary"
+                  disabled={rotationsLocked}
+                  onClick={() => {
+                    onClearRotations(event.id);
+                    setMessage("Rotations cleared. The roping runs one round at a time.");
+                  }}
+                >
+                  <X size={16} /> Clear rotations
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         <div className="draw-list">
           {(hasFreeRuns || hasRepeatEntries) && (
             <div className="draw-color-legend no-print">
@@ -4540,7 +4646,7 @@ function Teams({
               <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}{team.headerHorseName ? ` · Horse: ${team.headerHorseName}` : ""}</small></span></div>
               <span className="pair-mark">&</span>
               <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}{team.heelerHorseName ? ` · Horse: ${team.heelerHorseName}` : ""}</small></span></div>
-              <span className="draw-status">{(team.headerFreeRun || team.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}{repeatedTeamKeys.has(`${team.headerId}|${team.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}<span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}{team.paid === false && team.paymentMethod === "tab" ? " · Open tab" : ""}</small></span>
+              <span className="draw-status">{(team.headerFreeRun || team.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}{repeatedTeamKeys.has(`${team.headerId}|${team.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}<span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}{team.rotation ? ` · Rotation ${team.rotation}` : ""}{team.paid === false && team.paymentMethod === "tab" ? " · Open tab" : ""}</small></span>
               <span className="row-actions no-print">
                 {!team.generated && team.paid === false && (
                   <button
@@ -4789,6 +4895,12 @@ function RunDesk({
         Math.max(event?.rounds ?? 1, 1),
       ),
   );
+  const [selectedRotation, setSelectedRotation] = useState<number | undefined>(
+    () => event?.activeRotation,
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => event?.activeRunId ?? null,
+  );
   const [showRideInForm, setShowRideInForm] = useState(false);
   const [rideInMessage, setRideInMessage] = useState("");
   // In-app confirmation instead of window.confirm(): a native dialog in the
@@ -4826,16 +4938,44 @@ function RunDesk({
         !team.scratched,
     )
     .sort((a, b) => a.drawPosition - b.drawPosition);
-  const eventTeams = allEventTeams
-    .filter((team) => team.round === activeRound)
+  const stages: RunDeskStage[] = event
+    ? runDeskStages(event, allEventTeams)
+    : [{ round: 1 }];
+  const rotationsActive = stages.some((stage) => stage.rotation !== undefined);
+  // Resolve the stage for a round: the requested rotation, else the rotation
+  // of the given team, else the first stage for that round.
+  const resolveStage = (
+    round: number,
+    rotation?: number,
+    teamId?: string | null,
+  ): RunDeskStage => {
+    const roundStages = stages.filter((stage) => stage.round === round);
+    if (!roundStages.length) return stages[0] ?? { round: 1 };
+    if (roundStages.length === 1) return roundStages[0];
+    const teamRotation = teamId
+      ? allEventTeams.find((team) => team.id === teamId)?.rotation
+      : undefined;
+    return (
+      roundStages.find((stage) => stage.rotation === rotation) ??
+      roundStages.find((stage) => stage.rotation === teamRotation) ??
+      roundStages.find((stage) =>
+        stageTeams(allEventTeams, stage).some((team) => team.status === "ready"),
+      ) ??
+      roundStages[0]
+    );
+  };
+  const activeStage = resolveStage(activeRound, selectedRotation, selectedId);
+  const activeStageIndex = stages.findIndex(
+    (stage) =>
+      stage.round === activeStage.round && stage.rotation === activeStage.rotation,
+  );
+  const previousStage = activeStageIndex > 0 ? stages[activeStageIndex - 1] : null;
+  const eventTeams = stageTeams(allEventTeams, activeStage)
     .sort((a, b) => a.drawPosition - b.drawPosition);
   const repeatedRunDeskTeamKeys = repeatedTeamPairKeys(allEventTeams);
   const nextTeam =
     eventTeams.find((team) => team.status === "ready" && !team.rolled) ??
     eventTeams.find((team) => team.status === "ready");
-  const [selectedId, setSelectedId] = useState<string | null>(
-    () => event?.activeRunId ?? null,
-  );
   const selected = eventTeams.find((team) => team.id === selectedId) ?? nextTeam;
   const spectatorPicksClosed = Boolean(
     selected?.predictionClosesAt &&
@@ -4864,11 +5004,15 @@ function RunDesk({
     }
     pinnedSelection.current = null;
     const nextRound = normalizedRunDeskRound(event?.activeRound, roundCount);
-    setSelectedRound(nextRound);
-    setSelectedId(event?.activeRunId ?? null);
-    const nextRoundTeams = allEventTeams.filter(
-      (team) => team.round === nextRound,
+    const nextStage = resolveStage(
+      nextRound,
+      event?.activeRotation,
+      event?.activeRunId,
     );
+    setSelectedRound(nextRound);
+    setSelectedRotation(nextStage.rotation);
+    setSelectedId(event?.activeRunId ?? null);
+    const nextRoundTeams = stageTeams(allEventTeams, nextStage);
     const nextSelected =
       nextRoundTeams.find((team) => team.id === event?.activeRunId) ??
       nextRoundTeams.find((team) => team.status === "ready" && !team.rolled) ??
@@ -4876,14 +5020,23 @@ function RunDesk({
     setRawTime(nextSelected?.rawTime?.toString() ?? "");
     setPenalties(nextSelected?.penalties.toString() ?? "0");
     setNotes(nextSelected?.notes ?? "");
-  }, [event?.activeRound, event?.activeRunId, event?.id, roundCount]);
+  }, [
+    event?.activeRound,
+    event?.activeRotation,
+    event?.activeRunId,
+    event?.id,
+    roundCount,
+  ]);
   const persistedRound = normalizedRunDeskRound(
     event?.activeRound,
     roundCount,
   );
-  const persistedRoundTeams = allEventTeams.filter(
-    (team) => team.round === persistedRound,
+  const persistedStage = resolveStage(
+    persistedRound,
+    event?.activeRotation,
+    event?.activeRunId,
   );
+  const persistedRoundTeams = stageTeams(allEventTeams, persistedStage);
   const runDeskTeamState = persistedRoundTeams
     .map((team) => `${team.id}:${team.status}:${team.rolled}`)
     .join("|");
@@ -4898,6 +5051,7 @@ function RunDesk({
     onUpdateEvent({ ...event, ...selection });
   }, [
     event?.activeRound,
+    event?.activeRotation,
     event?.activeRunId,
     event?.id,
     persistedRound,
@@ -4906,8 +5060,10 @@ function RunDesk({
   const selectActiveRun = async (
     teamId: string | null,
     round = activeRound,
+    rotation: number | undefined = activeStage.rotation,
   ) => {
     setSelectedRound(round);
+    setSelectedRotation(rotation);
     setSelectedId(teamId);
     if (!event) return;
     const selection = {
@@ -4939,6 +5095,7 @@ function RunDesk({
             ...event,
             activeRunId: teamId ?? undefined,
             activeRound: round,
+            activeRotation: rotation,
           });
         }
         setActiveRunSaveStatus("offline");
@@ -4960,6 +5117,7 @@ function RunDesk({
             ...event,
             activeRunId: teamId,
             activeRound: round,
+            activeRotation: rotation,
           });
         }
         setActiveRunSaveStatus("offline");
@@ -4989,19 +5147,23 @@ function RunDesk({
   const selectActiveRunDeferred = (
     teamId: string | null,
     round = activeRound,
+    rotation: number | undefined = activeStage.rotation,
   ) => {
     clearPinnedSelection();
     setSelectedRound(round);
+    setSelectedRotation(rotation);
     setSelectedId(teamId);
     if (
       event &&
       (event.activeRunId !== (teamId ?? undefined) ||
-        event.activeRound !== round)
+        event.activeRound !== round ||
+        (rotationsActive && event.activeRotation !== rotation))
     ) {
       onUpdateEvent({
         ...event,
         activeRunId: teamId ?? undefined,
         activeRound: round,
+        activeRotation: rotation,
       });
     }
   };
@@ -5410,17 +5572,17 @@ function RunDesk({
   const previewRoundTimeSheet = (source: TimeSheetSource) => {
     if (!event || !eventTeams.length) return;
     setTimeSheetPreview({
-      title: `Round ${activeRound} ${source === "pick" ? "picked teams" : "draw"} time sheet`,
-      html: roundTimeSheetHtml(event, eventTeams, contestants, activeRound, source),
-      fileName: roundTimeSheetFileName(event.name, activeRound, source),
+      title: `${stageLabel(activeStage)} ${source === "pick" ? "picked teams" : "draw"} time sheet`,
+      html: roundTimeSheetHtml(event, eventTeams, contestants, activeRound, source, activeStage.rotation),
+      fileName: roundTimeSheetFileName(event.name, activeRound, source, activeStage.rotation),
     });
   };
   const previewPickedTeamsPosting = () => {
     if (!event || !eventTeams.length) return;
     setTimeSheetPreview({
-      title: `Round ${activeRound} picked teams posting`,
-      html: pickedTeamsPostingHtml(event, eventTeams, contestants, activeRound),
-      fileName: pickedTeamsPostingFileName(event.name, activeRound),
+      title: `${stageLabel(activeStage)} picked teams posting`,
+      html: pickedTeamsPostingHtml(event, eventTeams, contestants, activeRound, activeStage.rotation),
+      fileName: pickedTeamsPostingFileName(event.name, activeRound, activeStage.rotation),
     });
   };
   const printRoundTimeSheet = () => {
@@ -5585,12 +5747,12 @@ function RunDesk({
       },
     });
   };
-  const changeRound = (round: number) => {
-    const roundTeams = allEventTeams.filter((team) => team.round === round);
+  const changeStage = (stage: RunDeskStage) => {
+    const roundTeams = stageTeams(allEventTeams, stage);
     const nextRoundTeam =
       roundTeams.find((team) => team.status === "ready" && !team.rolled) ??
       roundTeams.find((team) => team.status === "ready");
-    selectActiveRunDeferred(nextRoundTeam?.id ?? null, round);
+    selectActiveRunDeferred(nextRoundTeam?.id ?? null, stage.round, stage.rotation);
     setRawTime("");
     setPenalties("0");
     setNotes("");
@@ -5661,6 +5823,9 @@ function RunDesk({
       ...team,
       headerEntryNumber: pairingRun,
       heelerEntryNumber: pairingRun,
+      ...(rotationsActive
+        ? { rotation: Math.max(1, rotationCount(event, allEventTeams)) }
+        : {}),
     };
     onAddRideIn(rideInTeam);
     setShowRideInForm(false);
@@ -5756,19 +5921,20 @@ function RunDesk({
       {event && event.drawApproved === true && (
         <div className="run-desk-round-controls">
           <div className="round-tabs" role="tablist" aria-label="Competition rounds">
-            {Array.from({ length: roundCount }, (_, index) => {
-              const round = index + 1;
-              const roundTeams = allEventTeams.filter((team) => team.round === round);
+            {stages.map((stage, index) => {
+              const roundTeams = stageTeams(allEventTeams, stage);
               const completed = roundTeams.filter((team) => team.status !== "ready").length;
+              const isActive = index === activeStageIndex;
+              const isShortRound = rotationsActive && stage.rotation === undefined;
               return (
                 <button
-                  className={activeRound === round ? "active" : ""}
-                  key={round}
+                  className={isActive ? "active" : ""}
+                  key={`${stage.round}-${stage.rotation ?? "final"}`}
                   role="tab"
-                  aria-selected={activeRound === round}
-                  onClick={() => changeRound(round)}
+                  aria-selected={isActive}
+                  onClick={() => changeStage(stage)}
                 >
-                  <span>Round {round}</span>
+                  <span>{isShortRound ? `Short round · Round ${stage.round}` : stage.rotation ? `Rotation ${stage.rotation} · Round ${stage.round}` : `Round ${stage.round}`}</span>
                   <small>{completed}/{roundTeams.length} runs</small>
                 </button>
               );
@@ -5796,9 +5962,9 @@ function RunDesk({
             >
               <Printer size={16} /> Post picked teams
             </button>
-            {activeRound > 1 && (
-              <button className="secondary" onClick={() => changeRound(activeRound - 1)}>
-                <ChevronLeft size={16} /> Previous round
+            {previousStage && (
+              <button className="secondary" onClick={() => changeStage(previousStage)}>
+                <ChevronLeft size={16} /> Previous {rotationsActive ? "stage" : "round"}
               </button>
             )}
             {activeRound === 1 && (
@@ -5894,7 +6060,7 @@ function RunDesk({
       )}
       <div className="run-desk-grid">
         <section className="panel desk-entry">
-          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>Round {activeRound} · {activeRunSaveStatus === "saving" ? "Saving Roping Now…" : activeRunSaveStatus === "error" ? "Roping Now save failed" : activeRunSaveStatus === "offline" ? "Roping Now saved on this computer" : activeRunSaveStatus === "saved" ? "Roping Now saved" : isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Team #${selected.originalTeamNumber ?? selected.drawPosition}${activeRound > 1 ? ` · Draw #${selected.drawPosition}` : ""}` : "Round complete"}</h3></div></div>
+          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>{stageLabel(activeStage)} · {activeRunSaveStatus === "saving" ? "Saving Roping Now…" : activeRunSaveStatus === "error" ? "Roping Now save failed" : activeRunSaveStatus === "offline" ? "Roping Now saved on this computer" : activeRunSaveStatus === "saved" ? "Roping Now saved" : isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Team #${selected.originalTeamNumber ?? selected.drawPosition}${activeRound > 1 ? ` · Draw #${selected.drawPosition}` : ""}` : rotationsActive && activeStage.rotation ? "Stage complete" : "Round complete"}</h3></div></div>
           {selected ? (
             <>
               <div className="active-team">
@@ -5996,7 +6162,7 @@ function RunDesk({
         </section>
 
         <section className="panel run-queue">
-          <PanelHeading title={`Round ${activeRound} run order`} subtitle={`${eventTeams.filter((team) => team.status === "ready").length} teams remaining${eventTeams.length > 1 ? " · Drag teams to reorder" : ""}`} />
+          <PanelHeading title={`${stageLabel(activeStage)} run order`} subtitle={`${eventTeams.filter((team) => team.status === "ready").length} teams remaining${eventTeams.length > 1 ? " · Drag teams to reorder" : ""}`} />
           <div className="queue-scroll">
             {eventTeams.map((team) => (
               <div

@@ -7,13 +7,26 @@ const escapeHtml = (value: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-export function pickedTeamsPostingFileName(eventName: string, round: number) {
+const rotationSuffix = (rotation?: number) =>
+  rotation ? `-rotation-${rotation}` : "";
+
+const rotationTitle = (rotation?: number) =>
+  rotation ? ` Rotation ${rotation}` : "";
+
+const inRotation = (team: Team, rotation?: number) =>
+  rotation === undefined || team.rotation === rotation;
+
+export function pickedTeamsPostingFileName(
+  eventName: string,
+  round: number,
+  rotation?: number,
+) {
   const safeName = eventName
     .trim()
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-|-$/g, "")
     .toLowerCase();
-  return `${safeName || "roping"}-round-${round}-picked-teams-posting.html`;
+  return `${safeName || "roping"}-round-${round}${rotationSuffix(rotation)}-picked-teams-posting.html`;
 }
 
 // Large-print list of picked (ride-in) teams to post for riders.
@@ -22,6 +35,7 @@ export function pickedTeamsPostingHtml(
   teams: Team[],
   contestants: Contestant[],
   round: number,
+  rotation?: number,
 ) {
   const byId = new Map(contestants.map((contestant) => [contestant.id, contestant]));
   const posted = teams
@@ -29,6 +43,7 @@ export function pickedTeamsPostingHtml(
       (team) =>
         team.eventId === event.id &&
         team.round === round &&
+        inRotation(team, rotation) &&
         !team.scratched &&
         !team.generated,
     )
@@ -54,7 +69,7 @@ export function pickedTeamsPostingHtml(
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${escapeHtml(event.name)} - Round ${round} Picked Teams</title>
+  <title>${escapeHtml(event.name)} - Round ${round}${rotationTitle(rotation)} Picked Teams</title>
   <style>
     @page { size: portrait; margin: 10mm; }
     * { box-sizing: border-box; }
@@ -80,7 +95,7 @@ export function pickedTeamsPostingHtml(
       <h1>${escapeHtml(event.name)}</h1>
       <p>${escapeHtml(event.date)} · ${escapeHtml(event.location)}</p>
     </div>
-    <strong>Round ${round} Picked Teams</strong>
+    <strong>Round ${round}${rotationTitle(rotation)} Picked Teams</strong>
   </header>
   <table>
     <thead>
@@ -105,13 +120,14 @@ export function roundTimeSheetFileName(
   eventName: string,
   round: number,
   source: TimeSheetSource = "draw",
+  rotation?: number,
 ) {
   const safeName = eventName
     .trim()
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-|-$/g, "")
     .toLowerCase();
-  return `${safeName || "roping"}-round-${round}-${source === "pick" ? "picked-teams" : "draw"}-time-sheet.html`;
+  return `${safeName || "roping"}-round-${round}${rotationSuffix(rotation)}-${source === "pick" ? "picked-teams" : "draw"}-time-sheet.html`;
 }
 
 export function roundTimeSheetHtml(
@@ -120,6 +136,7 @@ export function roundTimeSheetHtml(
   contestants: Contestant[],
   round: number,
   source: TimeSheetSource = "draw",
+  rotation?: number,
 ) {
   const contestantNames = new Map(
     contestants.map((contestant) => [contestant.id, contestant.name]),
@@ -129,6 +146,7 @@ export function roundTimeSheetHtml(
       (team) =>
         team.eventId === event.id &&
         team.round === round &&
+        inRotation(team, rotation) &&
         !team.scratched &&
         sourceMatches(team, source),
     )
@@ -152,7 +170,7 @@ export function roundTimeSheetHtml(
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${escapeHtml(event.name)} - Round ${round} ${sourceLabel(source)} Time Sheet</title>
+  <title>${escapeHtml(event.name)} - Round ${round}${rotationTitle(rotation)} ${sourceLabel(source)} Time Sheet</title>
   <style>
     @page { size: portrait; margin: 8mm 9mm; }
     * { box-sizing: border-box; }
@@ -180,7 +198,7 @@ export function roundTimeSheetHtml(
       <h1>${escapeHtml(event.name)}</h1>
       <p>${escapeHtml(event.date)} · ${escapeHtml(event.location)}</p>
     </div>
-    <strong>Round ${round} ${sourceLabel(source)} Time Sheet</strong>
+    <strong>Round ${round}${rotationTitle(rotation)} ${sourceLabel(source)} Time Sheet</strong>
   </header>
   <table>
     <thead>

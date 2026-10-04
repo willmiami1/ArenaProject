@@ -75,6 +75,9 @@ export interface ArenaEvent {
   drawHistory: DrawSnapshot[];
   activeRunId?: string;
   activeRound?: number;
+  /** Teams per rotation; 0 or undefined means the roping runs without rotations. */
+  rotationSize?: number;
+  activeRotation?: number;
   supportedEntryTypes?: Array<"draws" | "picked-teams">;
 }
 
@@ -114,6 +117,8 @@ export interface Team {
   scratched: boolean;
   generated: boolean;
   rideIn?: boolean;
+  /** Rotation block for preliminary rounds; unset for the short round or ropings without rotations. */
+  rotation?: number;
   rolled?: boolean;
   reRun?: boolean;
   points: number;

@@ -1373,6 +1373,7 @@ function syncShortGoFinalists(
         checkedIn: false,
         generated: true,
         points: 0,
+        rotation: undefined,
         predictionClosesAt: undefined,
         rolled: undefined,
       })),
@@ -1412,11 +1413,125 @@ function syncShortGoFinalists(
         checkedIn: existing?.checkedIn ?? false,
         generated: true,
         points: 0,
+        rotation: undefined,
         predictionClosesAt: existing?.predictionClosesAt,
         rolled: existing?.rolled,
       };
     }),
   ];
+}
+
+export const ROTATION_SIZE_MIN = 20;
+export const ROTATION_SIZE_MAX = 60;
+
+export function rotationsEnabled(event?: Pick<ArenaEvent, "rotationSize"> | null) {
+  return (event?.rotationSize ?? 0) > 0;
+}
+
+export function rotationCount(event: ArenaEvent, teams: Team[]) {
+  if (!rotationsEnabled(event)) return 0;
+  return teams
+    .filter((team) => team.eventId === event.id && team.round === 1)
+    .reduce((max, team) => Math.max(max, team.rotation ?? 0), 0);
+}
+
+/**
+ * Splits the Round 1 draw into rotations of roughly `size` teams. Teams are
+ * placed in draw order, preferring the rotation where the header is already
+ * heading (or the heeler heeling) and avoiding one where that rider works
+ * the other end, so a rider changes horses between rotations, not runs.
+ */
+export function assignRotations(
+  teams: Team[],
+  eventId: string,
+  size: number,
+) {
+  const rotationSize = Math.min(
+    ROTATION_SIZE_MAX,
+    Math.max(ROTATION_SIZE_MIN, Math.round(size)),
+  );
+  const roundOne = teams
+    .filter(
+      (team) => team.eventId === eventId && team.round === 1 && !team.scratched,
+    )
+    .sort((a, b) => a.drawPosition - b.drawPosition);
+  const count = Math.max(1, Math.ceil(roundOne.length / rotationSize));
+  const capacity = Math.ceil(roundOne.length / count);
+  const filled = Array.from({ length: count }, () => 0);
+  const heading = Array.from({ length: count }, () => new Set<string>());
+  const heeling = Array.from({ length: count }, () => new Set<string>());
+  const placement = new Map<string, number>();
+
+  for (const team of roundOne) {
+    let best = -1;
+    let bestScore = -Infinity;
+    filled.forEach((used, index) => {
+      if (used >= capacity) return;
+      const score =
+        (heading[index].has(team.headerId) ? 2 : 0) +
+        (heeling[index].has(team.heelerId) ? 2 : 0) -
+        (heeling[index].has(team.headerId) ? 3 : 0) -
+        (heading[index].has(team.heelerId) ? 3 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        best = index;
+      }
+    });
+    if (best < 0) best = filled.indexOf(Math.min(...filled));
+    filled[best] += 1;
+    heading[best].add(team.headerId);
+    heeling[best].add(team.heelerId);
+    placement.set(team.id, best + 1);
+  }
+
+  return teams.map((team) => {
+    if (team.eventId !== eventId) return team;
+    if (team.round === 1 && placement.has(team.id)) {
+      return { ...team, rotation: placement.get(team.id) };
+    }
+    return team;
+  });
+}
+
+export function clearRotations(teams: Team[], eventId: string) {
+  return teams.map((team) =>
+    team.eventId === eventId && team.rotation !== undefined
+      ? { ...team, rotation: undefined }
+      : team,
+  );
+}
+
+export type RunDeskStage = { round: number; rotation?: number };
+
+/** Ordered Run Desk stages: each rotation runs its preliminary rounds back to back, then one short round. */
+export function runDeskStages(event: ArenaEvent, teams: Team[]): RunDeskStage[] {
+  const rounds = Math.max(event.rounds ?? 1, 1);
+  const rotations = rotationCount(event, teams);
+  if (!rotations || rounds < 2) {
+    return Array.from({ length: rounds }, (_, index) => ({ round: index + 1 }));
+  }
+  const stages: RunDeskStage[] = [];
+  for (let rotation = 1; rotation <= rotations; rotation += 1) {
+    for (let round = 1; round < rounds; round += 1) {
+      stages.push({ round, rotation });
+    }
+  }
+  stages.push({ round: rounds });
+  return stages;
+}
+
+export function stageTeams(teams: Team[], stage: RunDeskStage) {
+  return teams.filter(
+    (team) =>
+      team.round === stage.round &&
+      (stage.rotation === undefined || team.rotation === stage.rotation),
+  );
+}
+
+export function stageLabel(stage: RunDeskStage) {
+  return stage.rotation
+    ? `Round ${stage.round} · Rotation ${stage.rotation}`
+    : `Round ${stage.round}`;
 }
 
 export function reconcileQualifiedAdvancements(
