@@ -45,7 +45,10 @@ import {
 import type { ArenaData, Contestant } from "./types";
 import { roundRobinRoleCapacity } from "./roundRobinCapacity";
 import { registrationDeskWorkspaceHref } from "./registrationDeskNavigation";
-import { registrationDeskRideInAllowed } from "./registrationWindow";
+import {
+  REGISTRATION_DESK_TEAM_PICK_CLOSED_ERROR,
+  registrationDeskRideInAllowed,
+} from "./registrationWindow";
 import {
   registrationDeskEntryPatch,
   registrationDeskEntryPermissions,
@@ -313,9 +316,14 @@ export function RegistrationDesk() {
       : event.drawLocked
         ? "This competition is visible, but entries are blocked while the draw is locked."
         : "";
-  // Picked teams can still ride in once the competition has started.
+  // Desk-picked teams are ride-ins: they can only be entered once the draw
+  // has been approved and sent to the Run Desk.
   const teamRideIn = Boolean(event && registrationDeskRideInAllowed(event));
-  const teamUnavailableMessage = teamRideIn ? "" : entryUnavailableMessage;
+  const teamUnavailableMessage = !event
+    ? ""
+    : teamRideIn
+      ? ""
+      : REGISTRATION_DESK_TEAM_PICK_CLOSED_ERROR;
   const contestant = data?.contestants.find((item) => item.id === contestantId);
   const waiverContestant = data?.contestants.find(
     (item) => item.id === waiverContestantId,
@@ -1144,6 +1152,11 @@ export function RegistrationDesk() {
             </h2>
           </div>
         </div>
+        {event && !teamRideIn && (
+          <p className="registration-desk-roster-note">
+            {REGISTRATION_DESK_TEAM_PICK_CLOSED_ERROR}
+          </p>
+        )}
         {event && (pickedHeader || pickedHeeler) && (
           <form
             className="registration-roster-pick-team"
@@ -1152,7 +1165,7 @@ export function RegistrationDesk() {
           >
             <div className="registration-roster-pick-team-heading">
               <div>
-                <span>{teamRideIn ? "Ride-in team" : "Pick a team"}</span>
+                <span>Ride-in team</span>
                 <strong>
                   {pickedHeader?.name ?? "Pick a header"}
                   {" & "}
@@ -1164,7 +1177,7 @@ export function RegistrationDesk() {
                     {" · "}
                     {pickedTeamTotals.runCount} runs ·{" "}
                     {formatMoney(pickedTeamTotals.amount)}
-                    {teamRideIn ? " · added to the end of Round 1" : ""}
+                     · added to the end of Round 1
                   </small>
                 )}
               </div>
@@ -1246,11 +1259,7 @@ export function RegistrationDesk() {
                     disabled={busy}
                     onClick={submitPickedTeam}
                   >
-                    {busy
-                      ? "Sending…"
-                      : teamRideIn
-                        ? "Send to Run Desk"
-                        : "Send to Draw Desk"}
+                    {busy ? "Sending…" : "Send to Run Desk"}
                   </button>
                 </div>
               </section>

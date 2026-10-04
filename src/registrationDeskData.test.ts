@@ -52,6 +52,9 @@ const event = (
   status: "Live",
   registrationOpen: true,
   drawLocked: false,
+  // Desk-picked teams are only accepted after the draw is approved, so the
+  // team fixtures default to an approved draw.
+  drawApproved: competitionType !== "draw-pot",
   competitionType,
   entryFee: 50,
   entriesAllowed: 5,
@@ -355,6 +358,13 @@ describe("Registration Desk local mirror", () => {
       heelerEntryNumber: 1,
     });
     expect(result.result.summary).toMatch(/Run Desk as a ride-in/);
+  });
+
+  it("blocks picked teams until the draw is approved", () => {
+    const selectedEvent = event("pick-only", { drawApproved: false });
+    expect(() =>
+      submitLocalRegistrationDeskSignup(workspace(selectedEvent), picked(selectedEvent)),
+    ).toThrow(/once the draw is approved/);
   });
 
   it("still blocks draws once the draw is locked", () => {

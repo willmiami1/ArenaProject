@@ -997,6 +997,7 @@ html:fullscreen .livestream-fullscreen { opacity: 0; pointer-events: none; }
 .registration-desk-roster-heading span { color: #b88458; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
 .registration-desk-roster-heading h2 { margin: 3px 0 0; font-family: "Manrope",sans-serif; font-size: 18px; }
 .registration-desk-roster-empty { margin: 0; padding: 20px; color: #9b8673; font-size: 11px; }
+.registration-desk-roster-note { margin: 0; padding: 10px 20px; color: #e4c494; background: #211810; border-bottom: 1px solid #3e2e23; font-size: 10px; font-weight: 700; }
 .registration-waiver-roster { display: grid; gap: 13px; padding: 16px 20px 19px; background: #110d0a; border-bottom: 1px solid #3e2e23; }
 .registration-waiver-roster>div h3 { margin: 0; color: #e4c494; font-family: "Manrope",sans-serif; font-size: 14px; }
 .registration-waiver-roster>div p { margin: 4px 0 0; color: #9f8a76; font-size: 10px; line-height: 1.5; }
