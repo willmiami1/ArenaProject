@@ -150,46 +150,72 @@ export function riderPostingHtml(
   const names = new Map(
     contestants.map((contestant) => [contestant.id, contestant.name]),
   );
-  const riderIds = new Map<string, string>();
-  included.forEach((team) => {
-    riderIds.set(team.headerId, names.get(team.headerId) ?? "Unknown");
-    riderIds.set(team.heelerId, names.get(team.heelerId) ?? "Unknown");
-  });
-  const riders = [...riderIds.entries()].sort((left, right) =>
-    left[1].localeCompare(right[1], undefined, { sensitivity: "base" }),
-  );
+  const rotations = [
+    ...new Set(included.map((team) => team.rotation).filter((value): value is number => Boolean(value))),
+  ].sort((a, b) => a - b);
+  const byRotation = rotations.length > 0;
 
-  const riderBlocks = riders
-    .map(([riderId, riderName]) => {
-      const runs = included
-        .filter(
-          (team) => team.headerId === riderId || team.heelerId === riderId,
-        )
-        .map((team) => {
-          const heading = team.headerId === riderId;
-          const partnerId = heading ? team.heelerId : team.headerId;
-          const partnerName = names.get(partnerId) ?? "Unknown";
-          // Only the rider's own side counts as a free run — the partner
-          // paid for their entry even when the other side runs free.
-          const freeRun = Boolean(
-            heading ? team.headerFreeRun : team.heelerFreeRun,
-          );
-          const teamNumber = team.originalTeamNumber ?? team.drawPosition;
-          const handicap = teamHandicapTotal(
-            team.headerId,
-            team.heelerId,
-            contestants,
-          );
-          const line = `Team ${teamNumber} · ${heading ? "Heading for" : "Heeling for"} ${escapeHtml(partnerName)} · HC ${handicap}${freeRun ? " · FREE RUN" : ""}`;
-          return `<li class="${freeRun ? "free-run" : ""}">${line}</li>`;
-        })
-        .join("");
-      return `<section class="rider">
+  const riderBlocksFor = (teamsInGroup: Team[]) => {
+    const riderIds = new Map<string, string>();
+    teamsInGroup.forEach((team) => {
+      riderIds.set(team.headerId, names.get(team.headerId) ?? "Unknown");
+      riderIds.set(team.heelerId, names.get(team.heelerId) ?? "Unknown");
+    });
+    const riders = [...riderIds.entries()].sort((left, right) =>
+      left[1].localeCompare(right[1], undefined, { sensitivity: "base" }),
+    );
+    const blocks = riders
+      .map(([riderId, riderName]) => {
+        const runs = teamsInGroup
+          .filter(
+            (team) => team.headerId === riderId || team.heelerId === riderId,
+          )
+          .map((team) => {
+            const heading = team.headerId === riderId;
+            const partnerId = heading ? team.heelerId : team.headerId;
+            const partnerName = names.get(partnerId) ?? "Unknown";
+            // Only the rider's own side counts as a free run — the partner
+            // paid for their entry even when the other side runs free.
+            const freeRun = Boolean(
+              heading ? team.headerFreeRun : team.heelerFreeRun,
+            );
+            const teamNumber = team.originalTeamNumber ?? team.drawPosition;
+            const handicap = teamHandicapTotal(
+              team.headerId,
+              team.heelerId,
+              contestants,
+            );
+            const line = `Team ${teamNumber} · ${heading ? "Heading for" : "Heeling for"} ${escapeHtml(partnerName)} · HC ${handicap}${freeRun ? " · FREE RUN" : ""}`;
+            return `<li class="${freeRun ? "free-run" : ""}">${line}</li>`;
+          })
+          .join("");
+        return `<section class="rider">
       <h2>${escapeHtml(riderName)}</h2>
       <ul>${runs}</ul>
     </section>`;
+      })
+      .join("");
+    return { blocks, riderCount: riders.length };
+  };
+
+  const groups = byRotation
+    ? rotations.map((rotation) => ({
+        title: `Rotation ${rotation}`,
+        teams: included.filter((team) => team.rotation === rotation),
+      }))
+    : [{ title: "", teams: included }];
+  let totalRiders = 0;
+  const groupSections = groups
+    .map(({ title, teams: groupTeams }, index) => {
+      const { blocks, riderCount } = riderBlocksFor(groupTeams);
+      totalRiders += riderCount;
+      const heading = title
+        ? `<h2 class="rotation-title">${escapeHtml(title)} <small>${riderCount} riders · ${groupTeams.length} teams</small></h2>`
+        : "";
+      return `<div class="rotation${index > 0 ? " page-break" : ""}">${heading}<div class="riders">${blocks || "<p>No teams in the draw.</p>"}</div></div>`;
     })
     .join("");
+  const riders = { length: byRotation ? totalRiders : riderBlocksFor(included).riderCount };
 
   return `<!doctype html>
 <html>
@@ -203,6 +229,9 @@ export function riderPostingHtml(
     .rider ul { margin: 0; padding-left: 18px; }
     .rider li { margin: 2px 0; }
     .rider li.free-run { font-weight: 700; }
+    .rotation-title { margin: 16px 0 0; padding: 8px 12px; color: #fff; background: #285f46; border-radius: 6px; font-size: 18px; text-transform: uppercase; }
+    .rotation-title small { margin-left: 10px; font-size: 11px; font-weight: 400; text-transform: none; opacity: .85; }
+    .page-break { break-before: page; page-break-before: always; }
   </style>
 </head>
 <body>
@@ -211,10 +240,10 @@ export function riderPostingHtml(
       <h1>${escapeHtml(event.name)}</h1>
       <p>${escapeHtml(event.date)} · ${escapeHtml(event.location)}</p>
     </div>
-    <strong>Rider Posting List</strong>
+    <strong>Rider Posting List${byRotation ? ` · ${rotations.length} rotations` : ""}</strong>
   </header>
-  <div class="riders">${riderBlocks || "<p>No teams in the draw.</p>"}</div>
-  <footer><span>Destiny Ranch Arena · Post at the arena. Free runs are shown in bold.</span><span>${riders.length} riders · ${included.length} teams</span></footer>
+  ${groupSections}
+  <footer><span>Destiny Ranch Arena · Post at the arena. Free runs are shown in bold.${byRotation ? " Each rotation prints on its own page." : ""}</span><span>${riders.length} riders · ${included.length} teams</span></footer>
 </body>
 </html>`;
 }

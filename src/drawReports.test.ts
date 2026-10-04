@@ -142,6 +142,25 @@ describe("rider posting report", () => {
     expect(html).not.toContain("Team 9 ·");
   });
 
+  it("prints each rotation as its own section when rotations are applied", () => {
+    const html = riderPostingHtml(
+      event,
+      [
+        team({ id: "t1", drawPosition: 1, rotation: 1 }),
+        team({ id: "t2", drawPosition: 2, rotation: 2, headerId: "cy", heelerId: "bo" }),
+      ],
+      contestants,
+    );
+
+    expect(html).toContain("Rotation 1");
+    expect(html).toContain("Rotation 2");
+    expect(html).toContain("2 rotations");
+    expect(html.match(/class="rotation page-break"/g)).toHaveLength(1);
+    const rotationOne = html.slice(html.indexOf("Rotation 1"), html.indexOf("Rotation 2"));
+    expect(rotationOne).toContain("Ada &lt;Header&gt;");
+    expect(rotationOne).not.toContain("Cy Both");
+  });
+
   it("creates a safe downloadable file name", () => {
     expect(riderPostingFileName("Tuesday Roping #4")).toBe(
       "tuesday-roping-4-rider-posting.html",
