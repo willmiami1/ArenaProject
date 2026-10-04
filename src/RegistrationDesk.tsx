@@ -270,6 +270,7 @@ export function RegistrationDesk() {
     {
       id: "header",
       title: "Headers",
+      teams: false,
       entries: eventRoster.filter(
         (rosterEntry) => rosterEntry.role === "Header" && rosterEntry.recordType === "registration",
       ),
@@ -277,11 +278,33 @@ export function RegistrationDesk() {
     {
       id: "heeler",
       title: "Heelers",
+      teams: false,
       entries: eventRoster.filter(
         (rosterEntry) => rosterEntry.role === "Heeler" && rosterEntry.recordType === "registration",
       ),
     },
+    {
+      id: "teams",
+      title: "Picked teams",
+      teams: true,
+      // One row per team, keyed off the header side; generated draw teams
+      // are not desk picks.
+      entries: eventRoster.filter(
+        (rosterEntry) =>
+          rosterEntry.recordType === "team" &&
+          rosterEntry.role === "Header" &&
+          !rosterEntry.generated,
+      ),
+    },
   ];
+  const teamHandicapFor = (rosterEntry: RegistrationDeskRosterEntry) =>
+    rosterEntry.handicap +
+    (eventRoster.find(
+      (other) =>
+        other.recordType === "team" &&
+        other.recordId === rosterEntry.recordId &&
+        other.role === "Heeler",
+    )?.handicap ?? 0);
   const drawsSupported = supportedRegistrationDeskModes(event).includes("draws");
   const entryUnavailableMessage = !event
     ? ""
@@ -943,6 +966,15 @@ export function RegistrationDesk() {
   };
 
   const beginRosterEntryEdit = (entry: RegistrationDeskRosterEntry) => {
+    const partner =
+      entry.recordType === "team"
+        ? eventRoster.find(
+            (other) =>
+              other.recordType === "team" &&
+              other.recordId === entry.recordId &&
+              other.role !== entry.role,
+          )
+        : undefined;
     setRosterEntryEdit({
       key: entry.key,
       eventId: entry.eventId,
@@ -951,6 +983,7 @@ export function RegistrationDesk() {
       role: entry.role,
       entries: entry.entries ?? 1,
       horseName: entry.horseName ?? "",
+      ...(partner ? { partnerHorseName: partner.horseName ?? "" } : {}),
       paid: entry.paid === true,
       paymentMethod: entry.paymentMethod ?? "",
     });
@@ -1235,7 +1268,11 @@ export function RegistrationDesk() {
                     <strong>{section.entries.length}</strong>
                   </div>
                   {!section.entries.length ? (
-                    <p>No {section.title.toLowerCase()} are signed up.</p>
+                    <p>
+                      {section.teams
+                        ? "No teams have been picked."
+                        : `No ${section.title.toLowerCase()} are signed up.`}
+                    </p>
                   ) : (
                     <ul>
                       {section.entries.map((rosterEntry) => {
@@ -1248,40 +1285,46 @@ export function RegistrationDesk() {
                         const editDisabled = busy || !permissions.canEdit;
                         const scratchDisabled = busy || !permissions.canScratch;
                         const picked =
-                          rosterEntry.role === "Header"
+                          !section.teams &&
+                          (rosterEntry.role === "Header"
                             ? pickedHeaderId === rosterEntry.contestantId
-                            : pickedHeelerId === rosterEntry.contestantId;
+                            : pickedHeelerId === rosterEntry.contestantId);
                         return (
                           <li key={rosterEntry.key} className={picked ? "picked" : undefined}>
                             <div className="registration-roster-entry-summary">
                               <div>
-                                <strong>{rosterEntry.name}</strong>
+                                <strong>
+                                  {section.teams
+                                    ? `${rosterEntry.name} & ${rosterEntry.partnerName ?? "—"}`
+                                    : rosterEntry.name}
+                                </strong>
                                 <span>
-                                  {rosterEntry.recordType === "registration"
-                                    ? `${rosterEntry.entries ?? 1} ${
+                                  {section.teams
+                                    ? `Team · Handicap #${teamHandicapFor(rosterEntry)}`
+                                    : `${rosterEntry.entries ?? 1} ${
                                         (rosterEntry.entries ?? 1) === 1
                                           ? "entry"
                                           : "entries"
-                                      }`
-                                    : `Team${
-                                        rosterEntry.partnerName
-                                          ? ` with ${rosterEntry.partnerName}`
-                                          : ""
-                                      }`}
-                                  {" · "}Handicap {rosterEntry.handicap}
+                                      } · Handicap ${rosterEntry.handicap}`}
                                   {rosterEntry.horseName
                                     ? ` · ${rosterEntry.horseName}`
                                     : ""}
-                                  {rosterEntry.payerName
-                                    ? ` · Payer: ${rosterEntry.payerName}${
+                                  {rosterEntry.paymentMethod
+                                    ? ` · ${
                                         rosterEntry.paymentMethod === "tab"
-                                          ? " (tab)"
-                                          : ""
-                                      }`
+                                          ? "Tab"
+                                          : rosterEntry.paymentMethod === "card"
+                                            ? "Card"
+                                            : "Cash"
+                                      }${rosterEntry.paid ? " paid" : ""}`
+                                    : ""}
+                                  {rosterEntry.payerName && !section.teams
+                                    ? ` · Payer: ${rosterEntry.payerName}`
                                     : ""}
                                 </span>
                               </div>
                               <div className="registration-roster-entry-actions">
+                                {!section.teams && (
                                 <button
                                   type="button"
                                   className={picked ? "pick active" : "pick"}
@@ -1299,6 +1342,7 @@ export function RegistrationDesk() {
                                 >
                                   <Users size={13} /> {picked ? "Picked" : "Pick"}
                                 </button>
+                                )}
                                 <button
                                   type="button"
                                   disabled={editDisabled}
@@ -1307,7 +1351,9 @@ export function RegistrationDesk() {
                                       ? "Generated draw teams must be scratched as a whole team."
                                       : editDisabled
                                         ? "Editing requires an open, unlocked live competition in Wix."
-                                        : `Edit ${rosterEntry.name}'s ${rosterEntry.role.toLowerCase()} entry`
+                                        : section.teams
+                                          ? "Edit this team's horses and payment"
+                                          : `Edit ${rosterEntry.name}'s ${rosterEntry.role.toLowerCase()} entry`
                                   }
                                   onClick={() => beginRosterEntryEdit(rosterEntry)}
                                 >
@@ -1375,7 +1421,7 @@ export function RegistrationDesk() {
                                   </>
                                 )}
                                 <label>
-                                  Horse
+                                  {section.teams ? `${rosterEntry.name}'s horse` : "Horse"}
                                   <input
                                     maxLength={100}
                                     value={rosterEntryEdit.horseName}
@@ -1387,6 +1433,21 @@ export function RegistrationDesk() {
                                     }
                                   />
                                 </label>
+                                {rosterEntryEdit.partnerHorseName !== undefined && (
+                                  <label>
+                                    {rosterEntry.partnerName ?? "Partner"}'s horse
+                                    <input
+                                      maxLength={100}
+                                      value={rosterEntryEdit.partnerHorseName}
+                                      onChange={(change) =>
+                                        setRosterEntryEdit({
+                                          ...rosterEntryEdit,
+                                          partnerHorseName: change.target.value.toUpperCase(),
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                )}
                                 <label>
                                   Payment method
                                   <select

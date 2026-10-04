@@ -95,6 +95,23 @@ describe("Registration Desk entry actions", () => {
     });
   });
 
+  it("updates both team horses when a partner horse is included", () => {
+    expect(
+      registrationDeskEntryPatch({
+        ...draft,
+        recordType: "team",
+        role: "Header",
+        partnerHorseName: " BLUE ",
+        paymentMethod: "cash",
+      }),
+    ).toEqual({
+      headerHorseName: "HORSE",
+      heelerHorseName: "BLUE",
+      paid: true,
+      paymentMethod: "cash",
+    });
+  });
+
   it("builds a confirmed scratch only for the selected event", () => {
     expect(registrationDeskScratchRequest(draft, "event")).toEqual({
       eventId: "event",

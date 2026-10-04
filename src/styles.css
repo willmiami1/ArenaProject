@@ -1011,6 +1011,7 @@ html:fullscreen .livestream-fullscreen { opacity: 0; pointer-events: none; }
 .registration-waiver-status-control button:disabled { color: #9f8a76; background: #211810; border-color: #49372b; opacity: .7; }
 .registration-desk-roster-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #3e2e23; }
 .registration-desk-roster-group { min-width: 0; background: #17110d; }
+.registration-desk-roster-group:nth-child(3) { grid-column: 1 / -1; }
 .registration-desk-roster-role-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 20px; background: #211810; border-bottom: 1px solid #3e2e23; }
 .registration-desk-roster-role-heading h3 { margin: 0; color: #e4c494; font-family: "Manrope",sans-serif; font-size: 13px; }
 .registration-desk-roster-role-heading strong { display: grid; width: 27px; height: 27px; place-items: center; color: #f1d4ac; background: #3b281b; border: 1px solid #68482e; border-radius: 50%; font-size: 10px; }

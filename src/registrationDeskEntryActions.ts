@@ -9,6 +9,7 @@ export interface RegistrationDeskEntryDraft {
   role: "Header" | "Heeler";
   entries: number;
   horseName: string;
+  partnerHorseName?: string;
   paid: boolean;
   paymentMethod: "" | "cash" | "card" | "tab";
 }
@@ -49,6 +50,12 @@ export function registrationDeskEntryPatch(
   return {
     [draft.role === "Header" ? "headerHorseName" : "heelerHorseName"]:
       draft.horseName.trim(),
+    ...(draft.partnerHorseName !== undefined
+      ? {
+          [draft.role === "Header" ? "heelerHorseName" : "headerHorseName"]:
+            draft.partnerHorseName.trim(),
+        }
+      : {}),
     paid: draft.paid,
     ...paymentPatch,
   };
