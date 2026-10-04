@@ -52,14 +52,14 @@ describe("Run Desk manual time sheet", () => {
       1,
     );
 
-    expect(html).toContain("Round 1 Manual Time Sheet");
+    expect(html).toContain("Round 1 Draw Teams Time Sheet");
     expect(html).toContain("<th>Original Team #</th>");
     expect(html).not.toContain("<th>Draw</th>");
     expect(html).toContain("Raw Time");
     expect(html).not.toContain("<th>Steer</th>");
     expect(html).not.toContain("<th>Notes</th>");
     expect(html).toContain("size: portrait");
-    expect(html).not.toContain("No teams in this round.");
+    expect(html).not.toContain("No draw teams in this round.");
     expect(html.match(/Ada &lt;Header&gt;/g)).toHaveLength(2);
     expect(html).toContain('<td class="draw">7</td>');
     expect(html).toContain('<td class="draw">12</td>');
@@ -74,9 +74,29 @@ describe("Run Desk manual time sheet", () => {
     expect(html).not.toContain("Ada <Header>");
   });
 
+  it("separates draw teams from picked teams by sheet source", () => {
+    const teams = [
+      team({ id: "draw", drawPosition: 1, generated: true }),
+      team({ id: "pick", drawPosition: 2, originalTeamNumber: 11, generated: false }),
+    ];
+    const drawSheet = roundTimeSheetHtml(event, teams, contestants, 1, "draw");
+    const pickSheet = roundTimeSheetHtml(event, teams, contestants, 1, "pick");
+
+    expect(drawSheet).toContain('<td class="draw">1</td>');
+    expect(drawSheet).not.toContain('<td class="draw">11</td>');
+    expect(drawSheet).toContain("1 draw teams");
+    expect(pickSheet).toContain("Round 1 Picked Teams Time Sheet");
+    expect(pickSheet).toContain('<td class="draw">11</td>');
+    expect(pickSheet).not.toContain('<td class="draw">1</td>');
+    expect(pickSheet).toContain("1 picked teams");
+  });
+
   it("creates a safe downloadable file name", () => {
     expect(roundTimeSheetFileName("Tuesday Roping #4", 2)).toBe(
-      "tuesday-roping-4-round-2-time-sheet.html",
+      "tuesday-roping-4-round-2-draw-time-sheet.html",
+    );
+    expect(roundTimeSheetFileName("Tuesday Roping #4", 2, "pick")).toBe(
+      "tuesday-roping-4-round-2-picked-teams-time-sheet.html",
     );
   });
 });

@@ -74,6 +74,7 @@ import { ReportsModule } from "./ReportsModule";
 import {
   roundTimeSheetFileName,
   roundTimeSheetHtml,
+  type TimeSheetSource,
 } from "./runDeskPrint";
 import {
   payoffReportFileName,
@@ -5404,12 +5405,12 @@ function RunDesk({
   };
   const openLedLeaderboard = () => openLedDisplay("leaderboard");
   const openLivestream = () => openLedDisplay("livestream");
-  const previewRoundTimeSheet = () => {
+  const previewRoundTimeSheet = (source: TimeSheetSource) => {
     if (!event || !eventTeams.length) return;
     setTimeSheetPreview({
-      title: `Round ${activeRound} time sheet`,
-      html: roundTimeSheetHtml(event, eventTeams, contestants, activeRound),
-      fileName: roundTimeSheetFileName(event.name, activeRound),
+      title: `Round ${activeRound} ${source === "pick" ? "picked teams" : "draw"} time sheet`,
+      html: roundTimeSheetHtml(event, eventTeams, contestants, activeRound, source),
+      fileName: roundTimeSheetFileName(event.name, activeRound, source),
     });
   };
   const printRoundTimeSheet = () => {
@@ -5766,10 +5767,17 @@ function RunDesk({
           <div className="run-desk-round-actions">
             <button
               className="secondary"
-              disabled={!eventTeams.length}
-              onClick={previewRoundTimeSheet}
+              disabled={!eventTeams.some((team) => team.generated)}
+              onClick={() => previewRoundTimeSheet("draw")}
             >
-              <Eye size={16} /> Preview time sheet
+              <Eye size={16} /> Preview draw sheet
+            </button>
+            <button
+              className="secondary"
+              disabled={!eventTeams.some((team) => !team.generated)}
+              onClick={() => previewRoundTimeSheet("pick")}
+            >
+              <Eye size={16} /> Preview picked teams sheet
             </button>
             {activeRound > 1 && (
               <button className="secondary" onClick={() => changeRound(activeRound - 1)}>

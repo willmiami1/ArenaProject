@@ -7,13 +7,25 @@ const escapeHtml = (value: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-export function roundTimeSheetFileName(eventName: string, round: number) {
+export type TimeSheetSource = "draw" | "pick";
+
+const sourceLabel = (source: TimeSheetSource) =>
+  source === "pick" ? "Picked Teams" : "Draw Teams";
+
+const sourceMatches = (team: Team, source: TimeSheetSource) =>
+  source === "pick" ? !team.generated : !!team.generated;
+
+export function roundTimeSheetFileName(
+  eventName: string,
+  round: number,
+  source: TimeSheetSource = "draw",
+) {
   const safeName = eventName
     .trim()
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-|-$/g, "")
     .toLowerCase();
-  return `${safeName || "roping"}-round-${round}-time-sheet.html`;
+  return `${safeName || "roping"}-round-${round}-${source === "pick" ? "picked-teams" : "draw"}-time-sheet.html`;
 }
 
 export function roundTimeSheetHtml(
@@ -21,18 +33,21 @@ export function roundTimeSheetHtml(
   teams: Team[],
   contestants: Contestant[],
   round: number,
+  source: TimeSheetSource = "draw",
 ) {
   const contestantNames = new Map(
     contestants.map((contestant) => [contestant.id, contestant.name]),
   );
-  const rows = teams
+  const sheetTeams = teams
     .filter(
       (team) =>
         team.eventId === event.id &&
         team.round === round &&
-        !team.scratched,
+        !team.scratched &&
+        sourceMatches(team, source),
     )
-    .sort((left, right) => left.drawPosition - right.drawPosition)
+    .sort((left, right) => left.drawPosition - right.drawPosition);
+  const rows = sheetTeams
     .map((team) => {
       const header = contestantNames.get(team.headerId) ?? "Unknown";
       const heeler = contestantNames.get(team.heelerId) ?? "Unknown";
@@ -51,7 +66,7 @@ export function roundTimeSheetHtml(
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${escapeHtml(event.name)} - Round ${round} Time Sheet</title>
+  <title>${escapeHtml(event.name)} - Round ${round} ${sourceLabel(source)} Time Sheet</title>
   <style>
     @page { size: portrait; margin: 8mm 9mm; }
     * { box-sizing: border-box; }
@@ -79,15 +94,15 @@ export function roundTimeSheetHtml(
       <h1>${escapeHtml(event.name)}</h1>
       <p>${escapeHtml(event.date)} · ${escapeHtml(event.location)}</p>
     </div>
-    <strong>Round ${round} Manual Time Sheet</strong>
+    <strong>Round ${round} ${sourceLabel(source)} Time Sheet</strong>
   </header>
   <table>
     <thead>
       <tr><th>Original Team #</th><th>Header</th><th>Heeler</th><th>Raw Time</th><th>Penalty</th><th>Total / NT</th></tr>
     </thead>
-    <tbody>${rows || '<tr><td colspan="6">No teams in this round.</td></tr>'}</tbody>
+    <tbody>${rows || `<tr><td colspan="6">No ${source === "pick" ? "picked" : "draw"} teams in this round.</td></tr>`}</tbody>
   </table>
-  <footer><span>Destiny Ranch Arena · Record times on paper, then enter them in Run Desk.</span><span>${teams.filter((team) => team.eventId === event.id && team.round === round && !team.scratched).length} teams</span></footer>
+  <footer><span>Destiny Ranch Arena · Record times on paper, then enter them in Run Desk.</span><span>${sheetTeams.length} ${source === "pick" ? "picked" : "draw"} teams</span></footer>
 </body>
 </html>`;
 }
