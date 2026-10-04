@@ -4441,28 +4441,6 @@ function Teams({
                 <span className="person"><i>{initials(rider(registration.contestantId)?.name ?? "")}</i><span><strong>{rider(registration.contestantId)?.name}</strong><small>{registration.role} · {registration.entries} entr{registration.entries === 1 ? "y" : "ies"}{registration.horseName ? ` · Horse: ${registration.horseName}` : ""}{registration.sourceTeamId ? " · Picked team" : ""}{registration.paid === false && registration.paymentMethod === "tab" ? " · Open tab" : ""}</small></span></span>
                 <span className={`tag ${registration.status === "entered" ? "complete" : registration.status === "waitlist" ? "amber" : "no-time"}`}>{registration.status}</span>
                 <button className={registration.paid === false ? "secondary small-action" : "selected-button small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, paid: registration.paid === false })}>{registration.paid === false ? (registration.paymentMethod === "tab" ? "Open tab · mark paid" : "Mark paid") : "Paid"}</button>
-                <button className={registration.checkedIn ? "selected-button small-action" : "secondary small-action"} disabled={event.drawLocked} onClick={() => onUpdateRegistration({ ...registration, checkedIn: !registration.checkedIn })}>{registration.checkedIn ? <><Check size={14} /> Checked in</> : "Check in"}</button>
-                <button className="secondary small-action" disabled={event.drawLocked} onClick={() => {
-                  if (registration.status === "scratched") {
-                    try {
-                      assertRoundRobinRoleCapacity(
-                        event,
-                        eventRegistrations,
-                        registration.role,
-                        registration.entries,
-                      );
-                    } catch (error) {
-                      setMessage(
-                        error instanceof Error ? error.message : "Registration is full.",
-                      );
-                      return;
-                    }
-                  }
-                  onUpdateRegistration({
-                    ...registration,
-                    status: registration.status === "scratched" ? "entered" : "scratched",
-                  });
-                }}>{registration.status === "scratched" ? "Restore" : "Scratch"}</button>
                 <button className="icon-action delete-action small-icon" disabled={event.drawLocked} title="Delete registration" onClick={() => onDeleteRegistration(registration.id)}><Trash2 size={14} /></button>
               </div>
             ))}
@@ -4570,9 +4548,7 @@ function Teams({
                     <CircleDollarSign size={15} />
                   </button>
                 )}
-                <button title={team.checkedIn ? "Checked in" : "Check in"} disabled={event?.drawLocked} onClick={() => onUpdateTeam({ ...team, checkedIn: !team.checkedIn })}>{team.checkedIn ? <Check size={15} /> : <UserRound size={15} />}</button>
                 {!team.generated && <button title="Edit team" disabled={!canEdit} onClick={() => { setEditingTeam(team); setShowForm(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil size={15} /></button>}
-                <button title={team.scratched ? "Restore team" : "Scratch team"} disabled={event?.drawLocked} onClick={() => onUpdateTeam({ ...team, scratched: !team.scratched })}><X size={15} /></button>
                 <button className="delete-action" title="Delete team" disabled={!canEdit} onClick={() => onDeleteTeam(team.id)}><Trash2 size={15} /></button>
               </span>
             </div>
