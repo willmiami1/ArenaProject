@@ -872,6 +872,14 @@ export function RegistrationDesk() {
       setTeamPaymentMethod("");
       setTeamReview(false);
       setTeamSubmissionId("");
+      // Leave Step 1 empty for the next contestant, keeping the summary visible.
+      setContestantId("");
+      setProfile(emptyContestant());
+      setCreatingProfile(false);
+      setEditingProfile(false);
+      signWaiverAfterSave.current = false;
+      setPinOpen(false);
+      setSearch("");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "The entry could not be saved.",
@@ -1755,8 +1763,6 @@ export function RegistrationDesk() {
                   )}
                 </div>
               </section>
-              {rosterPanel}
-            </div>
 
             <section className="registration-desk-panel">
               <div className="registration-desk-panel-heading">
@@ -1859,6 +1865,8 @@ export function RegistrationDesk() {
                   </form>
               </div>
             </section>
+              {rosterPanel}
+            </div>
           </div>
         )}
 
