@@ -64,6 +64,7 @@ export type WixAction =
   | "loadContestantSignedWaiver"
   | "getRegistrationDeskAccess"
   | "promptRegistrationDeskLogin"
+  | "logoutRegistrationDesk"
   | "loadRegistrationDeskData"
   | "saveRegistrationDeskContestant"
   | "setRegistrationDeskContestantPin"
@@ -367,6 +368,7 @@ export function sensitiveWixAction(action: WixAction) {
     action === "loadContestantSignedWaiver" ||
     action === "getRegistrationDeskAccess" ||
     action === "promptRegistrationDeskLogin" ||
+    action === "logoutRegistrationDesk" ||
     action === "loadRegistrationDeskData" ||
     action === "saveRegistrationDeskContestant" ||
     action === "setRegistrationDeskContestantPin" ||
@@ -674,6 +676,10 @@ export function getRegistrationDeskAccess() {
 
 export function promptRegistrationDeskLogin() {
   return requestWix<AdminAccessResult>("promptRegistrationDeskLogin");
+}
+
+export function logoutRegistrationDesk() {
+  return requestWix<{ loggedOut: boolean }>("logoutRegistrationDesk");
 }
 
 export function loadRegistrationDeskData() {

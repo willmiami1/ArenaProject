@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, LockKeyhole, LogIn, ShieldAlert } from "lucide-react";
+import { ArrowLeft, LockKeyhole, LogIn, LogOut, RefreshCw, ShieldAlert } from "lucide-react";
 import {
   canMountArenaCommand,
   isBrowserStoragePreview,
@@ -9,6 +9,7 @@ import {
 import {
   getAdminAccess,
   isWixEmbed,
+  logoutAdmin,
   promptAdminLogin,
 } from "./wixBridge";
 
@@ -77,6 +78,35 @@ export function AdminAccessGate({ children }: { children: ReactNode }) {
     }
   };
 
+  // Roles assigned in the Wix dashboard after login only show up on a fresh
+  // access check, so a denied operator can re-check without reloading.
+  const checkAgain = async () => {
+    setBusy(true);
+    setMessage("Checking your Wix administrator access...");
+    try {
+      applyResult(await getAdminAccess());
+    } catch {
+      setState("login-required");
+      setMessage("Sign in with a Wix account assigned the Arena Admin role.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const logout = async () => {
+    setBusy(true);
+    setMessage("Signing out of Wix Members...");
+    try {
+      await logoutAdmin();
+    } catch {
+      // The host reloads after logout; a rejected relay still means we
+      // should offer the login button again.
+    }
+    setState("login-required");
+    setMessage("Sign in with a Wix account assigned the Arena Admin role.");
+    setBusy(false);
+  };
+
   if (canMountArenaCommand(state)) {
     return (
       <>
@@ -117,6 +147,17 @@ export function AdminAccessGate({ children }: { children: ReactNode }) {
               <LogIn size={18} />
               {busy ? "Checking access..." : "Log in with Wix Members"}
             </button>
+          )}
+          {state === "denied" && embedded && (
+            <>
+              <button className="public-button primary" disabled={busy} onClick={checkAgain}>
+                <RefreshCw size={18} />
+                {busy ? "Checking access..." : "Check access again"}
+              </button>
+              <button className="public-button" disabled={busy} onClick={logout}>
+                <LogOut size={18} /> Log out and switch account
+              </button>
+            </>
           )}
           {state === "unavailable" &&
             import.meta.env.VITE_WIX_HOST_ORIGIN?.trim() && (

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, ClipboardPen, LogIn, ShieldAlert } from "lucide-react";
+import { ArrowLeft, ClipboardPen, LogIn, LogOut, RefreshCw, ShieldAlert } from "lucide-react";
 import {
   canMountArenaCommand,
   isBrowserStoragePreview,
@@ -9,6 +9,7 @@ import {
 import {
   getRegistrationDeskAccess,
   isWixEmbed,
+  logoutRegistrationDesk,
   promptRegistrationDeskLogin,
 } from "./wixBridge";
 
@@ -80,6 +81,32 @@ export function RegistrationDeskAccessGate({
     }
   };
 
+  const checkAgain = async () => {
+    setBusy(true);
+    setMessage("Checking registration desk access...");
+    try {
+      applyResult(await getRegistrationDeskAccess());
+    } catch {
+      setState("login-required");
+      setMessage("Sign in with a Wix Registration Desk account.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const logout = async () => {
+    setBusy(true);
+    setMessage("Signing out of Wix Members...");
+    try {
+      await logoutRegistrationDesk();
+    } catch {
+      // Fall through to the login prompt either way.
+    }
+    setState("login-required");
+    setMessage("Sign in with a Wix Registration Desk account.");
+    setBusy(false);
+  };
+
   if (canMountArenaCommand(state)) return <>{children}</>;
 
   return (
@@ -97,6 +124,17 @@ export function RegistrationDeskAccessGate({
               <LogIn size={18} />
               {busy ? "Checking access..." : "Log in with Wix Members"}
             </button>
+          )}
+          {state === "denied" && embedded && (
+            <>
+              <button className="public-button" disabled={busy} onClick={checkAgain}>
+                <RefreshCw size={18} />
+                {busy ? "Checking access..." : "Check access again"}
+              </button>
+              <button className="public-button" disabled={busy} onClick={logout}>
+                <LogOut size={18} /> Log out and switch account
+              </button>
+            </>
           )}
           <a className="public-button quiet" href="?page=home">
             <ArrowLeft size={18} /> Return to public website
