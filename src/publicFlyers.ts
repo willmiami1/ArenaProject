@@ -5,10 +5,6 @@ export interface PublicFlyer {
 
 export const futureEventFlyers: PublicFlyer[] = [
   {
-    src: "./october-17-bad-boy-roping-flyer.png",
-    alt: "Destiny Ranch Arena Saturday October 17 Team Roping flyer — #10.5 Bad Boy Roping, draw 2 $200, add pick or draw $100, 3 heads, 70% payback, buckles to 1-3 winners, Bad Boy lawn mower to high point roper with 150 paying teams, gates 7:30 AM, books 8:30 AM, rope 9:30 AM, Brazilian food truck",
-  },
-  {
     src: "./november-20-friday-nights-roping-flyer.png",
     alt: "Destiny Ranch Arena Friday Nights Roping flyer — Friday November 20th, Fall Roping 8.5 drawpot capped at 5, draw 5 for $300, add pick or draw $60, 3 heads, incentive on #6, progressive payback starting at 60%, buckles to 3 best headers and heelers, gates 6 PM, books 7 PM, rope 8 PM, Brazilian food trucks, family fun",
   },
