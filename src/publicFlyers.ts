@@ -20,6 +20,10 @@ export const futureEventFlyers: PublicFlyer[] = [
 
 export const pastEventWinnerFlyers: PublicFlyer[] = [
   {
+    src: "./october-17-winners-flyer.png",
+    alt: "Destiny Ranch Arena Saturday October 17 Team Roping winners flyer — 9 Slide Round Robin, 1st Jorge Pinheiro & Hazael Rodriguez, 2nd Enrique Hernandez & Kadu Amaral, 3rd Sean Nyberge x Kadu Amaral, next roping Nov 20th",
+  },
+  {
     src: "./september-25-winners-flyer.jpg",
     alt: "Destiny Ranch Arena Friday September 25 Team Roping winners flyer — 9 Slide Round Robin, 1st Jerry Vandermaas & John Hudson, 2nd Tyle Upshaw & Michael Dudash, 3rd Doug Pence x Kadu Amaral, Incentive #7 Tyler Upshaw & Jason Bell, next roping Oct 17th",
   },
