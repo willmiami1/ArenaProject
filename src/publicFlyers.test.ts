@@ -9,7 +9,7 @@ describe("public flyer categories", () => {
     expect(futureEventFlyers).toEqual([
       {
         src: "./november-20-friday-nights-roping-flyer.png",
-        alt: "Destiny Ranch Arena Friday Nights Roping flyer — Friday November 20th, Fall Roping 8.5 drawpot capped at 5, draw 5 for $300, add pick or draw $60, 3 heads, incentive on #6, progressive payback starting at 60%, buckles to 3 best headers and heelers, gates 6 PM, books 7 PM, rope 8 PM, Brazilian food trucks, family fun",
+        alt: "Destiny Ranch Arena Friday Nights Roping flyer — Friday November 20th, Fall Roping #8.5 drawpot capped at #4.5, draw 6 for $300, add pick or draw $50, 3 heads, incentive on #6, payout scale from 50% with 50 paying teams up to 75% with 250+, buckle to 3 best headers and heelers, gates 6 PM, books 7 PM, rope 8 PM, Brazilian food trucks, family fun",
       },
       {
         src: "./december-19-christmas-roping-flyer.png",
