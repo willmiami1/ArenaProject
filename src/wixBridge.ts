@@ -465,20 +465,40 @@ function requestWixFromOrigin<T>(
             750,
           )
         : undefined;
+    // Mutations take workspace locks and consistent reads on Wix; cold
+    // starts can run well past 8 s even though the write succeeds.
+    const slowMutation =
+      action === "save" ||
+      action === "saveContestant" ||
+      action === "saveEvent" ||
+      action === "saveRegistration" ||
+      action === "setActiveRun" ||
+      action === "setContestantPin" ||
+      action === "saveRegistrationDeskContestant" ||
+      action === "setRegistrationDeskContestantPin" ||
+      action === "submitRegistrationDeskSignup" ||
+      action === "updateRegistrationDeskEntry" ||
+      action === "scratchRegistrationDeskEntry" ||
+      action === "submitPublicSignupCash" ||
+      action === "submitRegistrationDeskWaiver";
     const timeoutMilliseconds =
       action === "promptAdminLogin" ||
       action === "promptRegistrationDeskLogin" ||
       action === "startPublicSignupPayment"
         ? 5 * 60 * 1000
-        : action === "save" ||
-            action === "submitPublicSignupCash" ||
-            action === "submitRegistrationDeskWaiver"
+        : slowMutation
           ? 30 * 1000
         : 8000;
     const timeout = window.setTimeout(() => {
       if (retry !== undefined) window.clearInterval(retry);
       window.removeEventListener("message", handleMessage);
-      reject(new Error("Wix persistence did not respond."));
+      reject(
+        new Error(
+          slowMutation
+            ? "Wix is taking longer than usual to confirm this save. Your change is kept on this computer and will sync automatically; refresh the page to verify."
+            : "Wix persistence did not respond.",
+        ),
+      );
     }, timeoutMilliseconds);
 
     function handleMessage(event: MessageEvent<WixResponse<T>>) {
