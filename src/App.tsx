@@ -3398,11 +3398,15 @@ function Contestants({
         <ContestantForm
           contestant={editing ?? undefined}
           onOpenRegistrationDesk={onOpenRegistrationDesk}
-          onSubmit={async (rider) => {
-            if (editing) await onUpdate(rider);
-            else await onAdd(rider);
+          onSubmit={(rider) => {
+            // Close right away; the header shows "Saving" while the Wix write
+            // settles and any failure surfaces in the workspace save banner.
+            const pending = Promise.resolve(
+              editing ? onUpdate(rider) : onAdd(rider),
+            );
             setEditing(null);
             setShowForm(false);
+            pending.catch(() => undefined);
           }}
           onCancel={() => {
             setEditing(null);

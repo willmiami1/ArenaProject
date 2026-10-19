@@ -822,6 +822,32 @@ export function useArenaData() {
           lastFailedSnapshot.current = "";
           setStatus(currentWasDirty ? "saving" : "saved");
           return confirmation.contestant;
+        } catch (error) {
+          // The editor closes before the save settles, so keep the edit in the
+          // local workspace (the dirty autosave re-syncs it) and surface the
+          // failure in the save banner instead of a now-unmounted form.
+          const exists = dataRef.current.contestants.some(
+            (item) => item.id === contestant.id,
+          );
+          const withContestant: ArenaData = {
+            ...dataRef.current,
+            contestants: exists
+              ? dataRef.current.contestants.map((item) =>
+                  item.id === contestant.id ? contestant : item,
+                )
+              : [...dataRef.current.contestants, contestant],
+          };
+          skipNextSave.current = false;
+          directMutationReconciliationSnapshot.current = "";
+          localDirty.current = true;
+          dataRef.current = withContestant;
+          setData(withContestant);
+          setLastSaveError(
+            error instanceof Error
+              ? error.message
+              : "The contestant profile could not be saved.",
+          );
+          throw error;
         } finally {
           contestantSaveInFlight.current = false;
           releaseSaveIdleWaiters();
