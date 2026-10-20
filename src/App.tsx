@@ -39,6 +39,7 @@ import {
   MapPin,
   Maximize2,
   Menu,
+  MessageSquareText,
   MonitorUp,
   Plus,
   Pencil,
@@ -71,6 +72,13 @@ import {
   type PublicSpectatorLeaderboardRow,
 } from "./publicData";
 import { ReportsModule } from "./ReportsModule";
+import {
+  buildSmsHref,
+  isAppleMessagesPlatform,
+  ridersForTextAudience,
+  textableEvents,
+  type TextAudience,
+} from "./riderTexting";
 import {
   pickedTeamsPostingFileName,
   pickedTeamsPostingHtml,
@@ -2997,6 +3005,116 @@ function ContestantWaiverStatus({
   );
 }
 
+function TextRidersDialog({
+  contestants,
+  events,
+  registrations,
+  teams,
+  onClose,
+}: {
+  contestants: Contestant[];
+  events: ArenaEvent[];
+  registrations: EventRegistration[];
+  teams: Team[];
+  onClose: () => void;
+}) {
+  const orderedEvents = useMemo(() => textableEvents(events), [events]);
+  const [audienceKey, setAudienceKey] = useState(
+    orderedEvents[0]?.id ?? "roster",
+  );
+  const [message, setMessage] = useState("");
+  const [copied, setCopied] = useState("");
+  const audience: TextAudience =
+    audienceKey === "roster" ? "roster" : { eventId: audienceKey };
+  const { recipients, missingPhone } = useMemo(
+    () => ridersForTextAudience(audience, contestants, registrations, teams),
+    [audienceKey, contestants, registrations, teams], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const phones = recipients.map((recipient) => recipient.phone);
+  const apple = isAppleMessagesPlatform(navigator.userAgent);
+  const href = buildSmsHref(phones, message, apple);
+  const copy = async (label: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(`${label} copied.`);
+    } catch {
+      setCopied(`Could not copy ${label.toLowerCase()}.`);
+    }
+  };
+  return (
+    <div
+      className="contestant-profile-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="contestant-profile-dialog text-riders-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="text-riders-title"
+      >
+        <div className="contestant-profile-header">
+          <div>
+            <span>Text riders</span>
+            <h2 id="text-riders-title">Send a group text</h2>
+          </div>
+          <button className="icon-action" title="Close" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div className="contestant-profile-content text-riders-content">
+          <label className="field">
+            <span>Recipients</span>
+            <select value={audienceKey} onChange={(event) => setAudienceKey(event.target.value)}>
+              {orderedEvents.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.name} · {new Date(`${event.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </option>
+              ))}
+              <option value="roster">Everyone on the roster</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Message</span>
+            <textarea
+              rows={4}
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder="Books open at 5pm, roping starts at 6. See you at Destiny Ranch!"
+            />
+          </label>
+          <p className="text-riders-count">
+            <strong>{recipients.length}</strong> rider{recipients.length === 1 ? "" : "s"} with a phone number
+            {missingPhone.length > 0 && (
+              <> · <span className="text-riders-missing">{missingPhone.length} without a number: {missingPhone.map((c) => c.name).join(", ")}</span></>
+            )}
+          </p>
+          <div className="text-riders-actions">
+            <a
+              className="primary"
+              href={recipients.length ? href : undefined}
+              aria-disabled={!recipients.length}
+              style={recipients.length ? undefined : { opacity: 0.5, pointerEvents: "none" }}
+            >
+              <MessageSquareText size={16} /> Open in Messages
+            </a>
+            <button className="secondary" disabled={!recipients.length} onClick={() => { void copy("Numbers", phones.join(", ")); }}>
+              Copy numbers
+            </button>
+            <button className="secondary" disabled={!message.trim()} onClick={() => { void copy("Message", message); }}>
+              Copy message
+            </button>
+          </div>
+          {copied && <p className="text-riders-note" role="status">{copied}</p>}
+          <p className="text-riders-note">
+            Open in Messages works best on a phone: it starts a group text in your messaging app with the riders and message filled in, and you press send. Recipients will see each other's numbers. On a computer, use Copy numbers instead.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function Contestants({
   contestants,
   meets,
@@ -3025,6 +3143,7 @@ function Contestants({
   const [profile, setProfile] = useState<Contestant | null>(null);
   const [search, setSearch] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
+  const [texting, setTexting] = useState(false);
   const embedded = isWixEmbed();
   const contestantIdsRef = useRef<string[]>([]);
   contestantIdsRef.current = contestants.map(({ id }) => id);
@@ -3394,6 +3513,15 @@ function Contestants({
           </section>
         </div>
       )}
+      {texting && (
+        <TextRidersDialog
+          contestants={contestants}
+          events={events}
+          registrations={registrations}
+          teams={teams}
+          onClose={() => setTexting(false)}
+        />
+      )}
       {(showForm || editing) && (
         <ContestantForm
           contestant={editing ?? undefined}
@@ -3457,6 +3585,14 @@ function Contestants({
             >
               <RefreshCw size={16} />
               {waiverStatuses.phase === "error" ? "Retry waivers" : "Refresh waivers"}
+            </button>
+            <button
+              className="secondary"
+              disabled={!contestants.length}
+              onClick={() => setTexting(true)}
+              title="Text registered riders from your phone's messaging app"
+            >
+              <MessageSquareText size={16} /> Text riders
             </button>
             <button className="secondary" disabled={!contestants.length} onClick={downloadBackup}><Download size={16} /> Download database</button>
             <label className="secondary import-database-button"><Upload size={16} /> Import database<input type="file" accept="application/json,text/plain,.json,.txt" onChange={(event) => { void restoreBackup(event.target.files?.[0]); event.target.value = ""; }} /></label>

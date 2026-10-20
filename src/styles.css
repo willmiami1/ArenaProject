@@ -294,6 +294,15 @@ main { grid-column: 2; min-width: 0; }
 .contestant-profile-identity p { margin: 0; color: #c8dbd0; font-size: 10px; }
 .contestant-profile-header > button { color: #fff; background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.22); }
 .contestant-profile-content { padding: 22px 24px 28px; }
+.text-riders-dialog { width: min(560px,100%); }
+.text-riders-content { display: flex; flex-direction: column; gap: 16px; }
+.text-riders-content .field textarea { min-height: 96px; }
+.text-riders-count { margin: 0; color: var(--muted); font-size: 12px; }
+.text-riders-count strong { color: var(--ink); }
+.text-riders-missing { color: #a14a41; }
+.text-riders-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.text-riders-actions a.primary { text-decoration: none; }
+.text-riders-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .contestant-profile-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
 .contestant-profile-stats span { display: grid; gap: 3px; padding: 17px; color: var(--muted); background: #f5f7f5; border: 1px solid var(--line); border-radius: 8px; font-size: 10px; font-weight: 700; }
 .contestant-profile-stats strong { color: #244c39; font: 800 25px "Manrope",sans-serif; }
