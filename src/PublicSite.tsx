@@ -617,7 +617,9 @@ const contestantAccountRequest = ({
 });
 
 const SMS_CONSENT_TEXT =
-  "Text me about Destiny Ranch Arena ropings: event flyers, my team numbers after the draw, and leaderboard links. Message & data rates may apply. Reply STOP to opt out.";
+  "I agree to receive text messages from Destiny Ranch Arena at the phone number provided about my competition registrations, team numbers after the draw, leaderboard links, and upcoming event flyers. Consent is not a condition of registration. Message frequency varies. Message & data rates may apply. Reply STOP to opt out or HELP for help.";
+const PRIVACY_POLICY_URL = "https://www.destinyrancharena.com/privacy-policy";
+const TERMS_URL = "https://www.destinyrancharena.com/terms";
 
 function SmsConsentField({
   checked,
@@ -633,7 +635,17 @@ function SmsConsentField({
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
       />
-      <span>{SMS_CONSENT_TEXT}</span>
+      <span>
+        {SMS_CONSENT_TEXT} See our{" "}
+        <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer">
+          Privacy Policy
+        </a>{" "}
+        and{" "}
+        <a href={TERMS_URL} target="_blank" rel="noreferrer">
+          Terms & Conditions
+        </a>
+        .
+      </span>
     </label>
   );
 }
@@ -651,7 +663,7 @@ function RiderAccountPage() {
     heelerHandicap: 3,
     pin: "",
     confirmPin: "",
-    smsOptIn: true,
+    smsOptIn: false,
   });
   const [busy, setBusy] = useState(false);
   const accountSubmissionInFlight = useRef(false);
@@ -1474,7 +1486,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     heelerHandicap: 3,
     pin: "",
     confirmPin: "",
-    smsOptIn: true,
+    smsOptIn: false,
   });
   const [options, setOptions] = useState<PublicSignupOptions | null>(null);
   const [selections, setSelections] = useState<Record<string, PublicSignupSelection>>({});
