@@ -252,9 +252,9 @@
 .public-rider-panel label { display: grid; gap: 7px; color: var(--public-cream); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
 .public-rider-panel input,.public-rider-panel select { width: 100%; min-height: 49px; padding: 11px 13px; color: var(--public-cream); background: #0e0b09; border: 1px solid #80674f; border-radius: 0; }
 .public-rider-panel .public-form-message { grid-column: 1/-1; }
-.public-rider-panel label.public-sms-consent { display: flex; gap: 12px; align-items: flex-start; grid-column: 1/-1; padding: 14px; font-size: 13px; font-weight: 400; line-height: 1.5; text-transform: none; letter-spacing: normal; border: 1px solid #80674f; background: #0e0b09; cursor: pointer; }
-.public-rider-panel .public-sms-consent input[type="checkbox"] { width: 20px; height: 20px; min-height: 0; margin: 2px 0 0; padding: 0; flex: none; accent-color: #b97a48; }
-.public-rider-panel .public-sms-consent a { color: var(--public-tan); text-decoration: underline; }
+.public-signup label.public-sms-consent,.public-rider-panel label.public-sms-consent { display: flex; gap: 12px; align-items: flex-start; grid-column: 1/-1; padding: 14px; font-size: 13px; font-weight: 400; line-height: 1.5; text-transform: none; letter-spacing: normal; border: 1px solid #80674f; background: #0e0b09; cursor: pointer; }
+.public-signup .public-sms-consent input[type="checkbox"],.public-rider-panel .public-sms-consent input[type="checkbox"] { width: 20px; height: 20px; min-height: 0; margin: 2px 0 0; padding: 0; flex: none; accent-color: #b97a48; }
+.public-signup .public-sms-consent a,.public-rider-panel .public-sms-consent a { color: var(--public-tan); text-decoration: underline; }
 .public-rider-photo { grid-column: 1/-1; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px; border: 1px solid #80674f; background: #0e0b09; }
 .public-rider-photo-preview { flex: 0 0 auto; width: 72px; height: 72px; display: grid; place-items: center; overflow: hidden; color: var(--public-tan); background: #17130f; border: 1px solid #80674f; border-radius: 50%; }
 .public-rider-photo-preview img { width: 100%; height: 100%; object-fit: cover; }
