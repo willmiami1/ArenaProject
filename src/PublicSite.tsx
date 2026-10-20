@@ -619,7 +619,7 @@ const contestantAccountRequest = ({
 const SMS_CONSENT_TEXT =
   "I agree to receive text messages from Destiny Ranch Arena at the phone number provided about my competition registrations, team numbers after the draw, leaderboard links, and upcoming event flyers. Consent is not a condition of registration. Message frequency varies. Message & data rates may apply. Reply STOP to opt out or HELP for help.";
 const PRIVACY_POLICY_URL = "https://www.destinyrancharena.com/privacy-policy";
-const TERMS_URL = "https://www.destinyrancharena.com/terms";
+const TERMS_URL = "https://www.destinyrancharena.com/terms-conditions";
 
 function SmsConsentField({
   checked,
