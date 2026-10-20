@@ -303,6 +303,22 @@ main { grid-column: 2; min-width: 0; }
 .text-riders-actions { display: flex; flex-wrap: wrap; gap: 9px; }
 .text-riders-actions a.primary { text-decoration: none; }
 .text-riders-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.text-riders-error { color: #a14a41; font-size: 12px; }
+.text-riders-mode { display: flex; gap: 8px; }
+.text-riders-mode button { flex: 1; justify-content: center; }
+.text-riders-hint { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.text-riders-preview, .text-riders-log { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-alt, rgba(0,0,0,0.03)); }
+.text-riders-sample { display: grid; gap: 4px; font-size: 12px; }
+.text-riders-sample span { color: var(--muted); margin-left: 6px; }
+.text-riders-sample pre { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--panel, #fff); border: 1px solid var(--line); white-space: pre-wrap; font: inherit; font-size: 12px; line-height: 1.45; }
+.text-riders-failures { margin: 0; padding-left: 18px; font-size: 12px; color: #a14a41; }
+.text-riders-log { max-height: 260px; overflow: auto; }
+.text-riders-log-row { display: grid; grid-template-columns: 110px 1fr 90px 1fr; gap: 8px; font-size: 12px; align-items: baseline; }
+.text-riders-log-row span:first-child { color: var(--muted); }
+.public-sms-consent { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.45; grid-column: 1 / -1; }
+.public-sms-consent input { margin-top: 3px; flex: none; }
+.public-sms-consent span { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.contestant-sms-consent { margin: 4px 0 12px; font-size: 12px; color: var(--muted); }
 .contestant-profile-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
 .contestant-profile-stats span { display: grid; gap: 3px; padding: 17px; color: var(--muted); background: #f5f7f5; border: 1px solid var(--line); border-radius: 8px; font-size: 10px; font-weight: 700; }
 .contestant-profile-stats strong { color: #244c39; font: 800 25px "Manrope",sans-serif; }

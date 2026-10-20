@@ -121,6 +121,14 @@ import {
   resetSpectatorScoreboard,
   setContestantPin,
   submitRegistrationDeskWaiver,
+  previewRiderTexts,
+  sendRiderTextBatch,
+  loadRiderTextLog,
+  type RiderTextTemplate,
+  type RiderTextPreview,
+  type RiderTextSendResult,
+  type RiderTextLogEntry,
+  type RiderTextRequest,
   type ContestantSignedWaiverEvidence,
   type ContestantPortalData,
 } from "./wixBridge";
@@ -3005,25 +3013,74 @@ function ContestantWaiverStatus({
   );
 }
 
+const RIDER_TEXT_TEMPLATE_OPTIONS: {
+  value: RiderTextTemplate;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    value: "flyer",
+    label: "Flyer / upcoming roping",
+    hint: "Everyone gets your note plus the flyer link (or the online entry page for the selected roping).",
+  },
+  {
+    value: "teams",
+    label: "Team numbers after the draw",
+    hint: "Each rider gets their own team numbers, position and partner, plus a link to their rider page.",
+  },
+  {
+    value: "leaderboard",
+    label: "Leaderboard link",
+    hint: "Everyone in the roping gets the live leaderboard link with team ranking and times.",
+  },
+  {
+    value: "custom",
+    label: "Custom message",
+    hint: "Send exactly what you type (an optional link is added on its own line).",
+  },
+];
+
 function TextRidersDialog({
   contestants,
   events,
   registrations,
   teams,
   onClose,
+  initialTemplate,
+  initialEventId,
+  lockEvent = false,
 }: {
   contestants: Contestant[];
   events: ArenaEvent[];
   registrations: EventRegistration[];
   teams: Team[];
   onClose: () => void;
+  initialTemplate?: RiderTextTemplate;
+  initialEventId?: string;
+  lockEvent?: boolean;
 }) {
   const orderedEvents = useMemo(() => textableEvents(events), [events]);
+  const automaticAvailable = isWixEmbed();
+  const [mode, setMode] = useState<"auto" | "manual">(
+    automaticAvailable ? "auto" : "manual",
+  );
+  const [template, setTemplate] = useState<RiderTextTemplate>(
+    initialTemplate ?? "flyer",
+  );
   const [audienceKey, setAudienceKey] = useState(
-    orderedEvents[0]?.id ?? "roster",
+    initialEventId ?? orderedEvents[0]?.id ?? "roster",
   );
   const [message, setMessage] = useState("");
+  const [link, setLink] = useState("");
   const [copied, setCopied] = useState("");
+  const [preview, setPreview] = useState<RiderTextPreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [sending, setSending] = useState<{ done: number; total: number } | null>(null);
+  const [sendResult, setSendResult] = useState<RiderTextSendResult["summary"] | null>(null);
+  const [failures, setFailures] = useState<RiderTextSendResult["results"]>([]);
+  const [error, setError] = useState("");
+  const [log, setLog] = useState<RiderTextLogEntry[] | null>(null);
+  const [logLoading, setLogLoading] = useState(false);
   const audience: TextAudience =
     audienceKey === "roster" ? "roster" : { eventId: audienceKey };
   const { recipients, missingPhone } = useMemo(
@@ -3041,6 +3098,87 @@ function TextRidersDialog({
       setCopied(`Could not copy ${label.toLowerCase()}.`);
     }
   };
+  const needsEvent = template === "teams" || template === "leaderboard";
+  const eventId = audienceKey === "roster" ? "" : audienceKey;
+  const request: RiderTextRequest = {
+    template,
+    audience: eventId ? "event" : "all",
+    eventId,
+    message,
+    link,
+  };
+  const templateHint = RIDER_TEXT_TEMPLATE_OPTIONS.find((option) => option.value === template)?.hint ?? "";
+  const resetPreview = () => {
+    setPreview(null);
+    setSendResult(null);
+    setFailures([]);
+    setError("");
+  };
+  const runPreview = async () => {
+    setPreviewing(true);
+    setError("");
+    setSendResult(null);
+    setFailures([]);
+    try {
+      const result = await previewRiderTexts(request);
+      if (!result) throw new Error("Wix did not return a preview.");
+      setPreview(result);
+    } catch (previewError) {
+      setPreview(null);
+      setError(previewError instanceof Error ? previewError.message : "Preview failed.");
+    } finally {
+      setPreviewing(false);
+    }
+  };
+  const runSend = async () => {
+    if (!preview || !preview.recipients.length) return;
+    const ids = preview.recipients.map((recipient) => recipient.contestantId);
+    const batchSize = Math.max(1, preview.batchLimit || 40);
+    const batchId = `text-${Date.now().toString(36)}`;
+    const summary = { sent: 0, failed: 0, optedOut: 0 };
+    const failed: RiderTextSendResult["results"] = [];
+    setSending({ done: 0, total: ids.length });
+    setError("");
+    try {
+      for (let start = 0; start < ids.length; start += batchSize) {
+        const batch = ids.slice(start, start + batchSize);
+        const result = await sendRiderTextBatch(request, batch, batchId);
+        if (!result) throw new Error("Wix did not confirm the text batch.");
+        summary.sent += result.summary.sent;
+        summary.failed += result.summary.failed;
+        summary.optedOut += result.summary.optedOut;
+        failed.push(...result.results.filter((item) => item.status !== "queued" && item.status !== "sent" && item.status !== "accepted"));
+        setSending({ done: Math.min(start + batch.length, ids.length), total: ids.length });
+      }
+      setSendResult(summary);
+      setFailures(failed);
+      setPreview(null);
+    } catch (sendError) {
+      setSendResult(summary);
+      setFailures(failed);
+      setError(
+        `${sendError instanceof Error ? sendError.message : "Sending failed."} ${summary.sent} text${summary.sent === 1 ? "" : "s"} went out before the error.`,
+      );
+    } finally {
+      setSending(null);
+    }
+  };
+  const showLog = async () => {
+    setLogLoading(true);
+    try {
+      const entries = await loadRiderTextLog(eventId || undefined, 100);
+      setLog(entries ?? []);
+    } catch (logError) {
+      setError(logError instanceof Error ? logError.message : "The text log could not be loaded.");
+    } finally {
+      setLogLoading(false);
+    }
+  };
+  const eventOptions = orderedEvents.map((event) => (
+    <option key={event.id} value={event.id}>
+      {event.name} · {new Date(`${event.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+    </option>
+  ));
   return (
     <div
       className="contestant-profile-overlay"
@@ -3058,57 +3196,212 @@ function TextRidersDialog({
         <div className="contestant-profile-header">
           <div>
             <span>Text riders</span>
-            <h2 id="text-riders-title">Send a group text</h2>
+            <h2 id="text-riders-title">{mode === "auto" ? "Send texts to riders" : "Send a group text"}</h2>
           </div>
           <button className="icon-action" title="Close" onClick={onClose}><X size={18} /></button>
         </div>
         <div className="contestant-profile-content text-riders-content">
+          <div className="text-riders-mode" role="tablist">
+            <button
+              role="tab"
+              aria-selected={mode === "auto"}
+              className={mode === "auto" ? "primary" : "secondary"}
+              disabled={!automaticAvailable}
+              title={automaticAvailable ? undefined : "Automatic texting works on the Destiny Ranch Arena website."}
+              onClick={() => setMode("auto")}
+            >
+              Send automatically
+            </button>
+            <button
+              role="tab"
+              aria-selected={mode === "manual"}
+              className={mode === "manual" ? "primary" : "secondary"}
+              onClick={() => setMode("manual")}
+            >
+              Open in Messages
+            </button>
+          </div>
+          {mode === "auto" && (
+            <label className="field">
+              <span>What to send</span>
+              <select
+                value={template}
+                onChange={(event) => {
+                  setTemplate(event.target.value as RiderTextTemplate);
+                  resetPreview();
+                }}
+              >
+                {RIDER_TEXT_TEMPLATE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <small className="text-riders-hint">{templateHint}</small>
+            </label>
+          )}
           <label className="field">
             <span>Recipients</span>
-            <select value={audienceKey} onChange={(event) => setAudienceKey(event.target.value)}>
-              {orderedEvents.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.name} · {new Date(`${event.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </option>
-              ))}
-              <option value="roster">Everyone on the roster</option>
+            <select
+              value={audienceKey}
+              disabled={lockEvent}
+              onChange={(event) => {
+                setAudienceKey(event.target.value);
+                resetPreview();
+              }}
+            >
+              {eventOptions}
+              {!lockEvent && !needsEvent && <option value="roster">Everyone on the roster</option>}
             </select>
           </label>
           <label className="field">
-            <span>Message</span>
+            <span>{mode === "auto" && template !== "custom" ? "Note (optional)" : "Message"}</span>
             <textarea
               rows={4}
               value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              placeholder="Books open at 5pm, roping starts at 6. See you at Destiny Ranch!"
+              onChange={(event) => {
+                setMessage(event.target.value);
+                resetPreview();
+              }}
+              placeholder={
+                template === "teams" && mode === "auto"
+                  ? "Books close at 5:30. First team out at 6."
+                  : "Books open at 5pm, roping starts at 6. See you at Destiny Ranch!"
+              }
             />
           </label>
-          <p className="text-riders-count">
-            <strong>{recipients.length}</strong> rider{recipients.length === 1 ? "" : "s"} with a phone number
-            {missingPhone.length > 0 && (
-              <> · <span className="text-riders-missing">{missingPhone.length} without a number: {missingPhone.map((c) => c.name).join(", ")}</span></>
-            )}
-          </p>
-          <div className="text-riders-actions">
-            <a
-              className="primary"
-              href={recipients.length ? href : undefined}
-              aria-disabled={!recipients.length}
-              style={recipients.length ? undefined : { opacity: 0.5, pointerEvents: "none" }}
-            >
-              <MessageSquareText size={16} /> Open in Messages
-            </a>
-            <button className="secondary" disabled={!recipients.length} onClick={() => { void copy("Numbers", phones.join(", ")); }}>
-              Copy numbers
-            </button>
-            <button className="secondary" disabled={!message.trim()} onClick={() => { void copy("Message", message); }}>
-              Copy message
-            </button>
-          </div>
-          {copied && <p className="text-riders-note" role="status">{copied}</p>}
-          <p className="text-riders-note">
-            Open in Messages works best on a phone: it starts a group text in your messaging app with the riders and message filled in, and you press send. Recipients will see each other's numbers. On a computer, use Copy numbers instead.
-          </p>
+          {mode === "auto" && template !== "teams" && (
+            <label className="field">
+              <span>{template === "flyer" ? "Flyer link (optional)" : "Link (optional)"}</span>
+              <input
+                type="url"
+                value={link}
+                placeholder={template === "flyer" ? "https://… (leave blank to link the online entry page)" : "https://…"}
+                onChange={(event) => {
+                  setLink(event.target.value);
+                  resetPreview();
+                }}
+              />
+            </label>
+          )}
+          {mode === "manual" && (
+            <>
+              <p className="text-riders-count">
+                <strong>{recipients.length}</strong> rider{recipients.length === 1 ? "" : "s"} with a phone number
+                {missingPhone.length > 0 && (
+                  <> · <span className="text-riders-missing">{missingPhone.length} without a number: {missingPhone.map((c) => c.name).join(", ")}</span></>
+                )}
+              </p>
+              <div className="text-riders-actions">
+                <a
+                  className="primary"
+                  href={recipients.length ? href : undefined}
+                  aria-disabled={!recipients.length}
+                  style={recipients.length ? undefined : { opacity: 0.5, pointerEvents: "none" }}
+                >
+                  <MessageSquareText size={16} /> Open in Messages
+                </a>
+                <button className="secondary" disabled={!recipients.length} onClick={() => { void copy("Numbers", phones.join(", ")); }}>
+                  Copy numbers
+                </button>
+                <button className="secondary" disabled={!message.trim()} onClick={() => { void copy("Message", message); }}>
+                  Copy message
+                </button>
+              </div>
+              {copied && <p className="text-riders-note" role="status">{copied}</p>}
+              <p className="text-riders-note">
+                Open in Messages works best on a phone: it starts a group text in your messaging app with the riders and message filled in, and you press send. Recipients will see each other's numbers. On a computer, use Copy numbers instead.
+              </p>
+            </>
+          )}
+          {mode === "auto" && (
+            <>
+              <div className="text-riders-actions">
+                <button
+                  className={preview ? "secondary" : "primary"}
+                  disabled={previewing || sending !== null || (needsEvent && !eventId)}
+                  onClick={() => { void runPreview(); }}
+                >
+                  {previewing ? "Checking…" : preview ? "Refresh preview" : "Preview texts"}
+                </button>
+                {preview && (
+                  <button
+                    className="primary"
+                    disabled={sending !== null || !preview.recipients.length || !preview.configured}
+                    onClick={() => {
+                      if (window.confirm(`Send this text to ${preview.recipients.length} rider${preview.recipients.length === 1 ? "" : "s"} now?`)) {
+                        void runSend();
+                      }
+                    }}
+                  >
+                    <MessageSquareText size={16} />
+                    {sending ? `Sending ${sending.done}/${sending.total}…` : `Send to ${preview.recipients.length} rider${preview.recipients.length === 1 ? "" : "s"}`}
+                  </button>
+                )}
+                <button className="secondary" disabled={logLoading} onClick={() => { void showLog(); }}>
+                  {logLoading ? "Loading…" : "Recent texts"}
+                </button>
+              </div>
+              {error && <p className="text-riders-note text-riders-error" role="alert">{error}</p>}
+              {preview && !preview.configured && (
+                <p className="text-riders-note text-riders-error" role="alert">
+                  Twilio is not set up yet. Add the Twilio secrets in the Wix Secrets Manager, then try again.
+                </p>
+              )}
+              {preview && (
+                <div className="text-riders-preview">
+                  <p className="text-riders-count">
+                    <strong>{preview.recipients.length}</strong> rider{preview.recipients.length === 1 ? "" : "s"} will get a text
+                    {preview.missingPhone.length > 0 && (
+                      <> · <span className="text-riders-missing">{preview.missingPhone.length} without a number: {preview.missingPhone.map((c) => c.name).join(", ")}</span></>
+                    )}
+                    {preview.optedOut.length > 0 && (
+                      <> · <span className="text-riders-missing">{preview.optedOut.length} opted out: {preview.optedOut.map((c) => c.name).join(", ")}</span></>
+                    )}
+                  </p>
+                  {preview.samples.map((sample) => (
+                    <div key={sample.contestantId} className="text-riders-sample">
+                      <strong>{sample.name}</strong> <span>{sample.phone}</span>
+                      <pre>{sample.body}</pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {sendResult && (
+                <div className="text-riders-preview" role="status">
+                  <p className="text-riders-count">
+                    <strong>{sendResult.sent}</strong> sent
+                    {sendResult.failed > 0 && <> · <span className="text-riders-missing">{sendResult.failed} failed</span></>}
+                    {sendResult.optedOut > 0 && <> · {sendResult.optedOut} opted out</>}
+                  </p>
+                  {failures.length > 0 && (
+                    <ul className="text-riders-failures">
+                      {failures.map((item) => (
+                        <li key={item.contestantId}>
+                          {item.name} ({item.phone}): {item.optedOut ? "replied STOP" : item.error || item.status}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {log && (
+                <div className="text-riders-log">
+                  <p className="text-riders-count"><strong>{log.length}</strong> recent text{log.length === 1 ? "" : "s"}{eventId ? " for this roping" : ""}</p>
+                  {log.length === 0 && <p className="text-riders-note">No texts have been sent yet.</p>}
+                  {log.map((entry) => (
+                    <div key={entry.id} className="text-riders-log-row">
+                      <span>{entry.sentAt ? new Date(entry.sentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : ""}</span>
+                      <strong>{entry.name}</strong>
+                      <span>{entry.template}</span>
+                      <span className={entry.status === "failed" ? "text-riders-missing" : ""}>{entry.status}{entry.error ? ` · ${entry.error}` : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-riders-note">
+                Texts go out from the arena's Twilio number one rider at a time, so riders never see each other's numbers. Riders who reply STOP are skipped automatically.
+              </p>
+            </>
+          )}
         </div>
       </section>
     </div>
@@ -3971,6 +4264,7 @@ function ContestantForm({
     hometown: contestant?.hometown ?? "",
     email: contestant?.email ?? "",
     horses: contestant?.horses ?? [],
+    smsOptIn: contestant?.smsOptIn !== false,
   });
   const [horseName, setHorseName] = useState("");
   const [clearPhoto, setClearPhoto] = useState(false);
@@ -4010,6 +4304,7 @@ function ContestantForm({
       photo: form.photo,
       clearPhoto,
       horses: normalizeHorseNames(form.horses),
+      smsOptIn: form.smsOptIn,
     };
     if (loginPin || confirmLoginPin) {
       if (!form.email.trim()) {
@@ -4071,6 +4366,10 @@ function ContestantForm({
         <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555-0123" /></Field>
         <Field label="Hometown"><input autoCapitalize="characters" value={form.hometown} onChange={(e) => setForm({ ...form, hometown: e.target.value.toUpperCase() })} placeholder="City, State" /></Field>
       </div>
+      <label className="public-sms-consent contestant-sms-consent">
+        <input type="checkbox" checked={form.smsOptIn} onChange={(e) => setForm({ ...form, smsOptIn: e.target.checked })} />
+        <span>Rider agreed to receive arena texts (flyers, team numbers, leaderboard links)</span>
+      </label>
       <div className="horse-editor">
         <h4>Horses</h4>
         <p>Add every horse associated with this contestant.</p>
@@ -4255,6 +4554,7 @@ function Teams({
   const [teamSearch, setTeamSearch] = useState("");
   const [draftDraw, setDraftDraw] = useState<Team[] | null>(null);
   const [draggedTeamId, setDraggedTeamId] = useState("");
+  const [textTemplate, setTextTemplate] = useState<RiderTextTemplate | null>(null);
   const [reportPreview, setReportPreview] = useState<{
     title: string;
     html: string;
@@ -4658,6 +4958,8 @@ function Teams({
               <>
                 <button className="secondary" disabled={!eventTeams.length} onClick={openPositionCheck}><Printer size={16} /> Position check</button>
                 <button className="secondary" disabled={!eventTeams.length} onClick={openRiderPosting}><Printer size={16} /> Rider posting</button>
+                <button className="secondary" disabled={!eventTeams.length} onClick={() => setTextTemplate("teams")}><MessageSquareText size={16} /> Text team numbers</button>
+                <button className="secondary" disabled={!eventTeams.length} onClick={() => setTextTemplate("leaderboard")}><MessageSquareText size={16} /> Text leaderboard link</button>
               </>
             )}
             {event && <button className="secondary" onClick={() => onUpdateEvent({ ...event, drawLocked: !event.drawLocked })}>{event.drawLocked ? <><Unlock size={16} /> Unlock</> : <><Lock size={16} /> Lock draw</>}</button>}
@@ -4853,6 +5155,18 @@ function Teams({
             />
           </section>
         </div>
+      )}
+      {textTemplate && event && (
+        <TextRidersDialog
+          contestants={contestants}
+          events={[event]}
+          registrations={registrations}
+          teams={teams}
+          initialTemplate={textTemplate}
+          initialEventId={event.id}
+          lockEvent
+          onClose={() => setTextTemplate(null)}
+        />
       )}
     </>
   );

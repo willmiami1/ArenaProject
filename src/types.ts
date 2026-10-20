@@ -97,6 +97,7 @@ export interface Contestant {
   source?: "online" | "staff";
   submittedAt?: string;
   clearPhoto?: boolean;
+  smsOptIn?: boolean;
 }
 
 export interface Team {

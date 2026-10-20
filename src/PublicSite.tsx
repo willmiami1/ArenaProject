@@ -42,6 +42,7 @@ import {
   loadSignupOptions,
   publicEventSectionTargetId,
   subscribeToWixSectionNavigation,
+  subscribeToWixPageNavigation,
   submitReservedSpot,
   submitSpectatorPrediction,
   updateContestantProfile,
@@ -615,6 +616,28 @@ const contestantAccountRequest = ({
   name: `${firstName.trim()} ${lastName.trim()}`,
 });
 
+const SMS_CONSENT_TEXT =
+  "Text me about Destiny Ranch Arena ropings: event flyers, my team numbers after the draw, and leaderboard links. Message & data rates may apply. Reply STOP to opt out.";
+
+function SmsConsentField({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <label className="public-checkbox public-sms-consent">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span>{SMS_CONSENT_TEXT}</span>
+    </label>
+  );
+}
+
 function RiderAccountPage() {
   const [account, setAccount] = useState<PublicAccountDraft>({
     firstName: "",
@@ -628,6 +651,7 @@ function RiderAccountPage() {
     heelerHandicap: 3,
     pin: "",
     confirmPin: "",
+    smsOptIn: true,
   });
   const [busy, setBusy] = useState(false);
   const accountSubmissionInFlight = useRef(false);
@@ -674,6 +698,7 @@ function RiderAccountPage() {
           <label>Last name<input required maxLength={50} autoComplete="family-name" autoCapitalize="characters" value={account.lastName} onChange={(event) => setAccount({ ...account, lastName: event.target.value.toUpperCase() })} /></label>
           <label>Email address<input required type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value.toLowerCase() })} /></label>
           <label>Phone number<input required type="tel" autoComplete="tel" value={account.phone} onChange={(event) => setAccount({ ...account, phone: event.target.value })} /></label>
+          <SmsConsentField checked={account.smsOptIn !== false} onChange={(smsOptIn) => setAccount({ ...account, smsOptIn })} />
           <label>Hometown<input maxLength={100} autoComplete="address-level2" autoCapitalize="characters" value={account.hometown} onChange={(event) => setAccount({ ...account, hometown: event.target.value.toUpperCase() })} /></label>
           <label>Horse name (optional)<input maxLength={100} autoCapitalize="characters" value={account.horseName ?? ""} onChange={(event) => setAccount({ ...account, horseName: event.target.value.toUpperCase() })} /></label>
           <label>Roping position<select value={account.role} onChange={(event) => setAccount({ ...account, role: event.target.value as ContestantAccountRequest["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
@@ -700,6 +725,7 @@ type RiderProfileDraft = {
   horses: string[];
   newPin: string;
   confirmNewPin: string;
+  smsOptIn: boolean;
 };
 
 const riderProfileDraft = (
@@ -715,6 +741,7 @@ const riderProfileDraft = (
   horses: contestant.horses ?? [],
   newPin: "",
   confirmNewPin: "",
+  smsOptIn: contestant.smsOptIn !== false,
 });
 
 function RiderPage({ data }: { data: PublicArenaData | null }) {
@@ -835,6 +862,7 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
         photo: draft.photo,
         clearPhoto: draft.clearPhoto,
         horses: draft.horses,
+        smsOptIn: draft.smsOptIn,
         ...(draft.newPin ? { newPin: draft.newPin } : {}),
       });
       if (!result) throw new Error("Profile update did not return a result.");
@@ -1005,6 +1033,7 @@ function RiderPage({ data }: { data: PublicArenaData | null }) {
           <label>Full name<input required maxLength={100} autoCapitalize="characters" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value.toUpperCase() })} /></label>
           <label>Email address<input required type="email" autoComplete="email" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value.toLowerCase() })} /></label>
           <label>Phone number<input required type="tel" autoComplete="tel" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} /></label>
+          <SmsConsentField checked={draft.smsOptIn} onChange={(smsOptIn) => setDraft({ ...draft, smsOptIn })} />
           <label>Hometown<input maxLength={100} autoCapitalize="characters" value={draft.hometown} onChange={(event) => setDraft({ ...draft, hometown: event.target.value.toUpperCase() })} /></label>
           <label>Roping position<select value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value as ContestantProfileUpdate["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
           <div className="public-rider-horses">
@@ -1445,6 +1474,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     heelerHandicap: 3,
     pin: "",
     confirmPin: "",
+    smsOptIn: true,
   });
   const [options, setOptions] = useState<PublicSignupOptions | null>(null);
   const [selections, setSelections] = useState<Record<string, PublicSignupSelection>>({});
@@ -1692,6 +1722,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
               <label>Last name<input required maxLength={50} autoComplete="family-name" autoCapitalize="characters" value={account.lastName} onChange={(event) => setAccount({ ...account, lastName: event.target.value.toUpperCase() })} /></label>
               <label>Email address<input required type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value.toLowerCase() })} /></label>
               <label>Phone number<input required type="tel" autoComplete="tel" value={account.phone} onChange={(event) => setAccount({ ...account, phone: event.target.value })} /></label>
+              <SmsConsentField checked={account.smsOptIn !== false} onChange={(smsOptIn) => setAccount({ ...account, smsOptIn })} />
               <label>Hometown<input autoComplete="address-level2" autoCapitalize="characters" value={account.hometown} onChange={(event) => setAccount({ ...account, hometown: event.target.value.toUpperCase() })} /></label>
               <label>Roping position<select value={account.role} onChange={(event) => setAccount({ ...account, role: event.target.value as ContestantAccountRequest["role"] })}><option>Both</option><option>Header</option><option>Heeler</option></select></label>
               {account.role !== "Heeler" && <label>Header handicap<input required type="number" min="0" max="20" step="0.5" value={account.headerHandicap} onChange={(event) => setAccount({ ...account, headerHandicap: Number(event.target.value) })} /></label>}
@@ -1805,6 +1836,15 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
   );
   useEffect(
     () => subscribeToWixSectionNavigation(setRequestedEventSection),
+    [],
+  );
+  useEffect(
+    () =>
+      subscribeToWixPageNavigation((page, id) => {
+        const current = new URL(window.location.href).searchParams;
+        if (current.get("page") === page && (current.get("id") || "") === id) return;
+        window.location.replace(href(page, id || undefined));
+      }),
     [],
   );
   useEffect(() => {

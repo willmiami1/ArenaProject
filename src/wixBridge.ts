@@ -71,7 +71,10 @@ export type WixAction =
   | "submitRegistrationDeskSignup"
   | "submitRegistrationDeskWaiver"
   | "updateRegistrationDeskEntry"
-  | "scratchRegistrationDeskEntry";
+  | "scratchRegistrationDeskEntry"
+  | "getRiderTextingStatus"
+  | "sendRiderTexts"
+  | "loadRiderTextLog";
 
 export interface ContestantPortalData {
   contestant: Contestant;
@@ -375,7 +378,10 @@ export function sensitiveWixAction(action: WixAction) {
     action === "submitRegistrationDeskSignup" ||
     action === "submitRegistrationDeskWaiver" ||
     action === "updateRegistrationDeskEntry" ||
-    action === "scratchRegistrationDeskEntry"
+    action === "scratchRegistrationDeskEntry" ||
+    action === "getRiderTextingStatus" ||
+    action === "sendRiderTexts" ||
+    action === "loadRiderTextLog"
   );
 }
 
@@ -480,7 +486,9 @@ function requestWixFromOrigin<T>(
       action === "updateRegistrationDeskEntry" ||
       action === "scratchRegistrationDeskEntry" ||
       action === "submitPublicSignupCash" ||
-      action === "submitRegistrationDeskWaiver";
+      action === "submitRegistrationDeskWaiver" ||
+      action === "sendRiderTexts" ||
+      action === "loadRiderTextLog";
     const timeoutMilliseconds =
       action === "promptAdminLogin" ||
       action === "promptRegistrationDeskLogin" ||
@@ -922,6 +930,7 @@ export interface ContestantProfileUpdate {
   clearPhoto?: boolean;
   horses?: string[];
   newPin?: string;
+  smsOptIn?: boolean;
 }
 
 export function updateContestantProfile(
@@ -946,4 +955,119 @@ export function setContestantPin(
     pin,
     contestant,
   });
+}
+
+// ---- Rider texting (Twilio via the Wix backend) ----
+
+export type RiderTextTemplate = "flyer" | "teams" | "leaderboard" | "custom";
+export type RiderTextAudience = "event" | "all" | "selected";
+
+export interface RiderTextRecipient {
+  contestantId: string;
+  name: string;
+  phone: string;
+}
+
+export interface RiderTextPreview {
+  configured: boolean;
+  batchLimit: number;
+  recipients: RiderTextRecipient[];
+  missingPhone: { contestantId: string; name: string }[];
+  optedOut: RiderTextRecipient[];
+  samples: (RiderTextRecipient & { body: string })[];
+}
+
+export interface RiderTextSendResult {
+  batchId: string;
+  summary: { sent: number; failed: number; optedOut: number };
+  results: (RiderTextRecipient & {
+    status: string;
+    error: string;
+    optedOut: boolean;
+  })[];
+}
+
+export interface RiderTextLogEntry {
+  id: string;
+  batchId: string;
+  eventId: string;
+  template: string;
+  contestantId: string;
+  name: string;
+  phone: string;
+  body: string;
+  status: string;
+  error: string;
+  sentBy: string;
+  sentAt: string;
+}
+
+export interface RiderTextRequest {
+  template: RiderTextTemplate;
+  audience: RiderTextAudience;
+  eventId?: string;
+  contestantIds?: string[];
+  message?: string;
+  link?: string;
+}
+
+export function getRiderTextingStatus() {
+  return requestWix<{ configured: boolean; sender: string; siteUrl: string }>(
+    "getRiderTextingStatus",
+  );
+}
+
+export function previewRiderTexts(request: RiderTextRequest) {
+  return requestWix<RiderTextPreview>("sendRiderTexts", {
+    ...request,
+    dryRun: true,
+  });
+}
+
+export function sendRiderTextBatch(
+  request: RiderTextRequest,
+  contestantIds: string[],
+  batchId: string,
+) {
+  return requestWix<RiderTextSendResult>("sendRiderTexts", {
+    ...request,
+    audience: "selected",
+    contestantIds,
+    batchId,
+    dryRun: false,
+  });
+}
+
+export function loadRiderTextLog(eventId?: string, limit = 200) {
+  return requestWix<RiderTextLogEntry[]>("loadRiderTextLog", {
+    eventId: eventId || "",
+    limit,
+  });
+}
+
+// Deep links (?page=…&id=…) on the Wix page URL are relayed by the host; the
+// embedded app reloads itself on the matching route.
+export function subscribeToWixPageNavigation(
+  onNavigate: (page: string, id: string) => void,
+) {
+  const trustedOrigin = wixParentOrigin();
+  if (!trustedOrigin) return () => undefined;
+  const handleMessage = (event: MessageEvent) => {
+    if (
+      event.source !== window.parent ||
+      event.origin !== trustedOrigin ||
+      typeof event.data !== "object" ||
+      event.data === null ||
+      event.data.type !== "arena:navigate-page" ||
+      typeof event.data.page !== "string"
+    ) {
+      return;
+    }
+    onNavigate(
+      event.data.page,
+      typeof event.data.id === "string" ? event.data.id : "",
+    );
+  };
+  window.addEventListener("message", handleMessage);
+  return () => window.removeEventListener("message", handleMessage);
 }

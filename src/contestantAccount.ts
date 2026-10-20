@@ -10,6 +10,7 @@ export interface ContestantAccountRequest {
   headerHandicap: number;
   heelerHandicap: number;
   pin: string;
+  smsOptIn?: boolean;
 }
 
 export const normalizedContestantEmail = (value: string) =>
@@ -99,6 +100,7 @@ export function createLocalContestantAccount(
     heelerHandicap: validated.heelerHandicap,
     photo: "",
     horses: validated.horseName ? [validated.horseName] : [],
+    ...(validated.smsOptIn === undefined ? {} : { smsOptIn: validated.smsOptIn }),
   };
   return { contestant, contestants: [...data.contestants, contestant] };
 }
