@@ -3025,13 +3025,8 @@ const RIDER_TEXT_TEMPLATE_OPTIONS: {
   },
   {
     value: "teams",
-    label: "Team numbers after the draw",
-    hint: "Each rider gets their own team numbers, position and partner, plus a link to their rider page.",
-  },
-  {
-    value: "leaderboard",
-    label: "Leaderboard link",
-    hint: "Everyone in the roping gets the live leaderboard link with team ranking and times.",
+    label: "Team numbers + live scoreboard",
+    hint: "Each rider gets their own team numbers and partners, one per line, plus the live scoreboard link (now roping, up next, and results).",
   },
   {
     value: "custom",
@@ -4958,8 +4953,7 @@ function Teams({
               <>
                 <button className="secondary" disabled={!eventTeams.length} onClick={openPositionCheck}><Printer size={16} /> Position check</button>
                 <button className="secondary" disabled={!eventTeams.length} onClick={openRiderPosting}><Printer size={16} /> Rider posting</button>
-                <button className="secondary" disabled={!eventTeams.length} onClick={() => setTextTemplate("teams")}><MessageSquareText size={16} /> Text team numbers</button>
-                <button className="secondary" disabled={!eventTeams.length} onClick={() => setTextTemplate("leaderboard")}><MessageSquareText size={16} /> Text leaderboard link</button>
+                <button className="secondary" disabled={!eventTeams.length} onClick={() => setTextTemplate("teams")}><MessageSquareText size={16} /> Text team numbers + scoreboard</button>
               </>
             )}
             {event && <button className="secondary" onClick={() => onUpdateEvent({ ...event, drawLocked: !event.drawLocked })}>{event.drawLocked ? <><Unlock size={16} /> Unlock</> : <><Lock size={16} /> Lock draw</>}</button>}
