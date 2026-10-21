@@ -282,13 +282,13 @@
 .public-scoreboard .public-page-head p { color: var(--public-muted); }
 .public-scoreboard-now { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; margin-bottom: 38px; }
 .public-scoreboard-team { display: grid; gap: 6px; align-content: start; padding: 18px 20px; background: #17130f; border: 1px solid rgba(234,220,198,.22); }
-.public-scoreboard-team.now { background: var(--public-gold); border-color: #f7d494; color: #1a120b; box-shadow: 8px 9px 0 rgba(166,108,67,.32); }
+.public-scoreboard-team.now { background: var(--public-tan); border-color: #e3bc8a; color: #17130f; box-shadow: 8px 9px 0 rgba(166,108,67,.32); }
 .public-scoreboard-team small { color: var(--public-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; }
-.public-scoreboard-team.now small { color: #4a3420; }
+.public-scoreboard-team.now small { color: #3a2514; }
 .public-scoreboard-team strong { font-family: "Manrope",sans-serif; font-size: clamp(18px,2.2vw,26px); line-height: 1.15; text-transform: uppercase; }
-.public-scoreboard-team.now strong { font-size: clamp(22px,3vw,34px); }
+.public-scoreboard-team.now strong { color: #17130f; font-size: clamp(22px,3vw,34px); font-weight: 900; }
 .public-scoreboard-team span { font-size: 11px; color: var(--public-tan); }
-.public-scoreboard-team.now span { color: #4a3420; font-weight: 800; }
+.public-scoreboard-team.now span { color: #3a2514; font-weight: 800; font-size: 13px; }
 .public-scoreboard-empty { opacity: .4; }
 .public-scoreboard-results header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .public-scoreboard-results h2 { margin: 0; font-family: "Manrope",sans-serif; font-size: clamp(26px,3.5vw,40px); }
