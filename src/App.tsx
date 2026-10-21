@@ -6899,7 +6899,8 @@ function AppRoute({ route }: { route: ReturnType<typeof parsePublicRoute> }) {
     route.kind === "signup" ||
     route.kind === "rider-account" ||
     route.kind === "rider" ||
-    route.kind === "spectator"
+    route.kind === "spectator" ||
+    route.kind === "scoreboard"
   ) {
     return <PublicSite route={route} />;
   }

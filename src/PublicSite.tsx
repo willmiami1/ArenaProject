@@ -31,6 +31,7 @@ import {
   type PublicCompetition,
   type PublicMeet,
   type PublicRoute,
+  type PublicScoreboard,
   type PublicSpectatorLeaderboardRow,
 } from "./publicData";
 import {
@@ -596,6 +597,104 @@ function SpectatorPage({
           </section>
         </div>
       </div>
+    </section>
+  );
+}
+
+function ScoreboardTeamCard({
+  label,
+  team,
+  emphasis,
+}: {
+  label: string;
+  team: PublicScoreboard["current"];
+  emphasis?: boolean;
+}) {
+  return (
+    <div className={`public-scoreboard-team${emphasis ? " now" : ""}`}>
+      <small>{label}</small>
+      {team ? (
+        <>
+          <strong>{team.headerName} & {team.heelerName}</strong>
+          <span>Team #{team.teamNumber}{team.round > 1 ? ` · Draw #${team.drawPosition}` : ""}</span>
+        </>
+      ) : (
+        <strong className="public-scoreboard-empty">—</strong>
+      )}
+    </div>
+  );
+}
+
+function ScoreboardPage({
+  competition,
+  refreshWarning,
+}: {
+  competition?: PublicCompetition;
+  refreshWarning?: string;
+}) {
+  if (!competition) return <NotFound />;
+  const board = competition.scoreboard;
+  const stageLabel = board
+    ? `Round ${board.round} of ${board.roundCount}${board.rotation ? ` · Rotation ${board.rotation}` : ""}`
+    : "";
+  const upNext = board?.upNext ?? [];
+  return (
+    <section className="public-scoreboard">
+      <ReturnToEventsLink />
+      <div className="public-page-head">
+        <Status value={competition.status} />
+        <h1>{competition.name}</h1>
+        <p>{formatDate(competition.date)}{competition.location ? ` · ${competition.location}` : ""}{stageLabel ? ` · ${stageLabel}` : ""}</p>
+      </div>
+      {refreshWarning && (
+        <p className="public-form-message" role="status">{refreshWarning}</p>
+      )}
+      {!board ? (
+        <p className="public-empty">{competition.status === "Complete" ? "This roping has wrapped up." : "The draw hasn’t been released yet. Check back once the roping starts."}</p>
+      ) : (
+        <>
+          <div className="public-scoreboard-now">
+            <ScoreboardTeamCard
+              label={board.finalResults ? "Final results" : board.roundComplete ? "Round complete" : "Now roping"}
+              team={board.current}
+              emphasis
+            />
+            <ScoreboardTeamCard label="Up next" team={upNext[0] ?? null} />
+            <ScoreboardTeamCard label="On deck" team={upNext[1] ?? null} />
+          </div>
+          <section className="public-scoreboard-results">
+            <header>
+              <h2>Results</h2>
+              <p>{board.standings.length} qualified average{board.standings.length === 1 ? "" : "s"}{competition.resultsPublished ? " · Official" : " · Unofficial, updates live"}</p>
+            </header>
+            {board.standings.length ? (
+              <div className="public-results" role="table" aria-label={`${competition.name} standings`}>
+                <div className="public-result-row header" role="row">
+                  <span>Place</span><span>Team</span><span>Rounds</span><span>Total time</span>
+                </div>
+                {board.standings.map((row) => (
+                  <div className="public-result-row" role="row" key={`${row.place}-${row.teamNumber}-${row.drawPosition}`}>
+                    <strong>{row.place}</strong>
+                    <span>
+                      <b>{row.headerName} & {row.heelerName}</b>
+                      <small>Team #{row.teamNumber}{board.round > 1 ? ` · Draw #${row.drawPosition}` : ""}{row.advances ? ` · Advances to Round ${board.round + 1}` : ""}</small>
+                    </span>
+                    <span>{row.rounds} / {board.roundCount}</span>
+                    <span className="public-result-total">{row.total.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="public-empty">Qualified runs will appear here.</p>
+            )}
+          </section>
+          {competition.status === "Live" && (
+            <p className="public-scoreboard-game">
+              <a className="public-button" href={href("spectator", competition.id)}>Play Cowboys × Steer</a>
+            </p>
+          )}
+        </>
+      )}
     </section>
   );
 }
@@ -1941,7 +2040,7 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
   }, [data, route]);
 
   useEffect(() => {
-    const title = route.kind === "events" ? "Events" : route.kind === "rider-account" ? "Create Rider Account" : route.kind === "rider" ? "Rider Log In" : route.kind === "event" ? selected.meet?.name : route.kind === "competition" || route.kind === "signup" || route.kind === "spectator" ? selected.competition?.name : "Home";
+    const title = route.kind === "events" ? "Events" : route.kind === "rider-account" ? "Create Rider Account" : route.kind === "rider" ? "Rider Log In" : route.kind === "event" ? selected.meet?.name : route.kind === "competition" || route.kind === "signup" || route.kind === "spectator" || route.kind === "scoreboard" ? selected.competition?.name : "Home";
     document.title = `${title ?? "Event"} | Destiny Ranch Arena`;
   }, [route.kind, selected.competition?.name, selected.meet?.name]);
 
@@ -1971,7 +2070,8 @@ export function PublicSite({ route = parsePublicRoute(window.location.search) }:
           route.kind === "event" ? <EventPage meet={selected.meet} /> :
           route.kind === "competition" ? <CompetitionPage competition={selected.competition} meet={selected.meet} /> :
           route.kind === "signup" ? <SignupPage competition={selected.competition} /> :
-          route.kind === "spectator" ? <SpectatorPage competition={selected.competition} onLocalUpdate={setData} refreshWarning={refreshWarning} /> : null}
+          route.kind === "spectator" ? <SpectatorPage competition={selected.competition} onLocalUpdate={setData} refreshWarning={refreshWarning} /> :
+          route.kind === "scoreboard" ? <ScoreboardPage competition={selected.competition} refreshWarning={refreshWarning} /> : null}
       </main>
       <PublicFooter />
     </div>

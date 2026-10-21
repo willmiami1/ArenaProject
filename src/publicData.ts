@@ -20,6 +20,9 @@ import {
 } from "./registrationWindow";
 import { roundRobinRoleCapacity } from "./roundRobinCapacity";
 import type { PublicRoleCapacity } from "./publicRoleCapacity";
+import { publicScoreboardProjection, type PublicScoreboard } from "./scoreboard";
+
+export type { PublicScoreboard } from "./scoreboard";
 
 export type PublicRoute =
   | { kind: "home" }
@@ -30,6 +33,7 @@ export type PublicRoute =
   | { kind: "rider-account" }
   | { kind: "rider" }
   | { kind: "spectator"; id: string }
+  | { kind: "scoreboard"; id: string }
   | { kind: "contestant" }
   | { kind: "staff" }
   | { kind: "registration-desk" }
@@ -146,6 +150,7 @@ export interface PublicCompetition {
   activePredictionRunId?: string;
   predictionRuns: PublicPredictionRun[];
   spectatorLeaderboards: PublicSpectatorLeaderboardRow[];
+  scoreboard?: PublicScoreboard;
 }
 
 export interface PublicSpectatorLeaderboardRow {
@@ -330,6 +335,7 @@ export function parsePublicRoute(search: string): PublicRoute {
   if (page === "rider-account") return { kind: "rider-account" };
   if (page === "rider") return { kind: "rider" };
   if (page === "spectator") return { kind: "spectator", id };
+  if (page === "scoreboard") return { kind: "scoreboard", id };
   return { kind: "home" };
 }
 
@@ -448,6 +454,11 @@ export function projectPublicArenaData(
             }),
           ),
       ).flat(),
+      scoreboard: publicScoreboardProjection(
+        event,
+        data.teams,
+        data.contestants,
+      ),
     };
   });
 

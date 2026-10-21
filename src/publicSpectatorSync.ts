@@ -26,6 +26,8 @@ export function publicRefreshInterval(
   routeKind: PublicRoute["kind"],
 ): number | undefined {
   if (routeKind === "spectator") return 1500;
+  // Rider scoreboard: many phones may watch at once, so poll a little slower.
+  if (routeKind === "scoreboard") return 5000;
   if (
     routeKind === "home" ||
     routeKind === "events" ||
