@@ -145,7 +145,7 @@ export const reportDefinitions: ReportDefinition[] = [
   { id: "competition-incentive", title: "Incentive Report", description: "Incentive-eligible teams and payout tracking.", section: "competition", category: "Payout Reports", kind: "payout", roles: financialRoles },
   { id: "competition-team-stats", title: "Team Statistics", description: "Round count, averages, penalties, and performance.", section: "competition", category: "Statistics", kind: "standings", roles: allRoles },
   { id: "competition-roper-ranking", title: "Ropers Ranking", description: "Top 12 ropers by steers-roped percentage and average time.", section: "competition", category: "Statistics", kind: "roper-ranking", roles: allRoles },
-  { id: "competition-high-point-roper", title: "High Point Roper", description: "Ropers who caught in the final round, scored by team placing (1st = 20 points down to 20th = 1), then catch percentage and average time.", section: "competition", category: "Statistics", kind: "high-point-roper", roles: allRoles },
+  { id: "competition-high-point-roper", title: "High Point Roper", description: "Ropers who caught in the final round, scored by team placing (1st = 100 points, 5 fewer each place down to 20th = 5), then catch percentage and average time.", section: "competition", category: "Statistics", kind: "high-point-roper", roles: allRoles },
   { id: "competition-arena", title: "Arena Statistics", description: "Selected-competition run and time statistics.", section: "competition", category: "Statistics", kind: "arena", roles: allRoles },
   { id: "competition-judge", title: "Judge Report", description: "Barrier calls, penalties, no-times, and notes.", section: "competition", category: "Competition Reports", kind: "results", roles: operationsRoles },
   { id: "competition-scratch", title: "Scratch List", description: "Scratched teams and registration entries.", section: "competition", category: "Competition Reports", kind: "status", roles: financialRoles },
@@ -1100,11 +1100,15 @@ export function roperRankingRows(
 }
 
 export const HIGH_POINT_PLACES = 20;
+export const HIGH_POINT_FIRST_PLACE = 100;
+export const HIGH_POINT_STEP = 5;
 
-// Points paid to each rider of a team by its final placing: 1st = 20 …
-// 20th = 1, regardless of how many teams are scored.
+// Points paid to each rider of a team by its final placing: 1st = 100,
+// 2nd = 95 … 20th = 5, regardless of how many teams are scored.
 export const highPointPlacePoints = (place: number) =>
-  place >= 1 && place <= HIGH_POINT_PLACES ? HIGH_POINT_PLACES + 1 - place : 0;
+  place >= 1 && place <= HIGH_POINT_PLACES
+    ? HIGH_POINT_FIRST_PLACE - (place - 1) * HIGH_POINT_STEP
+    : 0;
 
 export function highPointRoperRows(
   data: ArenaData,
@@ -1170,8 +1174,8 @@ export function highPointRoperRows(
 
   // Placings come from teams that caught their steer in the final round,
   // classified like the payoff Winners list: most rounds caught first, then
-  // fastest total. Up to 20 teams are scored: 1st pays 20 points down to 1
-  // point for 20th, no matter how many teams caught in the final round.
+  // fastest total. Up to 20 teams are scored: 1st pays 100 points, dropping
+  // 5 per place to 5 points for 20th, no matter how many teams caught in the final round.
   events.forEach((event) => {
     const eventTeams = teams.filter(
       (team) => team.eventId === event.id && !team.scratched,

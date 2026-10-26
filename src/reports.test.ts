@@ -199,10 +199,10 @@ describe("high point roper", () => {
 
     // Two scored teams → 1st = 20 points, 2nd = 19 points.
     expect(rows.map((row) => [row.rank, row.roper, row.position, row.points, row.placings, row.percentage])).toEqual([
-      [1, "Dee Fast", "Header", 20, "1st", "100%"],
-      [2, "Cal Catch", "Heeler", 20, "1st", "75%"],
-      [3, "Bo Heeler", "Heeler", 19, "2nd", "100%"],
-      [4, "Ada Header", "Header", 19, "2nd", "75%"],
+      [1, "Dee Fast", "Header", 100, "1st", "100%"],
+      [2, "Cal Catch", "Heeler", 100, "1st", "75%"],
+      [3, "Bo Heeler", "Heeler", 95, "2nd", "100%"],
+      [4, "Ada Header", "Header", 95, "2nd", "75%"],
     ]);
   });
 
@@ -232,16 +232,16 @@ describe("high point roper", () => {
     const rows = highPointRoperRows(workspace, [event], workspace.teams, "Heeler");
 
     expect(rows.map((row) => [row.rank, row.roper, row.points])).toEqual([
-      [1, "Cal Catch", 20],
-      [2, "Bo Heeler", 19],
+      [1, "Cal Catch", 100],
+      [2, "Bo Heeler", 95],
     ]);
   });
 
-  it("always pays 20 down to 1 by place", () => {
-    expect(highPointPlacePoints(1)).toBe(20);
-    expect(highPointPlacePoints(2)).toBe(19);
-    expect(highPointPlacePoints(7)).toBe(14);
-    expect(highPointPlacePoints(20)).toBe(1);
+  it("always pays 100 down to 5 in steps of 5 by place", () => {
+    expect(highPointPlacePoints(1)).toBe(100);
+    expect(highPointPlacePoints(2)).toBe(95);
+    expect(highPointPlacePoints(7)).toBe(70);
+    expect(highPointPlacePoints(20)).toBe(5);
     expect(highPointPlacePoints(21)).toBe(0);
   });
 });
