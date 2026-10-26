@@ -1422,7 +1422,7 @@ function syncShortGoFinalists(
 }
 
 export const ROTATION_SIZE_MIN = 20;
-export const ROTATION_SIZE_MAX = 60;
+export const ROTATION_SIZE_MAX = 100;
 
 export function rotationsEnabled(event?: Pick<ArenaEvent, "rotationSize"> | null) {
   return (event?.rotationSize ?? 0) > 0;
