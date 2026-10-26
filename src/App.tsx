@@ -101,6 +101,14 @@ import {
   riderPostingHtml,
 } from "./drawReports";
 import {
+  RESERVED_RUN_CHOICES,
+  RESERVED_RUN_MIN,
+  reservedHeaderRuns,
+  reservedHeelerRuns,
+  reservedPositionForRuns,
+  reservedRunTotals,
+} from "./reservedRuns";
+import {
   normalizedRunDeskRound,
   runDeskSelectionToPersist,
   activeRunRejectedByRules,
@@ -2665,7 +2673,8 @@ function ReservedSpotsView({
   );
   const [form, setForm] = useState({
     name: "",
-    position: "Header" as ReservedSpot["position"],
+    headerRuns: RESERVED_RUN_MIN,
+    heelerRuns: 0,
     phone: "",
     notes: "",
   });
@@ -2685,6 +2694,8 @@ function ReservedSpotsView({
     meets.find((meet) => meet.id === target.parentEventId)?.name ?? "";
   const headerCount = spots.filter((spot) => spot.position !== "Heeler").length;
   const heelerCount = spots.filter((spot) => spot.position !== "Header").length;
+  const runTotals = reservedRunTotals(spots);
+  const formPosition = reservedPositionForRuns(form.headerRuns, form.heelerRuns);
   const contestantByName = (name: string) =>
     contestants.find(
       (item) => item.name.trim().toUpperCase() === name.trim().toUpperCase(),
@@ -2706,7 +2717,7 @@ function ReservedSpotsView({
     formEvent.preventDefault();
     if (!event) return;
     const name = form.name.trim().toUpperCase();
-    if (!name) return;
+    if (!name || !formPosition) return;
     const contestant = contestantByName(name);
     onUpdateEvent({
       ...event,
@@ -2715,7 +2726,9 @@ function ReservedSpotsView({
         {
           id: uid("reserved"),
           name,
-          position: form.position,
+          position: formPosition,
+          headerRuns: form.headerRuns,
+          heelerRuns: form.heelerRuns,
           phone: form.phone.trim() || contestant?.phone?.trim() || "",
           notes: form.notes.trim(),
           source: "staff",
@@ -2724,7 +2737,7 @@ function ReservedSpotsView({
         },
       ],
     });
-    setForm({ name: "", position: form.position, phone: "", notes: "" });
+    setForm({ name: "", headerRuns: form.headerRuns, heelerRuns: form.heelerRuns, phone: "", notes: "" });
     setAutoPhone("");
   };
   const removeSpot = (spotId: string) => {
@@ -2778,9 +2791,9 @@ function ReservedSpotsView({
         </div>
         {event && (
           <div className="payoff-stats reserved-stats">
-            <div><span>Reserved</span><strong>{spots.length}</strong></div>
-            <div><span>Headers</span><strong>{headerCount}</strong></div>
-            <div><span>Heelers</span><strong>{heelerCount}</strong></div>
+            <div><span>Reserved</span><strong>{spots.length}</strong><small>{runTotals.headerRuns + runTotals.heelerRuns} total runs</small></div>
+            <div><span>Headers</span><strong>{headerCount}</strong><small>{runTotals.headerRuns} runs</small></div>
+            <div><span>Heelers</span><strong>{heelerCount}</strong><small>{runTotals.heelerRuns} runs</small></div>
             <div><span>Called in</span><strong>{spots.filter((spot) => spot.source === "staff").length}</strong></div>
           </div>
         )}
@@ -2801,16 +2814,26 @@ function ReservedSpotsView({
                 <option value={contestant.name} key={contestant.id} />
               ))}
             </datalist>
-            <Field label="Position">
+            <Field label="Header runs">
               <select
-                value={form.position}
-                onChange={(e) =>
-                  setForm({ ...form, position: e.target.value as ReservedSpot["position"] })
-                }
+                value={form.headerRuns}
+                onChange={(e) => setForm({ ...form, headerRuns: Number(e.target.value) })}
               >
-                <option value="Header">Header</option>
-                <option value="Heeler">Heeler</option>
-                <option value="Both">Both</option>
+                <option value={0}>None</option>
+                {RESERVED_RUN_CHOICES.map((choice) => (
+                  <option value={choice} key={choice}>{choice}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Heeler runs">
+              <select
+                value={form.heelerRuns}
+                onChange={(e) => setForm({ ...form, heelerRuns: Number(e.target.value) })}
+              >
+                <option value={0}>None</option>
+                {RESERVED_RUN_CHOICES.map((choice) => (
+                  <option value={choice} key={choice}>{choice}</option>
+                ))}
               </select>
             </Field>
             <Field label="Phone">
@@ -2829,7 +2852,7 @@ function ReservedSpotsView({
               />
             </Field>
             <div className="reserved-add">
-              <button className="primary" type="submit">
+              <button className="primary" type="submit" disabled={!formPosition} title={formPosition ? undefined : "Choose runs on at least one side"}>
                 <Plus size={16} /> Add reservation
               </button>
             </div>
@@ -2852,6 +2875,7 @@ function ReservedSpotsView({
               <span>#</span>
               <span>Rider</span>
               <span>Position</span>
+              <span>Runs</span>
               <span>Phone</span>
               <span>Notes</span>
               <span>Source</span>
@@ -2866,6 +2890,10 @@ function ReservedSpotsView({
                   {spot.contestantId && <small>On contestant list</small>}
                 </span>
                 <span>{spot.position}</span>
+                <span className="reserved-runs">
+                  {reservedHeaderRuns(spot) > 0 && <small>Head {reservedHeaderRuns(spot)}</small>}
+                  {reservedHeelerRuns(spot) > 0 && <small>Heel {reservedHeelerRuns(spot)}</small>}
+                </span>
                 <span>{spot.phone || "—"}</span>
                 <span className="reserved-notes">{spot.notes || "—"}</span>
                 <span>

@@ -1,5 +1,6 @@
 import type { ArenaEvent, Contestant, ReservedSpot, Team } from "./types";
 import { teamHandicapTotal } from "./competition";
+import { reservedHeaderRuns, reservedHeelerRuns } from "./reservedRuns";
 
 const escapeHtml = (value: unknown) =>
   String(value)
@@ -285,21 +286,27 @@ export function reservedSpotsHtml(
         <td class="num">${index + 1}</td>
         <td class="name">${escapeHtml(spot.name)}${spot.position === "Both" ? ' <b class="both">BOTH</b>' : ""}</td>
         <td class="hc">${escapeHtml(handicapFor(spot, side))}</td>
+        <td class="runs">${side === "Header" ? reservedHeaderRuns(spot) : reservedHeelerRuns(spot)}</td>
         <td class="phone">${escapeHtml(spot.phone || "")}</td>
         <td class="notes">${escapeHtml(spot.notes || "")}</td>
         <td class="check"></td>
       </tr>`,
       )
       .join("");
+  const sideRuns = (entries: ReservedSpot[], side: "Header" | "Heeler") =>
+    entries.reduce(
+      (sum, spot) => sum + (side === "Header" ? reservedHeaderRuns(spot) : reservedHeelerRuns(spot)),
+      0,
+    );
   const sideTable = (
     title: string,
     entries: ReservedSpot[],
     side: "Header" | "Heeler",
   ) => `<div class="side">
-      <h2>${title} (${entries.length})</h2>
+      <h2>${title} (${entries.length} · ${sideRuns(entries, side)} runs)</h2>
       <table>
-        <thead><tr><th>#</th><th>Rider</th><th>HC</th><th>Phone</th><th>Notes</th><th>Paid</th></tr></thead>
-        <tbody>${sideRows(entries, side) || '<tr><td colspan="6">No reservations.</td></tr>'}</tbody>
+        <thead><tr><th>#</th><th>Rider</th><th>HC</th><th>Runs</th><th>Phone</th><th>Notes</th><th>Paid</th></tr></thead>
+        <tbody>${sideRows(entries, side) || '<tr><td colspan="7">No reservations.</td></tr>'}</tbody>
       </table>
     </div>`;
 
@@ -319,6 +326,7 @@ export function reservedSpotsHtml(
     .num { width: 8%; text-align: center; }
     .name { font-size: 14px; font-weight: 600; }
     .hc { width: 8%; text-align: center; font-size: 14px; font-weight: 700; }
+    .runs { width: 8%; text-align: center; font-size: 14px; font-weight: 700; }
     .phone { width: 22%; white-space: nowrap; }
     .notes { font-size: 11px; color: #58645d; }
     .check { width: 10%; }

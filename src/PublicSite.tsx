@@ -58,6 +58,11 @@ import {
   type SpectatorChoice,
 } from "./spectatorPredictions";
 import {
+  RESERVED_RUN_CHOICES,
+  RESERVED_RUN_MIN,
+  reservedPositionForRuns,
+} from "./reservedRuns";
+import {
   spectatorAvatarInitials,
   spectatorIdentityInput,
   spectatorIdentityLabel,
@@ -1724,28 +1729,44 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
         delete next[competitionId];
         return next;
       }
+      // Default to the minimum runs on the rider's own side when it is open.
+      const riderRole = options?.contestant.role;
+      const preferred =
+        riderRole && riderRole !== "Both" && openRoles.includes(riderRole)
+          ? riderRole
+          : availableRole;
       return {
         ...current,
         [competitionId]: {
           competitionId,
-          role: availableRole,
+          role: preferred,
+          headerRuns: preferred === "Header" ? RESERVED_RUN_MIN : 0,
+          heelerRuns: preferred === "Heeler" ? RESERVED_RUN_MIN : 0,
         },
       };
     });
   };
 
-  const updateSelection = (
+  const updateSelectionRuns = (
     competitionId: string,
-    change: Partial<PublicSignupSelection>,
+    side: "Header" | "Heeler",
+    runs: number,
   ) => {
-    setSelections((current) => ({
-      ...current,
-      [competitionId]: {
-        ...current[competitionId],
-        ...change,
-        competitionId,
-      },
-    }));
+    setSelections((current) => {
+      const selection = current[competitionId];
+      if (!selection) return current;
+      const headerRuns = side === "Header" ? runs : selection.headerRuns ?? 0;
+      const heelerRuns = side === "Heeler" ? runs : selection.heelerRuns ?? 0;
+      return {
+        ...current,
+        [competitionId]: {
+          ...selection,
+          headerRuns,
+          heelerRuns,
+          role: headerRuns > 0 ? "Header" : heelerRuns > 0 ? "Heeler" : selection.role,
+        },
+      };
+    });
   };
 
   const reserveSpots = async (event: FormEvent) => {
@@ -1757,11 +1778,27 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
     ) {
       return;
     }
-    // Defensive only: the radios never offer a position outside selectableRoles,
+    const missingRuns = options.competitions.find((item) => {
+      const selection = selections[item.id];
+      return (
+        selection &&
+        !reservedPositionForRuns(selection.headerRuns ?? 0, selection.heelerRuns ?? 0)
+      );
+    });
+    if (missingRuns) {
+      setMessage(`Choose how many runs you want in ${missingRuns.name}.`);
+      return;
+    }
+    // Defensive only: the selects never offer a side outside selectableRoles,
     // and the backend hides a pick-and-draw the rider cannot draw a position in.
     const unavailablePosition = options.competitions.find((item) => {
       const selection = selections[item.id];
-      return selection && !selectableRoles(item).includes(selection.role);
+      if (!selection) return false;
+      const roles = selectableRoles(item);
+      return (
+        ((selection.headerRuns ?? 0) > 0 && !roles.includes("Header")) ||
+        ((selection.heelerRuns ?? 0) > 0 && !roles.includes("Heeler"))
+      );
     });
     if (unavailablePosition) {
       setMessage(
@@ -1781,11 +1818,15 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
         const label = roping
           ? formatSignupRopingLabel(roping.name, roping.date, roping.startTime)
           : selection.competitionId;
+        const headerRuns = selection.headerRuns ?? 0;
+        const heelerRuns = selection.heelerRuns ?? 0;
         const result = await submitReservedSpot({
           competitionId: selection.competitionId,
           email,
           pin,
-          position: selection.role,
+          position: reservedPositionForRuns(headerRuns, heelerRuns) ?? selection.role,
+          headerRuns,
+          heelerRuns,
         });
         if (!result) throw new Error("Reservations are unavailable right now.");
         results.push({ label, existing: result.existing });
@@ -1893,18 +1934,29 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                       ) : null}
                       {selection && (
                         <div className="public-roping-options">
-                          <fieldset>
-                            <legend>Your position</legend>
+                          <fieldset className="public-runs-fieldset">
+                            <legend>How many runs do you want?</legend>
                             {selectableRoles(roping).map((role) => {
                               const roleFull = roping.roleCapacities?.find((capacity) => capacity.role === role)?.full;
+                              const runs = role === "Header" ? selection.headerRuns ?? 0 : selection.heelerRuns ?? 0;
                               return (
-                              <label className="public-radio" key={role}>
-                                <input type="radio" name={`role-${roping.id}`} disabled={roleFull} checked={selection.role === role} onChange={() => updateSelection(roping.id, { role })} />
-                                {role}{roleFull ? " — FULL" : ""}
-                              </label>
+                                <label className="public-runs-select" key={role}>
+                                  <span>{role} runs{roleFull ? " — FULL" : ""}</span>
+                                  <select
+                                    value={roleFull ? 0 : runs}
+                                    disabled={roleFull}
+                                    onChange={(event) => updateSelectionRuns(roping.id, role, Number(event.target.value))}
+                                  >
+                                    <option value={0}>None</option>
+                                    {RESERVED_RUN_CHOICES.map((choice) => (
+                                      <option value={choice} key={choice}>{choice} {choice === 1 ? "run" : "runs"}</option>
+                                    ))}
+                                  </select>
+                                </label>
                               );
                             })}
                           </fieldset>
+                          <p className="public-payment-note">Pick 2 to 12 runs on each side you plan to rope. Leave a side on “None” if you won’t rope it.</p>
                           {roping.competitionType === "pick-and-draw" && (
                             <p className="public-payment-note">You are entered in the draw. Partners are picked at the event.</p>
                           )}
@@ -1915,7 +1967,7 @@ function SignupPage({ competition }: { competition?: PublicCompetition }) {
                 }) : <p className="public-form-message">There are no open ropings available for this contestant right now.</p>}
               </div>
               <div className="public-cart-total">
-                <span>{selectedEntries.length} {selectedEntries.length === 1 ? "roping" : "ropings"} selected</span>
+                <span>{selectedEntries.length} {selectedEntries.length === 1 ? "roping" : "ropings"} selected · {selectedEntries.reduce((sum, item) => sum + (item.headerRuns ?? 0) + (item.heelerRuns ?? 0), 0)} runs</span>
               </div>
               <p className="public-payment-note">
                 No payment now — your reservation goes straight to the arena office's will-call list. Entry fees are settled at the event.

@@ -7,6 +7,13 @@ import {
   riderPostingFileName,
   riderPostingHtml,
 } from "./drawReports";
+import {
+  normalizeReservedRuns,
+  reservedHeaderRuns,
+  reservedHeelerRuns,
+  reservedPositionForRuns,
+  reservedRunTotals,
+} from "./reservedRuns";
 import type { ArenaEvent, Contestant, Team } from "./types";
 
 const event: ArenaEvent = {
@@ -174,9 +181,9 @@ describe("reserved spots list", () => {
       {
         ...event,
         reservedSpots: [
-          { id: "s1", name: "ADA <HEADER>", position: "Header", source: "staff", createdAt: "" },
-          { id: "s2", name: "Bo", position: "Heeler", source: "online", contestantId: "bo", createdAt: "" },
-          { id: "s3", name: "Cy Both", position: "Both", source: "staff", createdAt: "" },
+          { id: "s1", name: "ADA <HEADER>", position: "Header", headerRuns: 4, heelerRuns: 0, source: "staff", createdAt: "" },
+          { id: "s2", name: "Bo", position: "Heeler", headerRuns: 0, heelerRuns: 6, source: "online", contestantId: "bo", createdAt: "" },
+          { id: "s3", name: "Cy Both", position: "Both", headerRuns: 3, heelerRuns: 2, source: "staff", createdAt: "" },
           { id: "s4", name: "Walk Up", position: "Header", source: "staff", createdAt: "" },
         ],
       },
@@ -189,5 +196,33 @@ describe("reserved spots list", () => {
     expect(heelersSide).toContain("<td class=\"hc\">5</td>");
     expect(heelersSide).toContain("<td class=\"hc\">2</td>");
     expect(html).toContain("<th>HC</th>");
+    expect(html).toContain("<th>Runs</th>");
+    // 4 + 3 + 2 (legacy spot defaults to the minimum) header runs; 6 + 2 heeler runs.
+    expect(headersSide).toContain("<h2>Headers (3 · 9 runs)</h2>");
+    expect(heelersSide).toContain(" (2 · 8 runs)</h2>");
+    expect(heelersSide).toContain("<td class=\"runs\">6</td>");
+  });
+});
+
+describe("reserved runs", () => {
+  it("derives the position from the runs on each side", () => {
+    expect(reservedPositionForRuns(2, 0)).toBe("Header");
+    expect(reservedPositionForRuns(0, 5)).toBe("Heeler");
+    expect(reservedPositionForRuns(2, 12)).toBe("Both");
+    expect(reservedPositionForRuns(0, 0)).toBeNull();
+  });
+
+  it("clamps runs to 2–12 and treats legacy spots as the minimum", () => {
+    expect(normalizeReservedRuns(1)).toBe(2);
+    expect(normalizeReservedRuns(20)).toBe(12);
+    expect(normalizeReservedRuns("x")).toBe(0);
+    expect(reservedHeaderRuns({ position: "Both" })).toBe(2);
+    expect(reservedHeelerRuns({ position: "Header" })).toBe(0);
+    expect(
+      reservedRunTotals([
+        { id: "a", name: "A", position: "Header", headerRuns: 5, heelerRuns: 0, source: "staff", createdAt: "" },
+        { id: "b", name: "B", position: "Both", source: "staff", createdAt: "" },
+      ]),
+    ).toEqual({ headerRuns: 7, heelerRuns: 2 });
   });
 });

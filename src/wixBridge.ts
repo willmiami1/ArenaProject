@@ -173,6 +173,9 @@ export interface PublicSignupSelection {
   competitionId: string;
   role: "Header" | "Heeler";
   partnerId?: string;
+  /** Reservation-only: runs wanted on each side (0 or 2–12). */
+  headerRuns?: number;
+  heelerRuns?: number;
 }
 
 export interface PublicSignupPayment {
@@ -861,6 +864,8 @@ export function submitReservedSpot(request: {
   email: string;
   pin: string;
   position: "Header" | "Heeler" | "Both";
+  headerRuns?: number;
+  heelerRuns?: number;
   notes?: string;
 }) {
   return requestWix<ReservedSpotConfirmation>("submitReservedSpot", request);

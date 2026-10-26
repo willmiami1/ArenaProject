@@ -14,6 +14,9 @@ export interface ReservedSpot {
   id: string;
   name: string;
   position: "Header" | "Heeler" | "Both";
+  /** Runs reserved on each side (0 or 2–12). Older spots only carry position. */
+  headerRuns?: number;
+  heelerRuns?: number;
   phone?: string;
   notes?: string;
   source: "staff" | "online";
