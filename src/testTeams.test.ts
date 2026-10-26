@@ -62,14 +62,25 @@ describe("generate test entries", () => {
     expect(heelers).toHaveLength(2);
     expect(result.registrations.every((entry) => entry.entries === 1 && entry.paid && entry.status === "entered")).toBe(true);
     expect(result.teams).toEqual([]);
-    expect(result.message).toContain("2 test headers and 2 test heelers");
+    expect(result.message).toContain("2 header entries across 2 riders");
   });
 
-  it("explains when the database runs short", () => {
-    const result = generateTestEntries(baseEvent, contestants, [], [], 10, makeId, fixedRandom);
-    expect(result.registrations.filter((entry) => entry.role === "Header")).toHaveLength(3);
-    expect(result.registrations.filter((entry) => entry.role === "Heeler")).toHaveLength(3);
-    expect(result.message).toContain("Only 3 eligible headers and 3 eligible heelers");
+  it("spreads extra entries across riders when the count exceeds the rider pool", () => {
+    const result = generateTestEntries({ ...baseEvent, entriesAllowed: 12 }, contestants, [], [], 10, makeId, fixedRandom);
+    const headers = result.registrations.filter((entry) => entry.role === "Header");
+    const heelers = result.registrations.filter((entry) => entry.role === "Heeler");
+    expect(headers).toHaveLength(3);
+    expect(headers.reduce((sum, entry) => sum + entry.entries, 0)).toBe(10);
+    expect(headers.map((entry) => entry.entries).sort()).toEqual([3, 3, 4]);
+    expect(heelers.reduce((sum, entry) => sum + entry.entries, 0)).toBe(10);
+    expect(result.message).toContain("10 header entries across 3 riders");
+  });
+
+  it("explains when the per-rider entry cap stops it from reaching the count", () => {
+    const result = generateTestEntries({ ...baseEvent, entriesAllowed: 2 }, contestants, [], [], 10, makeId, fixedRandom);
+    const headers = result.registrations.filter((entry) => entry.role === "Header");
+    expect(headers.every((entry) => entry.entries === 2)).toBe(true);
+    expect(result.message).toContain("Only 6 header and 6 heeler entries fit");
   });
 
   it("builds picked teams within the handicap total for pick-only ropings", () => {

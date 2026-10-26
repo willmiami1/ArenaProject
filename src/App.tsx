@@ -4883,13 +4883,13 @@ function Teams({
             <h3>Generate test teams</h3>
             <p>
               {usesDrawPool
-                ? `Enters that many random header and heeler riders from the database into the ${event.competitionType === "pick-and-draw" ? "Draw Pot" : "draw"} with one entry each.`
-                : "Adds that many random picked teams from riders in the database."}
+                ? `Enters that many header and heeler runs into the ${event.competitionType === "pick-and-draw" ? "Draw Pot" : "draw"} using random riders from the database. If you ask for more runs than there are riders, riders get more than one entry each.`
+                : "Adds that many random picked teams from riders in the database. Riders repeat with different partners when needed."}
               {" "}For test events only.
             </p>
           </div>
           <label>
-            <span>How many {usesDrawPool ? "riders per side" : "teams"}</span>
+            <span>How many {usesDrawPool ? "runs per side" : "teams"}</span>
             <input
               type="number"
               min={TEST_TEAM_MIN}

@@ -2,7 +2,7 @@ import { contestantEligibleForRole, teamHandicapTotal } from "./competition";
 import type { ArenaEvent, Contestant, EventRegistration, Team } from "./types";
 
 export const TEST_TEAM_MIN = 1;
-export const TEST_TEAM_MAX = 200;
+export const TEST_TEAM_MAX = 500;
 
 type Role = EventRegistration["role"];
 
@@ -21,8 +21,8 @@ const shuffle = <T>(items: T[], random: () => number) => {
   return copy;
 };
 
-const plural = (count: number, word: string) =>
-  `${count} ${word}${count === 1 ? "" : "s"}`;
+const plural = (count: number, word: string, many = `${word}s`) =>
+  `${count} ${count === 1 ? word : many}`;
 
 /**
  * Builds throwaway entries for a test roping from riders already in the database.
@@ -78,31 +78,49 @@ export function generateTestEntries(
     };
     const headers = pick("Header", new Set());
     const heelers = pick("Heeler", new Set(headers.map((item) => item.id)));
-    const build = (contestant: Contestant, role: Role): EventRegistration => ({
+    const build = (
+      contestant: Contestant,
+      role: Role,
+      entries: number,
+    ): EventRegistration => ({
       id: makeId("registration"),
       eventId: event.id,
       contestantId: contestant.id,
       role,
-      entries: 1,
+      entries,
       checkedIn: false,
       status: "entered",
       notes: "Test entry",
       paid: true,
       source: "staff",
     });
-    const generated = [
-      ...headers.map((contestant) => build(contestant, "Header")),
-      ...heelers.map((contestant) => build(contestant, "Heeler")),
-    ];
+    // Spread the requested runs across the riders; when the count is larger
+    // than the rider pool, riders get more than one entry (up to the event cap).
+    const maxEntries = Math.max(1, Number(event.entriesAllowed) || count);
+    const spread = (riders: Contestant[], role: Role) => {
+      if (!riders.length) return { entries: [] as EventRegistration[], total: 0 };
+      const base = Math.min(maxEntries, Math.floor(count / riders.length));
+      const extra = base < maxEntries ? count - base * riders.length : 0;
+      let total = 0;
+      const entries = riders.map((contestant, index) => {
+        const runs = Math.max(1, base + (index < extra ? 1 : 0));
+        total += runs;
+        return build(contestant, role, runs);
+      });
+      return { entries, total };
+    };
+    const headerSpread = spread(headers, "Header");
+    const heelerSpread = spread(heelers, "Heeler");
+    const generated = [...headerSpread.entries, ...heelerSpread.entries];
     const short =
-      headers.length < count || heelers.length < count
-        ? ` Only ${headers.length} eligible headers and ${heelers.length} eligible heelers were available.`
+      headerSpread.total < count || heelerSpread.total < count
+        ? ` Only ${headerSpread.total} header and ${heelerSpread.total} heeler entries fit with ${headers.length} eligible headers, ${heelers.length} eligible heelers and a limit of ${maxEntries} entries each.`
         : "";
     return {
       registrations: generated,
       teams: [],
       message: generated.length
-        ? `Added ${plural(headers.length, "test header")} and ${plural(heelers.length, "test heeler")} to the draw.${short}`
+        ? `Added ${plural(headerSpread.total, "header entry", "header entries")} across ${plural(headers.length, "rider")} and ${plural(heelerSpread.total, "heeler entry", "heeler entries")} across ${plural(heelers.length, "rider")}.${short}`
         : "No eligible riders are left in the database to enter.",
     };
   }
