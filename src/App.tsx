@@ -1731,7 +1731,8 @@ function LivestreamScreen({
         </div>
         {currentTeam ? (
           <>
-            {riderCard(currentTeam.headerId, "Header")}
+            {/* Heeler on the left, header on the right to match the camera's view of the boxes. */}
+            {riderCard(currentTeam.heelerId, "Heeler")}
             {showAnnouncerTimes && (
               <div className="livestream-times">
                 <div><small>Prior aggregate</small><strong>{currentPriorTotal.toFixed(2)}s</strong></div>
@@ -1739,7 +1740,7 @@ function LivestreamScreen({
                 <div><small>To move into 1st</small><strong>{currentTimeToFirst === undefined ? "Set the pace" : currentTimeToFirst <= 0 ? "Out of reach" : `${currentTimeToFirst.toFixed(2)}s`}</strong></div>
               </div>
             )}
-            {riderCard(currentTeam.heelerId, "Heeler")}
+            {riderCard(currentTeam.headerId, "Header")}
           </>
         ) : (
           <div className="livestream-rider"><strong>{finalResults ? "Competition complete" : "Round complete"}</strong></div>
