@@ -67,6 +67,46 @@ describe("rotations", () => {
     expect(rotationCount(event, assigned)).toBe(3);
   });
 
+  it("renumbers the draw so each rotation is a contiguous block in draw order", () => {
+    const teams = drawOf(60, ["a", "b", "c", "d", "e", "f"], ["u", "v", "w", "x", "y", "z"]);
+    const assigned = assignRotations(teams, event.id, 20);
+    const byNumber = [...assigned].sort((a, b) => a.drawPosition - b.drawPosition);
+    expect(byNumber.map((entry) => entry.drawPosition)).toEqual(Array.from({ length: 60 }, (_, i) => i + 1));
+    expect(byNumber.every((entry) => entry.originalTeamNumber === entry.drawPosition)).toBe(true);
+    expect(byNumber.slice(0, 20).every((entry) => entry.rotation === 1)).toBe(true);
+    expect(byNumber.slice(20, 40).every((entry) => entry.rotation === 2)).toBe(true);
+    expect(byNumber.slice(40).every((entry) => entry.rotation === 3)).toBe(true);
+    // Original draw order is preserved inside each rotation.
+    for (let rotation = 1; rotation <= 3; rotation += 1) {
+      const block = byNumber.filter((entry) => entry.rotation === rotation);
+      const originalOrder = block.map((entry) => Number(entry.id.slice(1)));
+      expect(originalOrder).toEqual([...originalOrder].sort((a, b) => a - b));
+    }
+  });
+
+  it("keeps each rider's runs inside a single rotation when the draw allows it", () => {
+    // 30 headers × 3 runs and 30 heelers × 3 runs, dealt round-robin so every
+    // rider's runs are spread across the whole draw before rotations are applied.
+    const headers = Array.from({ length: 30 }, (_, i) => `h${i}`);
+    const heelers = Array.from({ length: 30 }, (_, i) => `l${i}`);
+    const teams = Array.from({ length: 90 }, (_, index) =>
+      team({
+        id: `t${index + 1}`,
+        drawPosition: index + 1,
+        headerId: headers[index % 30],
+        heelerId: heelers[(index * 7) % 30],
+      }),
+    );
+    const assigned = assignRotations(teams, event.id, 30);
+    const rotationsFor = (rider: string, role: "headerId" | "heelerId") =>
+      new Set(assigned.filter((entry) => entry[role] === rider).map((entry) => entry.rotation)).size;
+    const split = [
+      ...headers.map((rider) => rotationsFor(rider, "headerId")),
+      ...heelers.map((rider) => rotationsFor(rider, "heelerId")),
+    ].filter((rotations) => rotations > 1).length;
+    expect(split).toBe(0);
+  });
+
   it("keeps a rider's heading and heeling runs in different rotations when possible", () => {
     // "cy" heads twice and heels twice; the scorer should separate those jobs.
     const teams = [

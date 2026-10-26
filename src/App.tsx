@@ -5077,7 +5077,7 @@ function Teams({
               <p>
                 {rotationsEnabled(event)
                   ? `${rotationCount(event, eventTeams)} rotations of about ${event.rotationSize} teams. Each rotation ropes its ${roundCountFor(event) - 1} preliminary round${roundCountFor(event) - 1 === 1 ? "" : "s"} back to back, then everyone meets in the short round.`
-                  : "Split Round 1 into blocks so each group ropes all its preliminary rounds before the next group starts."}
+                  : "Split Round 1 into blocks so each group ropes all its preliminary rounds before the next group starts. Teams are renumbered so rotation 1 holds the lowest numbers, riders are kept inside one rotation where the draw allows, and a rider who heads and heels does each job in a different rotation."}
                 {rotationsLocked ? " Runs have been recorded, so rotations can no longer be changed." : ""}
               </p>
             </div>
@@ -5103,7 +5103,7 @@ function Teams({
                     return;
                   }
                   onApplyRotations(event.id, size);
-                  setMessage(`Rotations applied with ${size} teams per rotation.`);
+                  setMessage(`Rotations applied with ${size} teams per rotation. Team numbers were reassigned so each rotation is a continuous block.`);
                 }}
               >
                 <RefreshCw size={16} /> {rotationsEnabled(event) ? "Re-apply rotation" : "Apply rotation"}

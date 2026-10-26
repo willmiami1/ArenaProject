@@ -1436,10 +1436,13 @@ export function rotationCount(event: ArenaEvent, teams: Team[]) {
 }
 
 /**
- * Splits the Round 1 draw into rotations of roughly `size` teams. Teams are
- * placed in draw order, preferring the rotation where the header is already
- * heading (or the heeler heeling) and avoiding one where that rider works
- * the other end, so a rider changes horses between rotations, not runs.
+ * Splits the Round 1 draw into rotations of roughly `size` teams and renumbers
+ * the draw so each rotation is a contiguous block (1–100, 101–200, …).
+ *
+ * Teams are grouped so that each rider's runs in a position stay inside one
+ * rotation (they can go home once their rotation is done), and a rider who both
+ * heads and heels does each job in a different rotation so they are not
+ * switching horses between runs. Within a rotation the original draw order is kept.
  */
 export function assignRotations(
   teams: Team[],
@@ -1451,43 +1454,178 @@ export function assignRotations(
     Math.max(ROTATION_SIZE_MIN, Math.round(size)),
   );
   const roundOne = teams
-    .filter(
-      (team) => team.eventId === eventId && team.round === 1 && !team.scratched,
-    )
+    .filter((team) => team.eventId === eventId && team.round === 1)
     .sort((a, b) => a.drawPosition - b.drawPosition);
+  if (!roundOne.length) return teams;
   const count = Math.max(1, Math.ceil(roundOne.length / rotationSize));
-  const capacity = Math.ceil(roundOne.length / count);
+  const maxSize = Math.ceil(roundOne.length / count);
+  const minSize = Math.floor(roundOne.length / count);
+
+  const SPLIT_COST = 2; // a rider's runs in one position spread over extra rotations
+  const HORSE_COST = 3; // a rider heading and heeling inside the same rotation
+  const heading: Map<string, number>[] = Array.from({ length: count }, () => new Map());
+  const heeling: Map<string, number>[] = Array.from({ length: count }, () => new Map());
   const filled = Array.from({ length: count }, () => 0);
-  const heading = Array.from({ length: count }, () => new Set<string>());
-  const heeling = Array.from({ length: count }, () => new Set<string>());
   const placement = new Map<string, number>();
 
-  for (const team of roundOne) {
-    let best = -1;
-    let bestScore = -Infinity;
-    filled.forEach((used, index) => {
-      if (used >= capacity) return;
-      const score =
-        (heading[index].has(team.headerId) ? 2 : 0) +
-        (heeling[index].has(team.heelerId) ? 2 : 0) -
-        (heeling[index].has(team.headerId) ? 3 : 0) -
-        (heading[index].has(team.heelerId) ? 3 : 0);
-      if (score > bestScore) {
-        bestScore = score;
-        best = index;
+  const bump = (table: Map<string, number>, rider: string, delta: number) => {
+    const next = (table.get(rider) ?? 0) + delta;
+    if (next <= 0) table.delete(rider);
+    else table.set(rider, next);
+  };
+  const place = (team: Team, rotation: number, delta: 1 | -1) => {
+    filled[rotation] += delta;
+    bump(heading[rotation], team.headerId, delta);
+    bump(heeling[rotation], team.heelerId, delta);
+    if (delta === 1) placement.set(team.id, rotation);
+  };
+  // Cost of a rider's current placement: runs outside their busiest rotation
+  // for each position (so they can go home after one rotation), plus a
+  // penalty for every rotation where they both head and heel. Counting runs
+  // rather than rotations gives the local search a gradient to follow.
+  const riderCost = (rider: string) => {
+    let headRuns = 0;
+    let heelRuns = 0;
+    let headPeak = 0;
+    let heelPeak = 0;
+    let headRotations = 0;
+    let heelRotations = 0;
+    let conflicts = 0;
+    for (let rotation = 0; rotation < count; rotation += 1) {
+      const headsHere = heading[rotation].get(rider) ?? 0;
+      const heelsHere = heeling[rotation].get(rider) ?? 0;
+      headRuns += headsHere;
+      heelRuns += heelsHere;
+      headPeak = Math.max(headPeak, headsHere);
+      heelPeak = Math.max(heelPeak, heelsHere);
+      if (headsHere) headRotations += 1;
+      if (heelsHere) heelRotations += 1;
+      if (headsHere && heelsHere) conflicts += Math.min(headsHere, heelsHere);
+    }
+    return (
+      SPLIT_COST *
+        3 *
+        (Math.max(headRotations, 1) - 1 + Math.max(heelRotations, 1) - 1) +
+      SPLIT_COST * (headRuns - headPeak + heelRuns - heelPeak) +
+      HORSE_COST * conflicts
+    );
+  };
+  const ridersOf = (...entries: Team[]) =>
+    [...new Set(entries.flatMap((team) => [team.headerId, team.heelerId]))];
+  const costOf = (riders: string[]) =>
+    riders.reduce((sum, rider) => sum + riderCost(rider), 0);
+
+  // Pass 1: fill one rotation at a time. Each pick is the unplaced team that
+  // best reuses riders already working that end in this rotation, avoids
+  // riders who work the other end here, and avoids pulling in riders who are
+  // already settled in an earlier rotation.
+  const remaining = new Set(roundOne);
+  const roleScore = (
+    rider: string,
+    same: Map<string, number>[],
+    other: Map<string, number>[],
+    rotation: number,
+  ) => {
+    if (same[rotation].has(rider)) return SPLIT_COST * 2;
+    const elsewhere = same.some((table, index) => index !== rotation && table.has(rider));
+    const horse = other[rotation].has(rider) ? HORSE_COST * 2 : 0;
+    return (elsewhere ? -SPLIT_COST : 0) - horse;
+  };
+  for (let rotation = 0; rotation < count; rotation += 1) {
+    const target =
+      rotation === count - 1
+        ? remaining.size
+        : rotation < roundOne.length % count || roundOne.length % count === 0
+          ? maxSize
+          : minSize;
+    while (filled[rotation] < target && remaining.size) {
+      let best: Team | null = null;
+      let bestScore = -Infinity;
+      for (const team of remaining) {
+        const score =
+          roleScore(team.headerId, heading, heeling, rotation) +
+          roleScore(team.heelerId, heeling, heading, rotation);
+        if (score > bestScore) {
+          bestScore = score;
+          best = team;
+        }
       }
-    });
-    if (best < 0) best = filled.indexOf(Math.min(...filled));
-    filled[best] += 1;
-    heading[best].add(team.headerId);
-    heeling[best].add(team.heelerId);
-    placement.set(team.id, best + 1);
+      if (!best) break;
+      remaining.delete(best);
+      place(best, rotation, 1);
+    }
+  }
+  for (const team of remaining) place(team, count - 1, 1);
+
+  // Pass 2: local search — move or swap teams between rotations while it
+  // lowers the number of split riders and horse changes.
+  for (let pass = 0; pass < 20; pass += 1) {
+    let improved = false;
+    for (const team of roundOne) {
+      const from = placement.get(team.id)!;
+      for (let to = 0; to < count; to += 1) {
+        if (to === from) continue;
+        if (filled[to] < maxSize && filled[from] > minSize) {
+          const riders = ridersOf(team);
+          const before = costOf(riders);
+          place(team, from, -1);
+          place(team, to, 1);
+          if (costOf(riders) < before) {
+            improved = true;
+            break;
+          }
+          place(team, to, -1);
+          place(team, from, 1);
+        }
+        let swapped = false;
+        for (const other of roundOne) {
+          if (placement.get(other.id) !== to) continue;
+          const riders = ridersOf(team, other);
+          const before = costOf(riders);
+          place(team, from, -1);
+          place(other, to, -1);
+          place(team, to, 1);
+          place(other, from, 1);
+          if (costOf(riders) < before) {
+            swapped = true;
+            break;
+          }
+          place(team, to, -1);
+          place(other, from, -1);
+          place(team, from, 1);
+          place(other, to, 1);
+        }
+        if (swapped) {
+          improved = true;
+          break;
+        }
+      }
+    }
+    if (!improved) break;
+  }
+
+  // Renumber so rotation 1 holds the lowest team numbers, keeping draw order inside each rotation.
+  const numbering = new Map<string, number>();
+  let nextNumber = 1;
+  for (let rotation = 0; rotation < count; rotation += 1) {
+    roundOne
+      .filter((team) => placement.get(team.id) === rotation)
+      .forEach((team) => {
+        numbering.set(team.id, nextNumber);
+        nextNumber += 1;
+      });
   }
 
   return teams.map((team) => {
     if (team.eventId !== eventId) return team;
     if (team.round === 1 && placement.has(team.id)) {
-      return { ...team, rotation: placement.get(team.id) };
+      const drawPosition = numbering.get(team.id)!;
+      return {
+        ...team,
+        rotation: placement.get(team.id)! + 1,
+        drawPosition,
+        originalTeamNumber: drawPosition,
+      };
     }
     return team;
   });
