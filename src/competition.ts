@@ -566,6 +566,213 @@ function drawPotTeams(
   return spaceDrawTeamsApart(teams);
 }
 
+type DrawSlot = {
+  contestantId: string;
+  entryNumber: number;
+  horseName?: string;
+  freeRun: boolean;
+};
+
+const drawSlotsFor = (
+  registrations: EventRegistration[],
+  role: EventRegistration["role"],
+) =>
+  registrations
+    .filter((entry) => entry.role === role)
+    .flatMap((entry) =>
+      Array.from({ length: entry.entries }, (_, index) => ({
+        contestantId: entry.contestantId,
+        entryNumber: index + 1,
+        horseName: entry.horseName,
+      })),
+    );
+
+// Pairs two equal-sized slot pools, retrying with fresh shuffles until every
+// slot finds an eligible partner that has not already been drawn together.
+function pairDrawSlots(
+  event: ArenaEvent,
+  headerSlots: DrawSlot[],
+  heelerSlots: DrawSlot[],
+  contestants: Contestant[],
+  used: Set<string>,
+  attempts = 100,
+) {
+  const count = Math.min(headerSlots.length, heelerSlots.length);
+  let best: { header: DrawSlot; heeler: DrawSlot }[] = [];
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const headers = shuffle(headerSlots);
+    const heelers = shuffle(heelerSlots);
+    const attemptUsed = new Set(used);
+    const pairs: { header: DrawSlot; heeler: DrawSlot }[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const header = headers[index];
+      let heelerIndex = heelers.findIndex(
+        (heeler, candidate) =>
+          candidate >= index &&
+          eligiblePair(event, header.contestantId, heeler.contestantId, contestants) &&
+          !attemptUsed.has(pairKey(header.contestantId, heeler.contestantId)),
+      );
+      if (heelerIndex < 0 && event.allowRepeatPartners) {
+        heelerIndex = heelers.findIndex(
+          (heeler, candidate) =>
+            candidate >= index &&
+            eligiblePair(event, header.contestantId, heeler.contestantId, contestants),
+        );
+      }
+      if (heelerIndex < 0) break;
+      [heelers[index], heelers[heelerIndex]] = [heelers[heelerIndex], heelers[index]];
+      attemptUsed.add(pairKey(header.contestantId, heelers[index].contestantId));
+      pairs.push({ header, heeler: heelers[index] });
+    }
+    if (pairs.length > best.length) best = pairs;
+    if (pairs.length === count) return { pairs, complete: true };
+  }
+  return { pairs: best, complete: false };
+}
+
+// Deals each rider's slots into rotations, keeping a rider whole inside one
+// rotation whenever it has room, and steering away from rotations flagged by
+// `avoid` (used to keep a rider's heeling out of the rotation where they head).
+function packSlotsIntoRotations(
+  slots: DrawSlot[],
+  capacities: number[],
+  avoid: (contestantId: string, rotation: number) => boolean = () => false,
+) {
+  const byRider = new Map<string, DrawSlot[]>();
+  slots.forEach((slot) => {
+    const list = byRider.get(slot.contestantId) ?? [];
+    list.push(slot);
+    byRider.set(slot.contestantId, list);
+  });
+  const free = [...capacities];
+  const buckets: DrawSlot[][] = capacities.map(() => []);
+  // Riders with rotations to avoid are dealt first so they still have room in
+  // an allowed rotation; within that, bigger entry counts go first.
+  const avoided = (contestantId: string) =>
+    capacities.reduce(
+      (total, _, rotation) => total + (avoid(contestantId, rotation) ? 1 : 0),
+      0,
+    );
+  const riders = shuffle([...byRider.entries()]).sort(
+    (a, b) => avoided(b[0]) - avoided(a[0]) || b[1].length - a[1].length,
+  );
+  for (const [contestantId, riderSlots] of riders) {
+    let remaining = [...riderSlots];
+    while (remaining.length) {
+      const candidates = free
+        .map((space, rotation) => ({ space, rotation }))
+        .filter((entry) => entry.space > 0);
+      if (!candidates.length) break;
+      const rank = (entry: { space: number; rotation: number }) =>
+        (avoid(contestantId, entry.rotation) ? 0 : 4) +
+        (entry.space >= remaining.length ? 2 : 0) +
+        entry.space / (capacities[entry.rotation] + 1);
+      const target = candidates.reduce((bestSoFar, entry) =>
+        rank(entry) > rank(bestSoFar) ? entry : bestSoFar,
+      );
+      const take = Math.min(target.space, remaining.length);
+      buckets[target.rotation].push(...remaining.slice(0, take));
+      remaining = remaining.slice(take);
+      free[target.rotation] -= take;
+    }
+  }
+  return buckets;
+}
+
+/**
+ * Draw-pot draw built rotation by rotation: riders are dealt into rotations
+ * first (whole where possible, heading and heeling in different rotations),
+ * then partners are drawn only inside each rotation. Teams come out numbered
+ * so rotation 1 is 1..N, rotation 2 continues, and so on. Returns null when a
+ * rotation cannot be completed under the pairing rules.
+ */
+export function drawPotTeamsByRotation(
+  event: ArenaEvent,
+  registrations: EventRegistration[],
+  contestants: Contestant[],
+  rotationSize: number,
+): Team[] | null {
+  const active = registrations.filter(
+    (entry) =>
+      entry.eventId === event.id &&
+      entry.status === "entered" &&
+      entryClearedForDraw(entry),
+  );
+  const headerEntries = drawSlotsFor(active, "Header");
+  const heelerEntries = drawSlotsFor(active, "Heeler");
+  if (!headerEntries.length || !heelerEntries.length) return [];
+  const count = Math.max(headerEntries.length, heelerEntries.length);
+  const size = Math.min(
+    ROTATION_SIZE_MAX,
+    Math.max(ROTATION_SIZE_MIN, Math.round(rotationSize)),
+  );
+  const rotations = Math.max(1, Math.ceil(count / size));
+  const base = Math.floor(count / rotations);
+  const capacities = Array.from(
+    { length: rotations },
+    (_, index) => base + (index < count % rotations ? 1 : 0),
+  );
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const headerSlots = expandPoolWithFreeRuns(headerEntries, count);
+    const heelerSlots = expandPoolWithFreeRuns(heelerEntries, count);
+    const headerBuckets = packSlotsIntoRotations(headerSlots, capacities);
+    const heads = headerBuckets.map(
+      (bucket) => new Set(bucket.map((slot) => slot.contestantId)),
+    );
+    const heelerBuckets = packSlotsIntoRotations(
+      heelerSlots,
+      capacities,
+      (contestantId, rotation) => heads[rotation].has(contestantId),
+    );
+    const used = new Set<string>();
+    const teams: Team[] = [];
+    let complete = true;
+    for (let rotation = 0; rotation < rotations; rotation += 1) {
+      const result = pairDrawSlots(
+        event,
+        headerBuckets[rotation],
+        heelerBuckets[rotation],
+        contestants,
+        used,
+        60,
+      );
+      if (!result.complete) {
+        complete = false;
+        break;
+      }
+      const offset = teams.length;
+      const rotationTeams = result.pairs.map(({ header, heeler }, index) => {
+        used.add(pairKey(header.contestantId, heeler.contestantId));
+        return newTeam(
+          event.id,
+          header.contestantId,
+          heeler.contestantId,
+          offset + index + 1,
+          1,
+          header.entryNumber,
+          heeler.entryNumber,
+          header.freeRun,
+          heeler.freeRun,
+          header.horseName,
+          heeler.horseName,
+        );
+      });
+      spaceDrawTeamsApart(rotationTeams).forEach((team) => {
+        const drawPosition = teams.length + 1;
+        teams.push({
+          ...team,
+          drawPosition,
+          originalTeamNumber: drawPosition,
+          rotation: rotation + 1,
+        });
+      });
+    }
+    if (complete) return teams;
+  }
+  return null;
+}
+
 export function teamEligibleForCompetition(
   event: ArenaEvent,
   team: Pick<Team, "headerId" | "heelerId">,
@@ -880,8 +1087,24 @@ export function generateCompetitionDraw(
   registrations: EventRegistration[],
   teams: Team[],
   contestants: Contestant[],
+  options: { rotationSize?: number } = {},
 ) {
   if (event.competitionType === "draw-pot") {
+    if (options.rotationSize && options.rotationSize > 0) {
+      const byRotation = drawPotTeamsByRotation(
+        event,
+        registrations,
+        contestants,
+        options.rotationSize,
+      );
+      if (byRotation) return byRotation;
+      // Pairing rules could not be met inside the rotations; draw normally and
+      // split afterwards.
+      const fallback = drawPotTeams(event, registrations, contestants);
+      return fallback.length
+        ? assignRotations(fallback, event.id, options.rotationSize)
+        : fallback;
+    }
     return drawPotTeams(event, registrations, contestants);
   }
   if (event.competitionType === "pick-and-draw") {

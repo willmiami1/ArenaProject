@@ -4,12 +4,14 @@ import {
   assignRotations,
   clearRotations,
   defaultCompetitionSettings,
+  drawPotTeamsByRotation,
+  generateCompetitionDraw,
   rotationCount,
   runDeskStages,
   stageLabel,
   stageTeams,
 } from "./competition";
-import type { ArenaEvent, Team } from "./types";
+import type { ArenaEvent, Contestant, EventRegistration, Team } from "./types";
 
 const event: ArenaEvent = {
   ...defaultCompetitionSettings,
@@ -167,5 +169,126 @@ describe("rotations", () => {
     );
     const advanced = next.find((entry) => entry.round === 2);
     expect(advanced?.rotation).toBe(first.rotation);
+  });
+});
+
+describe("draw pot drawn by rotation", () => {
+  const rider = (id: string, role: Contestant["role"], hc = 3): Contestant => ({
+    id,
+    name: id,
+    role,
+    headerHandicap: hc,
+    heelerHandicap: hc,
+    photo: "",
+    phone: "",
+    hometown: "",
+  });
+  const registration = (
+    contestantId: string,
+    role: "Header" | "Heeler",
+    entries: number,
+  ): EventRegistration => ({
+    id: `${contestantId}-${role}`,
+    eventId: event.id,
+    contestantId,
+    role,
+    entries,
+    checkedIn: false,
+    status: "entered",
+    notes: "",
+    paid: true,
+  });
+  const drawEvent: ArenaEvent = {
+    ...event,
+    competitionType: "draw-pot",
+    handicapTotal: 20,
+    maxContestantHandicap: 10,
+    allowRepeatPartners: false,
+  };
+
+  it("numbers rotations contiguously and keeps every rider inside one rotation when they fit", () => {
+    // 15 headers × 4 runs and 15 heelers × 4 runs = 60 teams → 3 rotations of 20.
+    const headers = Array.from({ length: 15 }, (_, i) => `h${i}`);
+    const heelers = Array.from({ length: 15 }, (_, i) => `l${i}`);
+    const contestants = [
+      ...headers.map((id) => rider(id, "Header")),
+      ...heelers.map((id) => rider(id, "Heeler")),
+    ];
+    const registrations = [
+      ...headers.map((id) => registration(id, "Header", 4)),
+      ...heelers.map((id) => registration(id, "Heeler", 4)),
+    ];
+    const draw = drawPotTeamsByRotation(drawEvent, registrations, contestants, 20);
+    expect(draw).not.toBeNull();
+    expect(draw!).toHaveLength(60);
+    expect(draw!.map((team) => team.drawPosition)).toEqual(Array.from({ length: 60 }, (_, i) => i + 1));
+    expect(draw!.slice(0, 20).every((team) => team.rotation === 1)).toBe(true);
+    expect(draw!.slice(20, 40).every((team) => team.rotation === 2)).toBe(true);
+    expect(draw!.slice(40).every((team) => team.rotation === 3)).toBe(true);
+    const rotationsOf = (id: string, key: "headerId" | "heelerId") =>
+      new Set(draw!.filter((team) => team[key] === id).map((team) => team.rotation)).size;
+    expect(headers.every((id) => rotationsOf(id, "headerId") === 1)).toBe(true);
+    expect(heelers.every((id) => rotationsOf(id, "heelerId") === 1)).toBe(true);
+    // No repeated partnerships.
+    const keys = draw!.map((team) => `${team.headerId}|${team.heelerId}`);
+    expect(new Set(keys).size).toBe(60);
+  });
+
+  it("puts a rider's heading and heeling in different rotations", () => {
+    const both = Array.from({ length: 6 }, (_, i) => `b${i}`);
+    const headers = Array.from({ length: 14 }, (_, i) => `h${i}`);
+    const heelers = Array.from({ length: 14 }, (_, i) => `l${i}`);
+    const contestants = [
+      ...both.map((id) => rider(id, "Both")),
+      ...headers.map((id) => rider(id, "Header")),
+      ...heelers.map((id) => rider(id, "Heeler")),
+    ];
+    const registrations = [
+      ...both.map((id) => registration(id, "Header", 3)),
+      ...both.map((id) => registration(id, "Heeler", 3)),
+      ...headers.map((id) => registration(id, "Header", 3)),
+      ...heelers.map((id) => registration(id, "Heeler", 3)),
+    ];
+    const draw = drawPotTeamsByRotation(drawEvent, registrations, contestants, 20);
+    expect(draw).not.toBeNull();
+    expect(draw!).toHaveLength(60);
+    both.forEach((id) => {
+      const heads = new Set(draw!.filter((team) => team.headerId === id).map((team) => team.rotation));
+      const heels = new Set(draw!.filter((team) => team.heelerId === id).map((team) => team.rotation));
+      expect([...heads].some((rotation) => heels.has(rotation))).toBe(false);
+    });
+  });
+
+  it("balances free runs when one side is short", () => {
+    const headers = Array.from({ length: 10 }, (_, i) => `h${i}`);
+    const heelers = Array.from({ length: 8 }, (_, i) => `l${i}`);
+    const contestants = [
+      ...headers.map((id) => rider(id, "Header")),
+      ...heelers.map((id) => rider(id, "Heeler")),
+    ];
+    const registrations = [
+      ...headers.map((id) => registration(id, "Header", 4)),
+      ...heelers.map((id) => registration(id, "Heeler", 4)),
+    ];
+    const draw = drawPotTeamsByRotation(drawEvent, registrations, contestants, 20);
+    expect(draw!).toHaveLength(40);
+    expect(draw!.filter((team) => team.heelerFreeRun)).toHaveLength(8);
+    expect(draw!.some((team) => team.headerFreeRun)).toBe(false);
+  });
+
+  it("falls back to a normal draw split afterwards when rotations cannot be paired", () => {
+    // Two headers and two heelers with 10 runs each cannot make 20 unique pairs.
+    const contestants = [rider("h1", "Header"), rider("h2", "Header"), rider("l1", "Heeler"), rider("l2", "Heeler")];
+    const registrations = [
+      registration("h1", "Header", 10),
+      registration("h2", "Header", 10),
+      registration("l1", "Heeler", 10),
+      registration("l2", "Heeler", 10),
+    ];
+    expect(drawPotTeamsByRotation(drawEvent, registrations, contestants, 20)).toBeNull();
+    const repeatEvent = { ...drawEvent, allowRepeatPartners: true };
+    const draw = generateCompetitionDraw(repeatEvent, registrations, [], contestants, { rotationSize: 20 });
+    expect(draw).toHaveLength(20);
+    expect(draw.every((team) => team.rotation === 1)).toBe(true);
   });
 });

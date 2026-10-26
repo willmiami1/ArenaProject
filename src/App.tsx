@@ -1054,7 +1054,7 @@ function StaffApp() {
                   ),
                 }))
               }
-              onCommitDraw={(eventId, eventTeams) =>
+              onCommitDraw={(eventId, eventTeams, rotationSize) =>
                 setData((current) => {
                   const drawnIds = new Set(eventTeams.map((team) => team.id));
                   const pendingOnlineTeams = current.teams.filter(
@@ -1087,6 +1087,9 @@ function StaffApp() {
                             ...event,
                             drawApproved: true,
                             drawLocked: true,
+                            ...(rotationSize
+                              ? { rotationSize, activeRotation: 1 }
+                              : {}),
                             ...activeSelection,
                             drawHistory: [
                               ...event.drawHistory,
@@ -4574,7 +4577,7 @@ function Teams({
   onAddTestEntries: (registrations: EventRegistration[], teams: Team[]) => void;
   onUpdateRegistration: (registration: EventRegistration) => void;
   onDeleteRegistration: (registrationId: string) => void;
-  onCommitDraw: (eventId: string, teams: Team[]) => void;
+  onCommitDraw: (eventId: string, teams: Team[], rotationSize?: number) => void;
   onUpdateEvent: (event: ArenaEvent) => void;
   onApplyRotations: (eventId: string, size: number) => void;
   onClearRotations: (eventId: string) => void;
@@ -4590,6 +4593,7 @@ function Teams({
   const [message, setMessage] = useState("");
   const [teamSearch, setTeamSearch] = useState("");
   const [draftDraw, setDraftDraw] = useState<Team[] | null>(null);
+  const [drawRotationInput, setDrawRotationInput] = useState("");
   const [draggedTeamId, setDraggedTeamId] = useState("");
   const [textTemplate, setTextTemplate] = useState<RiderTextTemplate | null>(null);
   const [reportPreview, setReportPreview] = useState<{
@@ -4775,9 +4779,26 @@ function Teams({
     setMessage("");
   };
 
+  const drawByRotation =
+    event?.competitionType === "draw-pot" && event && roundCountFor(event) > 1;
+  const drawRotationSize = (() => {
+    if (!drawByRotation) return 0;
+    const size = Number(drawRotationInput);
+    return Number.isInteger(size) && size > 0 ? size : 0;
+  })();
+
   const generateDraw = () => {
     if (!event) return;
-    const generated = generateCompetitionDraw(event, eventRegistrations, teams, contestants);
+    if (
+      drawRotationSize &&
+      (drawRotationSize < ROTATION_SIZE_MIN || drawRotationSize > ROTATION_SIZE_MAX)
+    ) {
+      setMessage(`Teams per rotation must be between ${ROTATION_SIZE_MIN} and ${ROTATION_SIZE_MAX}, or leave it blank to draw without rotations.`);
+      return;
+    }
+    const generated = generateCompetitionDraw(event, eventRegistrations, teams, contestants, {
+      rotationSize: drawRotationSize || undefined,
+    });
     const describeProblems = (fallback: string) => {
       const problems = drawPairingProblems(event, eventRegistrations, teams, contestants);
       if (problems.length) {
@@ -4817,16 +4838,23 @@ function Teams({
       }
     }
     setDraftDraw(generated);
+    const rotations = generated.reduce((max, team) => Math.max(max, team.rotation ?? 0), 0);
     setMessage(
-      `Draft draw created with ${generated.length} teams. Review the order, then approve it before opening Run Desk.`,
+      rotations
+        ? `Draft draw created with ${generated.length} teams in ${rotations} rotations of about ${drawRotationSize}. Partners were drawn inside each rotation so riders stay together. Review the order, then approve it before opening Run Desk.`
+        : `Draft draw created with ${generated.length} teams. Review the order, then approve it before opening Run Desk.`,
     );
   };
   const approveDraw = () => {
     if (!event || !draftDraw?.length) return;
-    onCommitDraw(event.id, draftDraw);
+    const rotations = draftDraw.reduce((max, team) => Math.max(max, team.rotation ?? 0), 0);
+    const rotationSize = rotations
+      ? drawRotationSize || Math.ceil(draftDraw.length / rotations)
+      : undefined;
+    onCommitDraw(event.id, draftDraw, rotationSize);
     setDraftDraw(null);
     setMessage(
-      `Draw approved and locked. ${draftDraw.length} teams were sent to Run Desk.`,
+      `Draw approved and locked. ${draftDraw.length} teams were sent to Run Desk${rotations ? ` in ${rotations} rotations` : ""}.`,
     );
   };
   const restoreDraw = (teams: Team[]) => {
@@ -5050,6 +5078,19 @@ function Teams({
               <button className="secondary" onClick={() => setDraftDraw(null)}>
                 <X size={16} /> Discard draft
               </button>
+            )}
+            {drawByRotation && event && !event.drawLocked && (
+              <label className="rotation-size" title="Leave blank to draw without rotations">
+                Teams per rotation
+                <input
+                  type="number"
+                  min={ROTATION_SIZE_MIN}
+                  max={ROTATION_SIZE_MAX}
+                  value={drawRotationInput}
+                  placeholder="Optional"
+                  onChange={(e) => setDrawRotationInput(e.target.value)}
+                />
+              </label>
             )}
             <button
               className={draftDraw ? "secondary" : "primary"}
