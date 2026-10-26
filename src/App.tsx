@@ -48,6 +48,7 @@ import {
   RefreshCw,
   Repeat2,
   Search,
+  Sparkles,
   Trophy,
   Trash2,
   Unlock,
@@ -108,6 +109,7 @@ import {
   reservedPositionForRuns,
   reservedRunTotals,
 } from "./reservedRuns";
+import { TEST_TEAM_MAX, TEST_TEAM_MIN, generateTestEntries } from "./testTeams";
 import {
   normalizedRunDeskRound,
   runDeskSelectionToPersist,
@@ -1029,6 +1031,13 @@ function StaffApp() {
                 }))
               }
               onAddRegistration={saveRegistrationImmediately}
+              onAddTestEntries={(newRegistrations, newTeams) =>
+                setData((current) => ({
+                  ...current,
+                  registrations: [...current.registrations, ...newRegistrations],
+                  teams: [...current.teams, ...newTeams],
+                }))
+              }
               onUpdateRegistration={(registration) =>
                 setData((current) => ({
                   ...current,
@@ -4546,6 +4555,7 @@ function Teams({
   onUpdateTeam,
   onDeleteTeam,
   onAddRegistration,
+  onAddTestEntries,
   onUpdateRegistration,
   onDeleteRegistration,
   onCommitDraw,
@@ -4561,6 +4571,7 @@ function Teams({
   onUpdateTeam: (team: Team) => void;
   onDeleteTeam: (teamId: string) => void;
   onAddRegistration: (registration: EventRegistration) => Promise<unknown>;
+  onAddTestEntries: (registrations: EventRegistration[], teams: Team[]) => void;
   onUpdateRegistration: (registration: EventRegistration) => void;
   onDeleteRegistration: (registrationId: string) => void;
   onCommitDraw: (eventId: string, teams: Team[]) => void;
@@ -4573,6 +4584,8 @@ function Teams({
     () => String(event?.rotationSize || 30),
   );
   const [entryMode, setEntryMode] = useState<"team" | "registration">("team");
+  const [showTestGenerator, setShowTestGenerator] = useState(false);
+  const [testTeamCount, setTestTeamCount] = useState("10");
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [message, setMessage] = useState("");
   const [teamSearch, setTeamSearch] = useState("");
@@ -4856,9 +4869,56 @@ function Teams({
                 <Handshake size={15} /> Enter Picked Team
               </button>
             )}
+            <button className="secondary" disabled={!canEdit} onClick={() => setShowTestGenerator((open) => !open)}>
+              <Sparkles size={15} /> Generate test teams
+            </button>
           </div>
           <span className={`tag ${event.registrationOpen ? "complete" : "no-time"}`}>{event.registrationOpen ? "Registration open" : "Registration closed"}</span>
           <span className={`tag ${event.drawLocked ? "no-time" : "neutral"}`}>{event.drawLocked ? "Draw locked" : "Draw editable"}</span>
+        </div>
+      )}
+      {showTestGenerator && event && canEdit && (
+        <div className="panel test-generator">
+          <div>
+            <h3>Generate test teams</h3>
+            <p>
+              {usesDrawPool
+                ? `Enters that many random header and heeler riders from the database into the ${event.competitionType === "pick-and-draw" ? "Draw Pot" : "draw"} with one entry each.`
+                : "Adds that many random picked teams from riders in the database."}
+              {" "}For test events only.
+            </p>
+          </div>
+          <label>
+            <span>How many {usesDrawPool ? "riders per side" : "teams"}</span>
+            <input
+              type="number"
+              min={TEST_TEAM_MIN}
+              max={TEST_TEAM_MAX}
+              value={testTeamCount}
+              onChange={(e) => setTestTeamCount(e.target.value)}
+            />
+          </label>
+          <button
+            className="primary"
+            onClick={() => {
+              const result = generateTestEntries(
+                event,
+                contestants,
+                registrations,
+                teams,
+                Number(testTeamCount),
+                uid,
+              );
+              if (result.registrations.length || result.teams.length) {
+                onAddTestEntries(result.registrations, result.teams);
+              }
+              setMessage(result.message);
+              setShowTestGenerator(false);
+            }}
+          >
+            <Sparkles size={15} /> Generate
+          </button>
+          <button className="secondary" onClick={() => setShowTestGenerator(false)}>Cancel</button>
         </div>
       )}
       {message && <div className="notice"><span style={{ whiteSpace: "pre-line" }}>{message}</span><button onClick={() => setMessage("")}><X size={16} /></button></div>}
