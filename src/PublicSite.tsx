@@ -685,12 +685,40 @@ function ScoreboardPage({
                       <small>Team #{row.teamNumber}{board.round > 1 ? ` · Draw #${row.drawPosition}` : ""}{row.advances ? ` · Advances to Round ${board.round + 1}` : ""}</small>
                     </span>
                     <span>{row.rounds} / {board.roundCount}</span>
-                    <span className="public-result-total">{row.total.toFixed(2)}</span>
+                    <span className="public-result-total">{row.total.toFixed(2)}{row.calls ? <small>{row.calls}</small> : null}</span>
                   </div>
                 ))}
               </div>
             ) : (
               <p className="public-empty">Qualified runs will appear here.</p>
+            )}
+          </section>
+          <section className="public-scoreboard-results">
+            <header>
+              <h2>Runs this {board.rotation ? "rotation" : "round"}</h2>
+              <p>{(board.runs ?? []).length} recorded · latest first</p>
+            </header>
+            {(board.runs ?? []).length ? (
+              <div className="public-results public-runs" role="table" aria-label={`${competition.name} runs`}>
+                <div className="public-result-row header" role="row">
+                  <span>Team</span><span>Ropers</span><span>Result</span>
+                </div>
+                {(board.runs ?? []).map((run) => (
+                  <div className={`public-result-row${run.time === null ? " miss" : ""}`} role="row" key={`${run.round}-${run.drawPosition}`}>
+                    <strong>#{run.teamNumber}</strong>
+                    <span>
+                      <b>{run.headerName} & {run.heelerName}</b>
+                      {board.round > 1 ? <small>Draw #{run.drawPosition}</small> : null}
+                    </span>
+                    <span className="public-result-total">
+                      {run.time === null ? run.result : run.time.toFixed(2)}
+                      {run.calls ? <small>{run.calls}</small> : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="public-empty">Runs will appear here as they are recorded.</p>
             )}
           </section>
           {competition.status === "Live" && (

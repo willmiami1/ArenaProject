@@ -86,4 +86,18 @@ describe("public scoreboard", () => {
     expect(board?.current?.id).toBe("r2-cd");
     expect(board?.upNext.map((team) => team.id)).toEqual(["r2-ab"]);
   });
+
+  it("lists every recorded run in the stage with misses and penalty calls", () => {
+    const teams = [
+      run({ id: "r1-ab", drawPosition: 1, status: "complete", rawTime: 8, penalties: 5, barrierPenalty: true }),
+      run({ id: "r1-cd", drawPosition: 2, headerId: "c", heelerId: "d", status: "no-time", noTimeReason: "heeler", legPenalty: true }),
+      run({ id: "r1-ad", drawPosition: 3, headerId: "a", heelerId: "d" }),
+    ];
+    const board = publicScoreboardProjection(event({ rounds: 1 }), teams, contestants);
+    expect(board?.standings[0]).toMatchObject({ total: 13, calls: "Barrier" });
+    expect(board?.runs).toEqual([
+      { teamNumber: 2, drawPosition: 2, round: 1, headerName: "CY", heelerName: "DEE", time: null, result: "Heeler miss", calls: "One leg" },
+      { teamNumber: 1, drawPosition: 1, round: 1, headerName: "ADA", heelerName: "BO", time: 13, result: "", calls: "Barrier" },
+    ]);
+  });
 });

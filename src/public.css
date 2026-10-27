@@ -299,6 +299,10 @@
 .public-scoreboard-results header p { margin: 0; color: var(--public-muted); font-size: 11px; }
 .public-scoreboard .public-result-row b { text-transform: uppercase; }
 .public-scoreboard .public-result-total { font-family: "Manrope",sans-serif; font-size: 22px; font-weight: 800; color: var(--public-tan); text-align: right; }
+.public-scoreboard .public-result-total small { font-family: inherit; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.public-scoreboard .public-runs .public-result-row { grid-template-columns: 80px 1fr 150px; min-height: 60px; }
+.public-scoreboard .public-runs .public-result-row>strong { font-size: 20px; }
+.public-scoreboard .public-runs .public-result-row.miss .public-result-total { font-size: 15px; color: #e3a38b; }
 .public-scoreboard-game { margin: 40px 0 0; text-align: center; }
 .public-spectator>a { font-size: 11px; font-weight: 800; }
 .public-spectator .public-page-head { padding: 42px 0 55px; }
@@ -452,6 +456,7 @@
   .public-rules dl { grid-template-columns: 1fr; }
   .public-rules dl div { border-right: 0; }
   .public-result-row { grid-template-columns: 45px 1fr 50px 70px; gap: 8px; font-size: 11px; }
+  .public-scoreboard .public-runs .public-result-row { grid-template-columns: 45px 1fr 96px; }
   .public-result-row>strong { font-size: 20px; }
   .public-signup { margin-top: 38px; padding: 26px 20px; box-shadow: 6px 7px 0 rgba(166,108,67,.38); }
   .public-rider { margin-top: 38px; }

@@ -1,4 +1,4 @@
-import { officialRunTime } from "./competition";
+import { noTimeLabel, officialRunTime, runPenaltyLabel } from "./competition";
 import {
   ledQualifiedRunsThroughRound,
   ledShowsFinalResults,
@@ -28,6 +28,22 @@ export interface PublicScoreboardRow {
   rounds: number;
   total: number;
   advances: boolean;
+  /** Penalty calls on the latest run, e.g. "Barrier · One leg". */
+  calls: string;
+}
+
+/** A recorded run in the active stage, including misses. */
+export interface PublicScoreboardRun {
+  teamNumber: number;
+  drawPosition: number;
+  round: number;
+  headerName: string;
+  heelerName: string;
+  /** Official time for a qualified run; null on a no-time. */
+  time: number | null;
+  /** "Header miss" / "Heeler miss" / "No time" on a miss; "" on a qualified run. */
+  result: string;
+  calls: string;
 }
 
 export interface PublicScoreboard {
@@ -37,6 +53,8 @@ export interface PublicScoreboard {
   current: PublicScoreboardTeam | null;
   upNext: PublicScoreboardTeam[];
   standings: PublicScoreboardRow[];
+  /** Every recorded run in the active stage, most recent draw first. */
+  runs: PublicScoreboardRun[];
   roundComplete: boolean;
   finalResults: boolean;
 }
@@ -144,8 +162,30 @@ export function publicScoreboardProjection(
       rounds: completedRuns(team).length,
       total: Math.round(total(team) * 100) / 100,
       advances: team.round === round && round < roundCount,
+      calls: runPenaltyLabel(team),
     }),
   );
+  const runs: PublicScoreboardRun[] = teams
+    .filter(
+      (team) =>
+        team.round === round &&
+        (rotation === undefined || team.rotation === rotation) &&
+        (team.status === "complete" || team.status === "no-time"),
+    )
+    .sort((a, b) => b.drawPosition - a.drawPosition)
+    .map((team) => ({
+      teamNumber: team.originalTeamNumber ?? team.drawPosition,
+      drawPosition: team.drawPosition,
+      round: team.round,
+      headerName: name(team.headerId),
+      heelerName: name(team.heelerId),
+      time:
+        team.status === "complete"
+          ? Math.round((officialRunTime(event, team, contestants) ?? 0) * 100) / 100
+          : null,
+      result: team.status === "no-time" ? noTimeLabel(team) : "",
+      calls: runPenaltyLabel(team),
+    }));
 
   return {
     round,
@@ -154,6 +194,7 @@ export function publicScoreboardProjection(
     current: current ? teamSummary(current) : null,
     upNext: upNext.map(teamSummary),
     standings,
+    runs,
     roundComplete: roundReady.length === 0,
     finalResults: ledShowsFinalResults(event, teams, round),
   };
