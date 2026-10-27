@@ -170,6 +170,9 @@ import {
   reorderDraftDrawTeams,
   reorderRunOrderTeams,
   repeatPairingBlockMessage,
+  noTimeLabel,
+  runPenaltyLabel,
+  runResultDetail,
   advanceRopingClock,
   formatRopingClock,
   assignRotations,
@@ -1401,7 +1404,7 @@ function ContestantPortal() {
                 <div><strong>{eventName(team.eventId)}</strong><small>Round {team.round} · Draw #{team.drawPosition}</small></div>
                 <div><span>Header</span><strong>{rider(team.headerId)}</strong></div>
                 <div><span>Heeler</span><strong>{rider(team.heelerId)}</strong></div>
-                <div className="portal-result"><span>Result</span><strong>{team.status === "complete" && team.rawTime !== null ? `${(team.rawTime + team.penalties).toFixed(2)}s` : team.status === "no-time" ? "No time" : team.rolled ? "Rolled" : "Ready"}</strong></div>
+                <div className="portal-result"><span>Result</span><strong>{team.status === "complete" && team.rawTime !== null ? `${(team.rawTime + team.penalties).toFixed(2)}s` : team.status === "no-time" ? noTimeLabel(team) : team.rolled ? "Rolled" : "Ready"}</strong></div>
               </div>
             ))}
             {!sortedTeams.length && <EmptyState text="No team entries are available yet." />}
@@ -2218,7 +2221,7 @@ function Overview({
                 <span className={`place place-${index + 1}`}>{index + 1}</span>
                 <div>
                   <strong>{rider(team.headerId)} <em>&</em> {rider(team.heelerId)}</strong>
-                  <small>Draw #{team.drawPosition}{team.penalties ? ` · +${team.penalties}s penalty` : " · Clean run"}</small>
+                  <small>Draw #{team.drawPosition}{` · ${runResultDetail(team)}`}</small>
                 </div>
                 <b>{event ? (officialRunTime(event, team, contestants) ?? 0).toFixed(2) : "—"}</b>
               </div>
@@ -5254,7 +5257,7 @@ function Teams({
               <div className="person"><i>{initials(rider(team.headerId)?.name ?? "")}</i><span><strong>{rider(team.headerId)?.name} {team.headerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Header · Entry {team.headerEntryNumber ?? 1}{team.headerHorseName ? ` · Horse: ${team.headerHorseName}` : ""}</small></span></div>
               <span className="pair-mark">&</span>
               <div className="person"><i>{initials(rider(team.heelerId)?.name ?? "")}</i><span><strong>{rider(team.heelerId)?.name} {team.heelerFreeRun && <b className="free-run-symbol" title="Free run — not eligible for jackpot payout">FR</b>}</strong><small>Heeler · Entry {team.heelerEntryNumber ?? 1}{team.heelerHorseName ? ` · Horse: ${team.heelerHorseName}` : ""}</small></span></div>
-              <span className="draw-status">{(team.headerFreeRun || team.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}{repeatedTeamKeys.has(`${team.headerId}|${team.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}<span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? "No time" : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}{team.rotation ? ` · Rotation ${team.rotation}` : ""}{team.paid === false && team.paymentMethod === "tab" ? " · Open tab" : ""}</small></span>
+              <span className="draw-status">{(team.headerFreeRun || team.heelerFreeRun) && <span className="tag free-run-tag">Free Run</span>}{repeatedTeamKeys.has(`${team.headerId}|${team.heelerId}`) && <span className="tag repeat-team-tag">Repeat Team</span>}<span className={`tag ${team.scratched ? "no-time" : team.rolled ? "amber" : team.status === "ready" ? "neutral" : team.status}`}>{team.scratched ? "Scratched" : team.rolled ? "Rolled" : team.status === "no-time" ? noTimeLabel(team) : team.status}</span><small>HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event?.rounds && event.rounds > 1 ? ` · Round ${team.round}` : ""}{team.rotation ? ` · Rotation ${team.rotation}` : ""}{team.paid === false && team.paymentMethod === "tab" ? " · Open tab" : ""}</small></span>
               <span className="row-actions no-print">
                 {!team.generated && team.paid === false && (
                   <button
@@ -5912,7 +5915,11 @@ function RunDesk({
         run?.status === "complete" && run.rawTime !== null
           ? (officialRunTime(event!, run, contestants) ?? 0).toFixed(2)
           : run?.status === "no-time"
-            ? "NT"
+            ? run.noTimeReason === "header"
+              ? "Head miss"
+              : run.noTimeReason === "heeler"
+                ? "Heel miss"
+                : "NT"
             : "--";
       return `R${round} ${time}`;
     });
@@ -6321,7 +6328,7 @@ function RunDesk({
       setNotes("");
     }
   };
-  const saveRun = (status: Team["status"]) => {
+  const saveRun = (status: Team["status"], noTimeReason?: Team["noTimeReason"]) => {
     if (!selected) return;
     const followingTeam =
       eventTeams.find(
@@ -6355,8 +6362,10 @@ function RunDesk({
       status: exceededLimit ? "no-time" : status,
       rawTime: status === "complete" ? Number(rawTime) : null,
       penalties: status === "complete" ? Number(penalties) : 0,
-      barrierPenalty: status === "complete" ? penaltyFlags.barrier : false,
-      legPenalty: status === "complete" ? penaltyFlags.leg : false,
+      // Penalty calls are kept on a miss too, so reports show the whole run.
+      barrierPenalty: penaltyFlags.barrier,
+      legPenalty: penaltyFlags.leg,
+      noTimeReason: status === "no-time" ? noTimeReason : undefined,
       notes: exceededLimit ? `${notes}${notes ? " · " : ""}Time limit exceeded` : notes,
       points: status === "complete" && !exceededLimit ? 1 : 0,
       rolled: false,
@@ -6378,6 +6387,9 @@ function RunDesk({
           status: "ready",
           rawTime: null,
           penalties: 0,
+          barrierPenalty: false,
+          legPenalty: false,
+          noTimeReason: undefined,
           notes: "",
           points: 0,
           rolled: false,
@@ -6415,6 +6427,9 @@ function RunDesk({
           status: "ready",
           rawTime: null,
           penalties: 0,
+          barrierPenalty: false,
+          legPenalty: false,
+          noTimeReason: undefined,
           notes: "",
           points: 0,
           rolled: false,
@@ -6831,7 +6846,8 @@ function RunDesk({
               <Field label="Run notes"><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional note" /></Field>
               <div className={`desk-actions${isEditingResult ? " editing" : ""}`}>
                 {isEditingResult && <button className="clear-result-button" onClick={clearRunResult}>Clear result / Not run yet</button>}
-                <button className="no-time-button" onClick={() => saveRun("no-time")}>Mark no time</button>
+                <button className="no-time-button" onClick={() => saveRun("no-time", "header")}>Header miss</button>
+                <button className="no-time-button" onClick={() => saveRun("no-time", "heeler")}>Heeler miss</button>
                 <button className="re-run-button" onClick={grantReRun}>Grant re-run</button>
                 <button className="primary" disabled={!rawTime || Number(rawTime) <= 0} onClick={() => saveRun("complete")}><Check size={18} /> {isEditingResult ? "Save corrected time" : "Save result"}</button>
               </div>
@@ -6891,7 +6907,7 @@ function RunDesk({
               >
                 <button className="queue-team-select" onClick={() => chooseTeam(team)}>
                   <span className="draw-number">{eventTeams.length > 1 && <GripVertical className="draw-drag-handle" size={14} />}{team.originalTeamNumber ?? team.drawPosition}</span>
-                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event && slideRulesActive(event) ? ` · Slide ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds` : team.status === "no-time" ? "No time" : team.reRun ? "PENDING RE-RUN · Picks cleared" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
+                  <span className="queue-team-name"><strong>{rider(team.headerId)} & {rider(team.heelerId)} <b className={`team-source-inline ${team.generated ? "draw" : "pick"}`}>{team.generated ? "DRAW" : "PICK"}</b></strong><small className="queue-handicap-details">Header HC {headerHandicap(team)} · Heeler HC {heelerHandicap(team)} · Total HC {teamHandicapTotal(team.headerId, team.heelerId, contestants)}{event && slideRulesActive(event) ? ` · Slide ${slideAdjustmentLabel(team)}` : ""}</small><small>{team.headerFreeRun || team.heelerFreeRun ? "FREE RUN · " : ""}{repeatedRunDeskTeamKeys.has(`${team.headerId}|${team.heelerId}`) ? "REPEAT TEAM · " : ""}{team.status === "complete" && event ? `${(officialRunTime(event, team, contestants) ?? 0).toFixed(2)} seconds${runPenaltyLabel(team) ? ` · ${runPenaltyLabel(team)}` : ""}` : team.status === "no-time" ? runResultDetail(team) : team.reRun ? "PENDING RE-RUN · Picks cleared" : team.rolled ? "ROLLED · Waiting" : "Not run yet"}</small>{activeRound > 1 && <small className="cumulative-times">{cumulativeRunLabel(team)}</small>}</span>
                 </button>
                 {team.status === "ready" && (
                   <button className={`roll-team-button ${team.rolled ? "active" : ""}`} onClick={() => toggleRolled(team)}>

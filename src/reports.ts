@@ -3,7 +3,9 @@ import {
   calculatePurse,
   competitionName,
   eventPayoutPercentages,
+  noTimeLabel,
   officialRunTime,
+  runPenaltyLabel,
   slideRulesActive,
   slideTimeAdjustment,
   teamHandicapTotal,
@@ -517,12 +519,16 @@ function teamRows(
         arenaPosition: team.arenaPosition ?? "—",
         steer: team.steerNumber ?? "—",
         rawTime: team.rawTime ?? "—",
-        penalties: team.penalties,
+        penalties: (() => {
+          const calls = runPenaltyLabel(team);
+          if (!calls) return team.penalties;
+          return team.penalties > 0 ? `${team.penalties} (${calls})` : calls;
+        })(),
         time: finalTime(event, team, data.contestants) ?? "—",
         status: team.scratched
           ? "Scratched"
           : team.status === "no-time"
-            ? "No Time"
+            ? noTimeLabel(team)
             : team.status === "complete"
               ? "Qualified"
               : "Ready",

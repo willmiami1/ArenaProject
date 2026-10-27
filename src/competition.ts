@@ -1864,6 +1864,39 @@ export function clearRotations(teams: Team[], eventId: string) {
 
 export type RunDeskStage = { round: number; rotation?: number };
 
+/** Penalty calls on a run: "Barrier", "One leg", "Barrier · One leg", or "" when clean. Older runs fall back to seconds. */
+export function runPenaltyLabel(
+  team: Pick<Team, "penalties" | "barrierPenalty" | "legPenalty">,
+) {
+  const calls = [
+    team.barrierPenalty ? "Barrier" : "",
+    team.legPenalty ? "One leg" : "",
+  ].filter(Boolean);
+  if (calls.length) return calls.join(" · ");
+  return team.penalties > 0 ? `+${team.penalties}s` : "";
+}
+
+/** "Header miss" / "Heeler miss" when the end that missed was recorded, else "No time". */
+export function noTimeLabel(team: Pick<Team, "noTimeReason">) {
+  return team.noTimeReason === "header"
+    ? "Header miss"
+    : team.noTimeReason === "heeler"
+      ? "Heeler miss"
+      : "No time";
+}
+
+/** Result detail shown beside a recorded run: the penalty calls or the miss. */
+export function runResultDetail(
+  team: Pick<Team, "status" | "penalties" | "barrierPenalty" | "legPenalty" | "noTimeReason">,
+) {
+  if (team.status === "no-time") {
+    const calls = runPenaltyLabel(team);
+    return calls ? `${noTimeLabel(team)} · ${calls}` : noTimeLabel(team);
+  }
+  if (team.status === "complete") return runPenaltyLabel(team) || "Clean";
+  return "";
+}
+
 /**
  * Keeps the Run Desk clock in step with recorded results: it starts at the
  * first recorded run, stops once no team is left to rope, and clears when

@@ -138,6 +138,8 @@ export interface Team {
   barrierPenalty?: boolean;
   /** Header caught one leg (+5s). */
   legPenalty?: boolean;
+  /** Which end missed on a no-time run. */
+  noTimeReason?: "header" | "heeler";
   paid?: boolean;
   paymentMethod?: "cash" | "card" | "tab";
   paymentReference?: string;
