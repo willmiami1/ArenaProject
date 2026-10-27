@@ -170,6 +170,8 @@ import {
   reorderDraftDrawTeams,
   reorderRunOrderTeams,
   repeatPairingBlockMessage,
+  advanceRopingClock,
+  formatRopingClock,
   assignRotations,
   clearRotations,
   ROTATION_SIZE_MAX,
@@ -1165,31 +1167,71 @@ function StaffApp() {
                 setData((current) => ({
                   ...current,
                   events: current.events.map((event) =>
-                    event.id === updatedEvent.id ? updatedEvent : event,
+                    event.id === updatedEvent.id
+                      ? // Run Desk updates can carry a stale event snapshot;
+                        // the clock is owned by the latest stored state.
+                        advanceRopingClock(
+                          {
+                            ...updatedEvent,
+                            ropingClockStartedAt: event.ropingClockStartedAt,
+                            ropingClockStoppedAt: event.ropingClockStoppedAt,
+                          },
+                          current.teams,
+                        )
+                      : event,
+                  ),
+                }))
+              }
+              onRestartRopingClock={() =>
+                setData((current) => ({
+                  ...current,
+                  events: current.events.map((event) =>
+                    event.id === activeEvent?.id
+                      ? advanceRopingClock(
+                          {
+                            ...event,
+                            ropingClockStartedAt: new Date().toISOString(),
+                            ropingClockStoppedAt: undefined,
+                          },
+                          current.teams,
+                        )
+                      : event,
                   ),
                 }))
               }
               onSave={(teamId, update) =>
                 setData((current) => {
+                  const teams = applyRunResult(
+                    current.teams,
+                    teamId,
+                    update,
+                    activeEvent?.rounds ?? 1,
+                    activeEvent?.shortGoTeams ?? 0,
+                    activeEvent,
+                    current.contestants,
+                  );
                   return {
                     ...current,
-                    teams: applyRunResult(
-                      current.teams,
-                      teamId,
-                      update,
-                      activeEvent?.rounds ?? 1,
-                      activeEvent?.shortGoTeams ?? 0,
-                      activeEvent,
-                      current.contestants,
+                    teams,
+                    events: current.events.map((event) =>
+                      event.id === activeEvent?.id
+                        ? advanceRopingClock(event, teams)
+                        : event,
                     ),
                   };
                 })
               }
               onAddRideIn={(team) =>
-                setData((current) => ({
-                  ...current,
-                  teams: [...current.teams, team],
-                }))
+                setData((current) => {
+                  const teams = [...current.teams, team];
+                  return {
+                    ...current,
+                    teams,
+                    events: current.events.map((event) =>
+                      event.id === team.eventId ? advanceRopingClock(event, teams) : event,
+                    ),
+                  };
+                })
               }
               onDeleteRideIn={(teamId) =>
                 setData((current) => ({
@@ -5435,6 +5477,48 @@ function TeamForm({ event, team, contestants, drawPosition, onSubmit, onCancel, 
   );
 }
 
+function RopingClock({
+  event,
+  onReset,
+}: {
+  event: ArenaEvent;
+  onReset: () => void;
+}) {
+  const [now, setNow] = useState(() => new Date().toISOString());
+  const running = Boolean(event.ropingClockStartedAt && !event.ropingClockStoppedAt);
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(new Date().toISOString()), 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+  const startedAt = event.ropingClockStartedAt;
+  const display = startedAt
+    ? formatRopingClock(startedAt, event.ropingClockStoppedAt ?? now)
+    : "0:00:00";
+  const timeOf = (iso: string) =>
+    new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return (
+    <div className={`roping-clock ${running ? "running" : startedAt ? "stopped" : ""}`}>
+      <Clock3 size={18} />
+      <div>
+        <strong>{display}</strong>
+        <small>
+          {!startedAt
+            ? "Clock starts with the first run"
+            : event.ropingClockStoppedAt
+              ? `Roping done · ${timeOf(startedAt)} – ${timeOf(event.ropingClockStoppedAt)}`
+              : `Roping since ${timeOf(startedAt)}`}
+        </small>
+      </div>
+      {startedAt && (
+        <button className="secondary" onClick={onReset} title="Restart the clock from zero">
+          Restart
+        </button>
+      )}
+    </div>
+  );
+}
+
 function RunDesk({
   event,
   teams,
@@ -5442,6 +5526,7 @@ function RunDesk({
   contestants,
   onSelectActiveRun,
   onUpdateEvent,
+  onRestartRopingClock,
   onSave,
   onAddRideIn,
   onDeleteRideIn,
@@ -5457,6 +5542,7 @@ function RunDesk({
   contestants: Contestant[];
   onSelectActiveRun: (selection: ActiveRunSelection) => Promise<unknown>;
   onUpdateEvent: (event: ArenaEvent) => void;
+  onRestartRopingClock: () => void;
   onSave: (teamId: string, update: Partial<Team>) => void;
   onAddRideIn: (team: Team) => void;
   onDeleteRideIn: (teamId: string) => void;
@@ -6498,6 +6584,17 @@ function RunDesk({
       )}
       {event && event.drawApproved === true && (
         <div className="run-desk-round-controls">
+          <RopingClock
+            event={event}
+            onReset={() =>
+              setPendingConfirm({
+                title: "Restart roping clock",
+                message: "Restart the clock from zero right now?",
+                confirmLabel: "Restart clock",
+                onConfirm: onRestartRopingClock,
+              })
+            }
+          />
           <div className="round-tabs" role="tablist" aria-label="Competition rounds">
             {stages.map((stage, index) => {
               const roundTeams = stageTeams(allEventTeams, stage);

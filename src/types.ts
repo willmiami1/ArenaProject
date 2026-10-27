@@ -81,6 +81,9 @@ export interface ArenaEvent {
   /** Teams per rotation; 0 or undefined means the roping runs without rotations. */
   rotationSize?: number;
   activeRotation?: number;
+  /** Run Desk clock: set when the first result is recorded, stopped when the last team has run. */
+  ropingClockStartedAt?: string;
+  ropingClockStoppedAt?: string;
   supportedEntryTypes?: Array<"draws" | "picked-teams">;
 }
 

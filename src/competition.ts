@@ -1864,6 +1864,43 @@ export function clearRotations(teams: Team[], eventId: string) {
 
 export type RunDeskStage = { round: number; rotation?: number };
 
+/**
+ * Keeps the Run Desk clock in step with recorded results: it starts at the
+ * first recorded run, stops once no team is left to rope, and clears when
+ * every result has been cleared. Returns the same event when nothing changes.
+ */
+export function advanceRopingClock(
+  event: ArenaEvent,
+  teams: Team[],
+  now = new Date().toISOString(),
+): ArenaEvent {
+  const eventTeams = teams.filter(
+    (team) => team.eventId === event.id && !team.scratched,
+  );
+  const hasResult = eventTeams.some((team) => team.status !== "ready");
+  const pending = eventTeams.some((team) => team.status === "ready");
+  const startedAt = hasResult ? event.ropingClockStartedAt ?? now : undefined;
+  const stoppedAt =
+    hasResult && !pending ? event.ropingClockStoppedAt ?? now : undefined;
+  if (
+    startedAt === event.ropingClockStartedAt &&
+    stoppedAt === event.ropingClockStoppedAt
+  ) {
+    return event;
+  }
+  return { ...event, ropingClockStartedAt: startedAt, ropingClockStoppedAt: stoppedAt };
+}
+
+/** Elapsed roping time formatted as H:MM:SS. */
+export function formatRopingClock(startedAt: string, endedAt: string) {
+  const elapsed = Math.max(0, Date.parse(endedAt) - Date.parse(startedAt));
+  const totalSeconds = Math.floor(elapsed / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 /** Ordered Run Desk stages: each rotation runs its preliminary rounds back to back, then one short round. */
 export function runDeskStages(event: ArenaEvent, teams: Team[]): RunDeskStage[] {
   const rounds = Math.max(event.rounds ?? 1, 1);

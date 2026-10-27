@@ -432,6 +432,14 @@ main { grid-column: 2; min-width: 0; }
 
 .run-desk-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(390px, 1fr); align-items: start; gap: 17px; margin-bottom: 17px; }
 .run-desk-round-controls { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+.roping-clock { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 10px 14px; background: #fff; border: 1px solid var(--line); border-radius: 10px; color: #65716a; }
+.roping-clock > div { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.roping-clock strong { font-size: 24px; font-variant-numeric: tabular-nums; letter-spacing: .02em; color: var(--ink); line-height: 1; }
+.roping-clock small { font-size: 10px; color: #929c96; }
+.roping-clock.running { border-color: var(--green); background: #f1f8f3; }
+.roping-clock.running strong { color: var(--green); }
+.roping-clock.stopped strong { color: #a0413b; }
+.roping-clock button { padding: 6px 12px; font-size: 11px; }
 .run-desk-round-actions { display: flex; flex-wrap: wrap; gap: 7px; margin: -6px 0 17px; }
 .round-tabs { display: flex; gap: 7px; margin: -7px 0 14px; overflow-x: auto; padding-bottom: 6px; }
 .round-tabs button { min-width: 112px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 13px; color: #65716a; background: #fff; border: 1px solid var(--line); border-radius: 8px; text-align: left; }
