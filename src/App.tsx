@@ -5646,7 +5646,23 @@ function RunDesk({
       Date.parse(selected.predictionClosesAt) <= Date.now(),
   );
   const [rawTime, setRawTime] = useState("");
-  const [penalties, setPenalties] = useState("0");
+  // Penalties are two 5-second flags: broken barrier and one leg caught.
+  const [penaltyFlags, setPenaltyFlags] = useState({ barrier: false, leg: false });
+  const penalties = String((penaltyFlags.barrier ? 5 : 0) + (penaltyFlags.leg ? 5 : 0));
+  const penaltyFlagsFor = (team?: Pick<Team, "penalties" | "barrierPenalty" | "legPenalty"> | null) => {
+    if (!team) return { barrier: false, leg: false };
+    if (team.barrierPenalty || team.legPenalty) {
+      return { barrier: Boolean(team.barrierPenalty), leg: Boolean(team.legPenalty) };
+    }
+    // Older results only stored seconds.
+    return { leg: team.penalties >= 5, barrier: team.penalties >= 10 };
+  };
+  const setPenalties = (value: string | ReturnType<typeof penaltyFlagsFor>) =>
+    setPenaltyFlags(
+      typeof value === "string"
+        ? penaltyFlagsFor({ penalties: Number(value) || 0 })
+        : value,
+    );
   const [notes, setNotes] = useState("");
   // Team the operator clicked on. While set, background Roping Now updates
   // (Wix syncs, other devices) must not move the selection or wipe the
@@ -5682,7 +5698,7 @@ function RunDesk({
       nextRoundTeams.find((team) => team.status === "ready" && !team.rolled) ??
       nextRoundTeams.find((team) => team.status === "ready");
     setRawTime(nextSelected?.rawTime?.toString() ?? "");
-    setPenalties(nextSelected?.penalties.toString() ?? "0");
+    setPenalties(penaltyFlagsFor(nextSelected));
     setNotes(nextSelected?.notes ?? "");
   }, [
     event?.activeRound,
@@ -6276,7 +6292,7 @@ function RunDesk({
       setSelectedId(team.id);
     }
     setRawTime(team.rawTime?.toString() ?? "");
-    setPenalties(team.penalties.toString());
+    setPenalties(penaltyFlagsFor(team));
     setNotes(team.notes);
   };
   const toggleRolled = (team: Team) => {
@@ -6339,6 +6355,8 @@ function RunDesk({
       status: exceededLimit ? "no-time" : status,
       rawTime: status === "complete" ? Number(rawTime) : null,
       penalties: status === "complete" ? Number(penalties) : 0,
+      barrierPenalty: status === "complete" ? penaltyFlags.barrier : false,
+      legPenalty: status === "complete" ? penaltyFlags.leg : false,
       notes: exceededLimit ? `${notes}${notes ? " · " : ""}Time limit exceeded` : notes,
       points: status === "complete" && !exceededLimit ? 1 : 0,
       rolled: false,
@@ -6781,7 +6799,13 @@ function RunDesk({
               </div>
               <div className="penalty-buttons">
                 <span>Penalty{Number(penalties) > 0 && rawTime ? ` · ${(Number(rawTime) + Number(penalties)).toFixed(2)}s total` : ""}</span>
-                {["0", "5", "10", "15"].map((value) => <button className={penalties === value ? "active" : ""} key={value} onClick={() => setPenalties(value)}>{value === "0" ? "Clean" : `+${value}s`}</button>)}
+                {(
+                  [
+                    { label: "Clean", active: !penaltyFlags.barrier && !penaltyFlags.leg, onClick: () => setPenaltyFlags({ barrier: false, leg: false }) },
+                    { label: "Barrier +5s", active: penaltyFlags.barrier, onClick: () => setPenaltyFlags((flags) => ({ ...flags, barrier: !flags.barrier })) },
+                    { label: "One leg +5s", active: penaltyFlags.leg, onClick: () => setPenaltyFlags((flags) => ({ ...flags, leg: !flags.leg })) },
+                  ] as const
+                ).map((option) => <button className={option.active ? "active" : ""} key={option.label} onClick={option.onClick}>{option.label}</button>)}
               </div>
               {event && rawTime && Number(rawTime) > 0 && (() => {
                 const raw = Number(rawTime);

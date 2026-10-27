@@ -136,6 +136,8 @@ export interface Team {
   steerNumber?: string;
   arenaPosition?: string;
   barrierPenalty?: boolean;
+  /** Header caught one leg (+5s). */
+  legPenalty?: boolean;
   paid?: boolean;
   paymentMethod?: "cash" | "card" | "tab";
   paymentReference?: string;
