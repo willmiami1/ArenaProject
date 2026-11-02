@@ -78,6 +78,7 @@ import {
   pastEventWinnerFlyers,
   type PublicFlyer,
 } from "./publicFlyers";
+import { videoForEventDate } from "./publicEventVideos";
 import type { ContestantAccountRequest } from "./contestantAccount";
 import { resizeProfilePhoto } from "./profilePhoto";
 import type { ArenaData } from "./types";
@@ -297,6 +298,7 @@ function RopingCard({
   competition: PublicCompetition;
   scheduleOnly?: boolean;
 }) {
+  const video = competition.status === "Upcoming" ? videoForEventDate(competition.date) : undefined;
   return (
     <article className={`public-event-card${competition.status === "Live" ? " live" : ""}`}>
       <div className="public-date-block">
@@ -320,6 +322,21 @@ function RopingCard({
           competition.description.trim() && (
             <p className="public-event-description">{competition.description}</p>
           )}
+        {video && (
+          <video
+            className="public-event-video"
+            controls
+            preload="none"
+            playsInline
+            poster={video.poster}
+            width={video.width}
+            height={video.height}
+            title={video.title}
+            aria-label={video.title}
+          >
+            <source src={video.src} type="video/mp4" />
+          </video>
+        )}
         <div className="public-card-badges">
           {competition.registrationOpen && (
             <a href={href("signup", competition.id)}>
