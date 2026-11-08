@@ -2650,7 +2650,7 @@ function EventForm({
         )}
         <Field label="Max Team Handicap"><input required type="number" min="0" step="0.5" value={form.handicapTotal} onChange={(e) => setForm({ ...form, handicapTotal: e.target.value })} placeholder="10.5" /></Field>
         {(form.competitionType === "slide" || (form.competitionType === "round-robin" && form.slideRulesEnabled)) && (
-          <Field label="Slide number"><input required type="number" min="0" max="40" step="0.5" value={form.slideNumber} onChange={(e) => setForm({ ...form, slideNumber: e.target.value })} /><small>On every run, each 0.5 handicap above or below this number adds or subtracts 0.5 seconds, capped at 4 seconds.</small></Field>
+          <Field label="Slide number"><input required type="number" min="0" max="40" step="0.5" value={form.slideNumber} onChange={(e) => setForm({ ...form, slideNumber: e.target.value })} /><small>In Round 1 only, each 0.5 handicap above or below this number adds or subtracts 0.5 seconds, capped at 4 seconds. Later rounds run straight up.</small></Field>
         )}
         <Field label="Highest contestant handicap"><input required type="number" min="0" step="0.5" value={form.maxContestantHandicap} onChange={(e) => setForm({ ...form, maxContestantHandicap: e.target.value })} /><small>Contestants above this handicap in their entered position cannot participate.</small></Field>
         <Field label="Time limit (seconds)"><input required type="number" min="1" value={form.timeLimit} onChange={(e) => setForm({ ...form, timeLimit: e.target.value })} /></Field>

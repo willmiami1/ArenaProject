@@ -943,7 +943,7 @@ describe("aggregate public standings", () => {
     expect(ropingFormatLabel(event({ competitionType: "draw-pot", handicapTotal: 0 }))).toBe("Draw Pot");
   });
 
-  it("applies the Slide adjustment from Round 1 and caps it at four seconds", () => {
+  it("applies the Slide adjustment in Round 1 only and caps it at four seconds", () => {
     const slide = event({
       competitionType: "slide",
       slideNumber: 10,
@@ -958,12 +958,12 @@ describe("aggregate public standings", () => {
 
     expect(slideTimeAdjustment(slide, roundOne, handicapNine)).toBe(-1);
     expect(officialRunTime(slide, roundOne, handicapNine)).toBe(7);
-    expect(slideTimeAdjustment(slide, roundTwo, handicapNine)).toBe(-1);
-    expect(officialRunTime(slide, roundTwo, handicapNine)).toBe(7);
+    expect(slideTimeAdjustment(slide, roundTwo, handicapNine)).toBe(0);
+    expect(officialRunTime(slide, roundTwo, handicapNine)).toBe(8);
     expect(
       slideTimeAdjustment(
         slide,
-        roundTwo,
+        roundOne,
         [
           { ...contestants[0], headerHandicap: 7.25 },
           { ...contestants[1], heelerHandicap: 3.25 },
@@ -973,7 +973,7 @@ describe("aggregate public standings", () => {
     expect(
       slideTimeAdjustment(
         slide,
-        roundTwo,
+        roundOne,
         [
           { ...contestants[0], headerHandicap: 10 },
           { ...contestants[1], heelerHandicap: 10 },
@@ -983,7 +983,7 @@ describe("aggregate public standings", () => {
     expect(
       slideTimeAdjustment(
         slide,
-        roundTwo,
+        roundOne,
         [
           { ...contestants[0], headerHandicap: 1 },
           { ...contestants[1], heelerHandicap: 1 },
@@ -993,7 +993,7 @@ describe("aggregate public standings", () => {
     expect(
       publicStandingRows(slide, [roundOne, roundTwo], handicapNine)[0]
         .officialTotal,
-    ).toBe(14);
+    ).toBe(15);
   });
 
   it("applies the Slide adjustment to a Round Robin only in Round 1 when slide rules are enabled", () => {

@@ -47,8 +47,8 @@ export const competitionTypes: {
     name: "Slide",
     setupTime: "3-5 min",
     description:
-      "Fixed teams receive a handicap-based time adjustment on every run.",
-    features: ["Fixed teams", "Slide adjustment every round", "Four-second cap"],
+      "Fixed teams receive a handicap-based time adjustment in Round 1 only.",
+    features: ["Fixed teams", "Slide adjustment in Round 1", "Four-second cap"],
   },
 ];
 
@@ -179,10 +179,10 @@ export function slideTimeAdjustment(
   team: Pick<Team, "round" | "headerId" | "heelerId">,
   contestants: Contestant[],
 ) {
-  // Slide competitions adjust every run. A Round Robin with slide rules only
-  // adjusts Round 1; later rounds are run straight up.
+  // Slide adjustments apply to Round 1 only; later rounds (and the short
+  // round) are run straight up, for both Slide and Round Robin formats.
   if (!slideRulesActive(event)) return 0;
-  if (event.competitionType === "round-robin" && team.round !== 1) return 0;
+  if (team.round !== 1) return 0;
   const difference =
     teamHandicapTotal(team.headerId, team.heelerId, contestants) -
     Number(event.slideNumber ?? 10);
