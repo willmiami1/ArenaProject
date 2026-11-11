@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultCompetitionSettings } from "./competition";
 import {
+  heldShortRoundTeam,
   ledQualifiedRunsThroughRound,
   ledShowsFinalResults,
   resolveLedRunDeskState,
@@ -137,5 +138,32 @@ describe("LED Run Desk synchronization", () => {
         2,
       ),
     ).toBe(true);
+  });
+
+  it("holds the just-roped short-round team only while the Run Desk option is on", () => {
+    const justRoped = team("just-roped", 2, "complete");
+    const nextUp = team("next-up", 2, "ready");
+    const teams = [justRoped, nextUp];
+    const holding: ArenaEvent = {
+      ...event,
+      activeRound: 2,
+      activeRunId: "just-roped",
+      holdShortRoundTeam: true,
+    };
+
+    expect(heldShortRoundTeam(holding, teams, 2)).toBe(justRoped);
+    expect(
+      heldShortRoundTeam(holding, [{ ...justRoped, status: "no-time", rawTime: null }, nextUp], 2),
+    ).toMatchObject({ id: "just-roped" });
+    // Option off, a ready selection, or an earlier round never hold.
+    expect(heldShortRoundTeam({ ...holding, holdShortRoundTeam: false }, teams, 2)).toBeUndefined();
+    expect(heldShortRoundTeam({ ...holding, activeRunId: "next-up" }, teams, 2)).toBeUndefined();
+    expect(
+      heldShortRoundTeam(
+        { ...holding, activeRunId: "round-one" },
+        [team("round-one", 1, "complete")],
+        1,
+      ),
+    ).toBeUndefined();
   });
 });

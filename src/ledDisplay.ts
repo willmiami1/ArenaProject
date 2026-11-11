@@ -46,6 +46,29 @@ export function resolveLedRunDeskState(
   return { round, activeTeamId: activeTeam?.id };
 }
 
+/**
+ * The short-round team the Run Desk is holding on screen after its result
+ * (slow-motion replay). Only a recorded run in the final round that is still
+ * the persisted Roping Now selection counts; otherwise displays fall back to
+ * the next ready team as usual.
+ */
+export function heldShortRoundTeam(
+  event: Pick<ArenaEvent, "id" | "rounds" | "activeRunId" | "holdShortRoundTeam">,
+  teams: Team[],
+  round: number,
+) {
+  if (event.holdShortRoundTeam !== true) return undefined;
+  if (round !== Math.max(event.rounds, 1)) return undefined;
+  return teams.find(
+    (team) =>
+      team.id === event.activeRunId &&
+      team.eventId === event.id &&
+      team.round === round &&
+      !team.scratched &&
+      (team.status === "complete" || team.status === "no-time"),
+  );
+}
+
 export function ledQualifiedRunsThroughRound(
   eventId: string,
   teams: Team[],

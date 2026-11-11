@@ -78,6 +78,12 @@ export interface ArenaEvent {
   drawHistory: DrawSnapshot[];
   activeRunId?: string;
   activeRound?: number;
+  /**
+   * Short round only: keep the team that just roped on the LED/livestream
+   * (for the slow-motion replay) until the announcer picks the next team,
+   * instead of auto-advancing when the result is saved.
+   */
+  holdShortRoundTeam?: boolean;
   /** Teams per rotation; 0 or undefined means the roping runs without rotations. */
   rotationSize?: number;
   activeRotation?: number;

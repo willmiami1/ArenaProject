@@ -18,6 +18,7 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
   ClipboardPen,
   Clock3,
@@ -144,6 +145,7 @@ import {
 } from "./wixBridge";
 import { registrationDeskHref } from "./registrationDeskNavigation";
 import {
+  heldShortRoundTeam,
   ledQualifiedRunsThroughRound,
   ledShowsFinalResults,
   resolveLedRunDeskState,
@@ -1672,13 +1674,31 @@ function LivestreamScreen({
       teamQualifiedTotal(team, eventTeams, round + 1, event, data.contestants),
     (team) => completedRoundsThrough(team, round),
   ).slice(0, 20);
+  // During the slow-motion replay the Run Desk can hold the team that just
+  // roped on screen until the announcer picks the next team.
+  const heldTeam = heldShortRoundTeam(event, eventTeams, round);
   const currentTeam =
+    heldTeam ??
     roundTeams.find(
       (team) =>
         team.id === runDeskState.activeTeamId && team.status === "ready",
     ) ??
     roundTeams.find((team) => team.status === "ready" && !team.rolled) ??
     roundTeams.find((team) => team.status === "ready");
+  const heldRunTime =
+    heldTeam && heldTeam.status === "complete"
+      ? officialRunTime(event, heldTeam, data.contestants)
+      : null;
+  const heldTotal =
+    heldTeam && heldTeam.status === "complete"
+      ? teamQualifiedTotal(heldTeam, eventTeams, round + 1, event, data.contestants)
+      : null;
+  const heldPlace = heldTeam
+    ? (() => {
+        const index = standings.findIndex((team) => sameTeamEntry(team, heldTeam));
+        return index >= 0 ? index + 1 : null;
+      })()
+    : null;
   // High call = where the team stood coming into the short round.
   const highCall = (() => {
     if (!currentTeam || round < 2) return null;
@@ -1720,6 +1740,7 @@ function LivestreamScreen({
       ? shortRoundTotals[livestreamPayingSpots - 1] - currentPriorTotal - 0.01
       : undefined;
   const showAnnouncerTimes = Boolean(currentTeam && round > 1 && !finalResults);
+  const showHeldResult = Boolean(heldTeam && !finalResults);
   const rider = (id: string) =>
     data.contestants.find((contestant) => contestant.id === id);
   const riderName = (id: string) => rider(id)?.name ?? "Unknown";
@@ -1775,22 +1796,30 @@ function LivestreamScreen({
         <footer className="livestream-round">{ropingFormatLabel(event)} · Unofficial</footer>
       </aside>
       <div className="livestream-stage" />
-      <section className={`livestream-now${showAnnouncerTimes ? " with-times" : ""}`}>
+      <section className={`livestream-now${showAnnouncerTimes || showHeldResult ? " with-times" : ""}`}>
         <div className="livestream-now-label">
           <span className="live-dot" />
           <strong>
             {finalResults
               ? <>Final<br />Results</>
-              : highCall
-                ? <>High Call<br /><em>#{highCall}</em></>
-                : <>Current<br />Team</>}
+              : heldTeam
+                ? <>Just<br />Roped</>
+                : highCall
+                  ? <>High Call<br /><em>#{highCall}</em></>
+                  : <>Current<br />Team</>}
           </strong>
         </div>
         {currentTeam ? (
           <>
             {/* Heeler on the left, header on the right to match the camera's view of the boxes. */}
             {riderCard(currentTeam.heelerId, "Heeler")}
-            {showAnnouncerTimes && (
+            {showHeldResult && heldTeam ? (
+              <div className="livestream-times">
+                <div><small>This run</small><strong>{heldRunTime !== null ? `${heldRunTime.toFixed(2)}s` : noTimeLabel(heldTeam)}</strong></div>
+                <div><small>{heldTeam.status === "complete" ? `Total on ${round} head` : "Calls"}</small><strong>{heldTotal !== null ? `${heldTotal.toFixed(2)}s` : runPenaltyLabel(heldTeam) || "—"}</strong></div>
+                <div><small>Standing</small><strong>{heldPlace ? ordinal(heldPlace) : heldTeam.status === "complete" ? "—" : "Out"}</strong></div>
+              </div>
+            ) : showAnnouncerTimes && (
               <div className="livestream-times">
                 <div><small>Prior aggregate</small><strong>{currentPriorTotal.toFixed(2)}s</strong></div>
                 <div><small>To be in the money</small><strong>{currentTimeToMoney === undefined ? "Just catch" : currentTimeToMoney <= 0 ? "Out of reach" : `${currentTimeToMoney.toFixed(2)}s`}</strong></div>
@@ -1890,12 +1919,22 @@ function LedLeaderboard({
   const defaultCurrentTeam = roundTeams.find(
     (team) => team.status === "ready" && !team.rolled,
   ) ?? roundTeams.find((team) => team.status === "ready");
+  const ledHeldTeam = heldShortRoundTeam(event, eventTeams, round);
   const currentTeam =
+    ledHeldTeam ??
     roundTeams.find(
       (team) =>
         team.id === ledRunDeskState.activeTeamId &&
         team.status === "ready",
     ) ?? defaultCurrentTeam;
+  const ledHeldRunTime =
+    ledHeldTeam && ledHeldTeam.status === "complete"
+      ? officialRunTime(event, ledHeldTeam, data.contestants)
+      : null;
+  const ledHeldTotal =
+    ledHeldTeam && ledHeldTeam.status === "complete"
+      ? teamQualifiedTotal(ledHeldTeam, eventTeams, round + 1, event, data.contestants)
+      : null;
   const finalResults = ledShowsFinalResults(event, eventTeams, round);
   // The live scoreboard remains provisional even after results are published.
   const officialResults = false;
@@ -2039,7 +2078,7 @@ function LedLeaderboard({
       <section className="led-current-team">
         <div className="led-current-label">
           <span className="live-dot" />
-          <span>{finalResults ? "Competition complete" : "Now roping"}</span>
+          <span>{finalResults ? "Competition complete" : ledHeldTeam ? "Just roped" : "Now roping"}</span>
           <strong>
             {finalResults
               ? officialResults
@@ -2058,7 +2097,12 @@ function LedLeaderboard({
               <i>&</i>
               {ledRider(currentTeam.heelerId, currentTeam.heelerHorseName)}
             </div>
-            {isFinalRound && (
+            {isFinalRound && ledHeldTeam ? (
+              <div className="led-current-targets">
+                <span><small>This run</small><strong>{ledHeldRunTime !== null ? `${ledHeldRunTime.toFixed(2)}s` : noTimeLabel(ledHeldTeam)}</strong></span>
+                <span><small>{ledHeldTeam.status === "complete" ? `Total on ${round} head` : "Calls"}</small><strong>{ledHeldTotal !== null ? `${ledHeldTotal.toFixed(2)}s` : runPenaltyLabel(ledHeldTeam) || "—"}</strong></span>
+              </div>
+            ) : isFinalRound && (
               <div className="led-current-targets">
                 <span><small>Be in the money pot</small><strong>{currentTeamTimeToMoney === undefined ? "Just catch" : currentTeamTimeToMoney <= 0 ? "Out of reach" : `${currentTeamTimeToMoney.toFixed(2)}s`}</strong></span>
                 <span><small>Take 1st</small><strong>{currentTeamTimeToFirst === undefined ? "Set pace" : currentTeamTimeToFirst <= 0 ? "Out of reach" : `${currentTeamTimeToFirst.toFixed(2)}s`}</strong></span>
@@ -5851,6 +5895,45 @@ function RunDesk({
     }
   };
   const isEditingResult = Boolean(selected && selected.status !== "ready");
+  // Short round: optionally keep the team that just roped as Roping Now (for
+  // the slow-motion replay) until the announcer clicks the next team.
+  const isShortRoundStage = activeRound === roundCount && roundCount > 1;
+  const holdShortRoundTeam = Boolean(event?.holdShortRoundTeam);
+  const heldTeam = event ? heldShortRoundTeam(event, eventTeams, activeRound) : undefined;
+  const teamAfter = (team: Team) =>
+    eventTeams.find(
+      (candidate) =>
+        candidate.id !== team.id &&
+        candidate.status === "ready" &&
+        !candidate.rolled &&
+        candidate.drawPosition > team.drawPosition,
+    ) ??
+    eventTeams.find(
+      (candidate) =>
+        candidate.id !== team.id &&
+        candidate.status === "ready" &&
+        !candidate.rolled,
+    ) ??
+    eventTeams.find(
+      (candidate) => candidate.id !== team.id && candidate.status === "ready",
+    );
+  const heldNextTeam = heldTeam ? teamAfter(heldTeam) : undefined;
+  const setHoldShortRoundTeam = (enabled: boolean) => {
+    if (!event || Boolean(event.holdShortRoundTeam) === enabled) return;
+    onUpdateEvent({ ...event, holdShortRoundTeam: enabled });
+  };
+  const releaseHeldTeam = () => {
+    if (!heldTeam) return;
+    const following = teamAfter(heldTeam);
+    if (following) {
+      void selectActiveRun(following.id);
+    } else {
+      selectActiveRunDeferred(null);
+    }
+    setRawTime("");
+    setPenalties("0");
+    setNotes("");
+  };
   const resetScoreboard = async () => {
     if (!event || scoreboardResetBusy) return;
     if (
@@ -6330,25 +6413,11 @@ function RunDesk({
   };
   const saveRun = (status: Team["status"], noTimeReason?: Team["noTimeReason"]) => {
     if (!selected) return;
-    const followingTeam =
-      eventTeams.find(
-        (team) =>
-          team.id !== selected.id &&
-          team.status === "ready" &&
-          !team.rolled &&
-          team.drawPosition > selected.drawPosition,
-      ) ??
-      eventTeams.find(
-        (team) =>
-          team.id !== selected.id &&
-          team.status === "ready" &&
-          !team.rolled,
-      ) ??
-      eventTeams.find(
-        (team) =>
-          team.id !== selected.id &&
-          team.status === "ready",
-      );
+    const followingTeam = teamAfter(selected);
+    // Hold the team on the screens while the replay runs; the announcer
+    // moves on by clicking the next team.
+    const holdThisTeam =
+      holdShortRoundTeam && isShortRoundStage && selected.status === "ready" && Boolean(followingTeam);
     const previewTeam = {
       ...selected,
       rawTime: Number(rawTime),
@@ -6371,6 +6440,12 @@ function RunDesk({
       rolled: false,
       reRun: false,
     });
+    if (holdThisTeam) {
+      // Keep the just-roped team as Roping Now; the saved values stay in the
+      // form so a correction can be made during the replay.
+      selectActiveRunDeferred(selected.id);
+      return;
+    }
     selectActiveRunDeferred(followingTeam?.id ?? null);
     setRawTime("");
     setPenalties("0");
@@ -6768,7 +6843,7 @@ function RunDesk({
       )}
       <div className="run-desk-grid">
         <section className="panel desk-entry">
-          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>{stageLabel(activeStage)} · {activeRunSaveStatus === "saving" ? "Saving Roping Now…" : activeRunSaveStatus === "error" ? "Roping Now save failed" : activeRunSaveStatus === "offline" ? "Roping Now saved on this computer" : activeRunSaveStatus === "saved" ? "Roping Now saved" : isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Team #${selected.originalTeamNumber ?? selected.drawPosition}${activeRound > 1 ? ` · Draw #${selected.drawPosition}` : ""}` : rotationsActive && activeStage.rotation ? "Stage complete" : "Round complete"}</h3></div></div>
+          <div className="desk-title"><span className="stat-icon">{isEditingResult ? <Pencil size={21} /> : <Gauge size={21} />}</span><div><span>{stageLabel(activeStage)} · {activeRunSaveStatus === "saving" ? "Saving Roping Now…" : activeRunSaveStatus === "error" ? "Roping Now save failed" : activeRunSaveStatus === "offline" ? "Roping Now saved on this computer" : activeRunSaveStatus === "saved" ? "Roping Now saved" : heldTeam && heldTeam.id === selected?.id ? "Holding on screens for replay" : isEditingResult ? "Editing recorded result" : "Now roping"}</span><h3>{selected ? `Team #${selected.originalTeamNumber ?? selected.drawPosition}${activeRound > 1 ? ` · Draw #${selected.drawPosition}` : ""}` : rotationsActive && activeStage.rotation ? "Stage complete" : "Round complete"}</h3></div></div>
           {selected ? (
             <>
               <div className="active-team">
@@ -6786,7 +6861,31 @@ function RunDesk({
               </div>
               <div className="run-handicap"><span>Combined team handicap</span><strong>{teamHandicapTotal(selected.headerId, selected.heelerId, contestants)} / {event?.handicapTotal ?? "—"}</strong></div>
               {event && slideRulesActive(event) && (
-               <div className="run-handicap"><span>Slide adjustment ({event.competitionType === "round-robin" ? "round 1 only" : "every round"})</span><strong>{slideAdjustmentLabel(selected)} · Slide #{event.slideNumber ?? 10}</strong></div>
+               <div className="run-handicap"><span>Slide adjustment (round 1 only)</span><strong>{slideAdjustmentLabel(selected)} · Slide #{event.slideNumber ?? 10}</strong></div>
+              )}
+              {event && isShortRoundStage && (
+                <label className="toggle-row hold-team-toggle">
+                  <input
+                    type="checkbox"
+                    checked={holdShortRoundTeam}
+                    onChange={(e) => setHoldShortRoundTeam(e.target.checked)}
+                  />
+                  <span>
+                    <strong>Hold team on screens after the result</strong>
+                    <small>For the slow-motion replay: the LED and livestream keep showing the team that just roped until you click the next team.</small>
+                  </span>
+                </label>
+              )}
+              {heldTeam && heldTeam.id === selected.id && (
+                <div className="notice held-team-notice" aria-live="polite">
+                  <div>
+                    <strong>Holding Team #{heldTeam.originalTeamNumber ?? heldTeam.drawPosition} on the screens</strong>
+                    <span>{runResultDetail(heldTeam)}{heldTeam.status === "complete" && heldTeam.rawTime !== null ? ` · ${(officialRunTime(event!, heldTeam, contestants) ?? 0).toFixed(2)}s` : ""} · Click the next team in the order when the replay is done.</span>
+                  </div>
+                  <button className="primary" onClick={releaseHeldTeam}>
+                    {heldNextTeam ? <>Show Team #{heldNextTeam.originalTeamNumber ?? heldNextTeam.drawPosition} <ChevronRight size={16} /></> : "Round complete"}
+                  </button>
+                </div>
               )}
               {selected.status === "ready" && (
                 <button

@@ -409,6 +409,14 @@ main { grid-column: 2; min-width: 0; }
 .run-desk-confirm-actions button.secondary { color: inherit; border: 1px solid currentColor; }
 .run-desk-confirm-actions button.primary { color: #fff; background: #a64b3a; }
 .app-shell .run-desk-confirm { color: #f1d9b3; border-color: #b58a4d; }
+.hold-team-toggle { margin: 0 0 14px; }
+.hold-team-toggle input { margin-top: 2px; }
+.hold-team-toggle strong { display: block; font-size: 12px; }
+.hold-team-toggle small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.held-team-notice { align-items: center; margin: 0 0 16px; padding: 12px 14px; color: #0f3d2e; background: #e6f4ec; border: 2px solid #2f8f5f; font-size: 11px; }
+.held-team-notice > div:first-child { display: grid; gap: 3px; }
+.held-team-notice strong { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.held-team-notice button.primary { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 9px 14px; color: #fff; background: #2f8f5f; border-radius: 8px; font-size: 12px; font-weight: 800; }
 .registration-panel { margin-bottom: 17px; overflow: hidden; }
 .registration-list { padding: 4px 20px; }
 .entry-totals { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
