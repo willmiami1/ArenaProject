@@ -3156,7 +3156,7 @@ const RIDER_TEXT_TEMPLATE_OPTIONS: {
   {
     value: "teams",
     label: "Team numbers + live scoreboard",
-    hint: "Each rider gets their own team numbers and partners, one per line, plus the live scoreboard link (now roping, up next, and results).",
+    hint: "Each rider gets their own team numbers and partners, one per line, marked (Draw) or (Pick), plus the live scoreboard link (now roping, up next, and results).",
   },
   {
     value: "custom",
