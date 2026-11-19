@@ -8,10 +8,6 @@ describe("public flyer categories", () => {
   it("lists the upcoming event flyers soonest first", () => {
     expect(futureEventFlyers).toEqual([
       {
-        src: "./november-20-friday-nights-roping-flyer-v2.png",
-        alt: "Destiny Ranch Arena Friday Nights Roping flyer — Friday November 20th, Fall Roping #8.5 drawpot capped at #4.5, draw 4 for $200, add pick or draw $50, 3 heads, incentive on #6, payout scale from 50% with 50 paying teams up to 75% with 250+, buckle to 3 best headers and heelers, gates 5 PM, books 6 PM, rope 7 PM, Brazilian food trucks, family fun, presented with Tomahawk Saddlery",
-      },
-      {
         src: "./november-22-rope-for-doc-tribute-flyer.png",
         alt: "Destiny Ranch Arena Living Tribute and Fundraiser for Doc Wilber flyer — Rope for Doc, Sunday November 22nd, Cowboy Church 9:30 AM, rope 10:00 AM, #9 Slide, $40 per roper, pick or draw, 3 heads, free burgers, hot dogs and beverages after roping, 100% of funds donated to Doc, first 3 teams get buckles, shirts and hats, 2549 E C 476 Bushnell FL 33513, 954-520-2631",
       },
