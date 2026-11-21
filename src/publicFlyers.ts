@@ -5,12 +5,12 @@ export interface PublicFlyer {
 
 export const futureEventFlyers: PublicFlyer[] = [
   {
-    src: "./november-22-rope-for-doc-tribute-flyer.png",
-    alt: "Destiny Ranch Arena Living Tribute and Fundraiser for Doc Wilber flyer — Rope for Doc, Sunday November 22nd, Cowboy Church 9:30 AM, rope 10:00 AM, #9 Slide, $40 per roper, pick or draw, 3 heads, free burgers, hot dogs and beverages after roping, 100% of funds donated to Doc, first 3 teams get buckles, shirts and hats, 2549 E C 476 Bushnell FL 33513, 954-520-2631",
-  },
-  {
     src: "./december-6-the-rookie-drawpot-flyer.png",
     alt: "Destiny Ranch Arena Team Roping The Rookie flyer — Sunday December 6th, Cowboy Church 9:30 AM, rope 10:00 AM, #6 Drawpot The Rookie, must never have won more than $1,000, draw 6 for $300, add draws $50, max 10 times, 3 heads, payout scale from 50% with 50 to 99 paying teams up to 75% with 250+, buckles to first 3 places, food truck, family fun, 2549 E C 476 Bushnell FL 33513, 954-520-2631",
+  },
+  {
+    src: "./december-13-rope-for-doc-tribute-flyer.png",
+    alt: "Destiny Ranch Arena Living Tribute and Fundraiser for Doc Wilber flyer — Rope for Doc, new date Sunday December 13th, Cowboy Church 9:30 AM, rope 10:00 AM, #9 Slide, $40 per roper, pick or draw, 3 heads, 100% of funds donated to Doc, first 3 teams get buckles, shirts and hats, free burgers, hot dogs and beverages, presented with Tomahawk Saddlery, 2549 E C 476 Bushnell FL 33513, 954-520-2631",
   },
   {
     src: "./december-19-christmas-roping-flyer-v2.png",
